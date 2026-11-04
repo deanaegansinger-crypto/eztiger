@@ -24,6 +24,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequiredOverridesAllowed=dialog
 UninstallDisplayIcon={app}\eztiger.exe
+SetupIconFile=..\app\windows\runner\resources\app_icon.ico
 WizardStyle=modern
 
 [Tasks]

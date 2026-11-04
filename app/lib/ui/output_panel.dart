@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 import 'common.dart';
+import 'logo.dart';
 
 /// What the singers see: the CDG lyrics screen or the karaoke video.
 class KaraokeScreen extends StatelessWidget {
@@ -31,6 +32,8 @@ class KaraokeScreen extends StatelessWidget {
       final t = e.current;
       content = Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const EzLogo(size: 160),
+          const SizedBox(height: 12),
           const Text('EZTIGER', style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: EzColors.brass, letterSpacing: 6)),
           const SizedBox(height: 8),
           Text(t == null ? 'Up next…' : t.title,
