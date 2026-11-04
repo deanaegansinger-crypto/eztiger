@@ -159,6 +159,53 @@ INSERT INTO playlist_tracks(playlist_id, track_id, position)
 VALUES(?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_tracks WHERE playlist_id = ?))''',
       [playlistId, trackId, playlistId]);
 
+  /// Adds several songs to the end of a playlist, in order.
+  Future<void> addAll(int playlistId, Iterable<int> trackIds) => db.transaction((txn) async {
+        final r = await txn.rawQuery(
+            'SELECT COALESCE(MAX(position), -1) + 1 AS n FROM playlist_tracks WHERE playlist_id = ?', [playlistId]);
+        var pos = r.first['n'] as int;
+        for (final id in trackIds) {
+          await txn.insert('playlist_tracks', {'playlist_id': playlistId, 'track_id': id, 'position': pos++});
+        }
+      });
+
+  /// Inserts songs before position [at] (0-based; past the end adds them at
+  /// the bottom).
+  Future<void> insertAll(int playlistId, Iterable<int> trackIds, {required int at}) =>
+      db.transaction((txn) async {
+        final ids = await _ids(txn, playlistId);
+        ids.insertAll(at.clamp(0, ids.length), trackIds);
+        await _write(txn, playlistId, ids);
+      });
+
+  /// Moves the songs at [positions] so they sit together before what was
+  /// position [to] (counted before the move), keeping their order.
+  Future<void> moveBlock(int playlistId, Iterable<int> positions, int to) => db.transaction((txn) async {
+        final ids = await _ids(txn, playlistId);
+        await _write(txn, playlistId, moveBlockIn(ids, positions, to));
+      });
+
+  Future<List<int>> _ids(Transaction txn, int playlistId) async => (await txn.query('playlist_tracks',
+          where: 'playlist_id = ?', whereArgs: [playlistId], orderBy: 'position'))
+      .map((r) => r['track_id'] as int)
+      .toList();
+
+  Future<void> _write(Transaction txn, int playlistId, List<int> ids) async {
+    await txn.delete('playlist_tracks', where: 'playlist_id = ?', whereArgs: [playlistId]);
+    for (var i = 0; i < ids.length; i++) {
+      await txn.insert('playlist_tracks', {'playlist_id': playlistId, 'track_id': ids[i], 'position': i});
+    }
+  }
+
+  /// Removes the songs at [positions] (0-based) in one go.
+  Future<void> removePositions(int playlistId, Iterable<int> positions) => db.transaction((txn) async {
+        for (final p in positions) {
+          await txn.delete('playlist_tracks',
+              where: 'playlist_id = ? AND position = ?', whereArgs: [playlistId, p]);
+        }
+        await _renumber(txn, playlistId);
+      });
+
   /// Saves the current queue as a playlist ("drag songs from the queue onto
   /// a folder to save them for next time").
   Future<void> addQueue(int playlistId) async {
@@ -241,6 +288,32 @@ ORDER BY q.position''');
         }
       });
 
+  /// Adds songs to the queue before position [at] (past the end adds them at
+  /// the bottom). Returns the new queue ids.
+  Future<List<int>> insertAll(Iterable<int> trackIds, {required int at}) => db.transaction((txn) async {
+        final ids = (await txn.query('queue', orderBy: 'position')).map((r) => r['id'] as int).toList();
+        final added = <int>[];
+        for (final t in trackIds) {
+          added.add(await txn.insert('queue', {'track_id': t, 'position': ids.length + added.length}));
+        }
+        ids.insertAll(at.clamp(0, ids.length), added);
+        for (var i = 0; i < ids.length; i++) {
+          await txn.update('queue', {'position': i}, where: 'id = ?', whereArgs: [ids[i]]);
+        }
+        return added;
+      });
+
+  /// Moves the queue entries [queueIds] together before what was position
+  /// [to], keeping their order.
+  Future<void> moveBlock(Iterable<int> queueIds, int to) => db.transaction((txn) async {
+        final ids = (await txn.query('queue', orderBy: 'position')).map((r) => r['id'] as int).toList();
+        final positions = [for (final q in queueIds) ids.indexOf(q)]..removeWhere((p) => p < 0);
+        final moved = moveBlockIn(ids, positions, to);
+        for (var i = 0; i < moved.length; i++) {
+          await txn.update('queue', {'position': i}, where: 'id = ?', whereArgs: [moved[i]]);
+        }
+      });
+
   /// Call when a queued song has been sung: logs it to history and takes it
   /// off the queue, in one step.
   Future<void> markSung(int queueId, {DateTime? at}) => db.transaction((txn) async {
@@ -296,4 +369,15 @@ ORDER BY h.sung_at DESC, h.id DESC LIMIT ?''', [if (singer != null) singer, limi
           'SELECT DISTINCT singer FROM singer_history WHERE singer IS NOT NULL ORDER BY singer COLLATE NOCASE'))
       .map((r) => r['singer'] as String)
       .toList();
+}
+
+/// [list] with the items at [positions] lifted out and put back together
+/// before what was index [to].
+List<T> moveBlockIn<T>(List<T> list, Iterable<int> positions, int to) {
+  final pos = positions.toSet().where((p) => p >= 0 && p < list.length).toList()..sort();
+  final block = [for (final p in pos) list[p]];
+  final rest = [for (var i = 0; i < list.length; i++) if (!pos.contains(i)) list[i]];
+  final before = pos.where((p) => p < to).length;
+  rest.insertAll((to - before).clamp(0, rest.length), block);
+  return rest;
 }

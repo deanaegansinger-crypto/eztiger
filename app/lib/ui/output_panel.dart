@@ -31,16 +31,25 @@ class KaraokeScreen extends StatelessWidget {
     } else {
       final t = e.current;
       content = Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const EzLogo(size: 160),
-          const SizedBox(height: 12),
-          const Text('EZTIGER', style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: EzColors.brass, letterSpacing: 6)),
-          const SizedBox(height: 8),
-          Text(t == null ? 'Up next…' : t.title,
-              textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, color: EzColors.cyan)),
-          if (t?.artist != null) Text(t!.artist!, style: const TextStyle(fontSize: 13, color: EzColors.vfdSub)),
-          if (e.singer != null) Text('🎤 ${e.singer}', style: const TextStyle(fontSize: 13, color: Colors.white70)),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const EzLogo(size: 160),
+            const SizedBox(height: 12),
+            const Text(
+              'EZTIGER',
+              style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: EzColors.brass, letterSpacing: 6),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              t == null ? 'Up next…' : t.title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, color: EzColors.cyan),
+            ),
+            if (t?.artist != null) Text(t!.artist!, style: const TextStyle(fontSize: 13, color: EzColors.vfdSub)),
+            if (e.singer != null) Text('🎤 ${e.singer}', style: const TextStyle(fontSize: 13, color: Colors.white70)),
+          ],
+        ),
       );
     }
     return ColoredBox(color: Colors.black, child: content);
@@ -78,46 +87,78 @@ class _OutputPanelState extends State<OutputPanel> {
         color: context.ez.panel,
         borderRadius: BorderRadius.circular(10),
         clipBehavior: Clip.antiAlias,
-        child: Column(children: [
-          GestureDetector(
-            onPanUpdate: (d) => setState(() => pos = p + d.delta),
-            child: MouseRegion(
-              cursor: SystemMouseCursors.move,
-              child: Container(
-                height: 28,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                color: context.ez.raised,
-                child: Row(children: [
-                  const HeadText('Karaoke output', color: EzColors.brass),
-                  const Spacer(),
-                  Tooltip(
-                    message: 'Full screen (Esc to exit)',
-                    child: InkWell(onTap: widget.onFullScreen, child: const Icon(Icons.fullscreen, size: 18)),
-                  ),
-                ]),
-              ),
-            ),
-          ),
-          Expanded(
-            child: Stack(children: [
-              const Positioned.fill(child: KaraokeScreen()),
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: GestureDetector(
-                  onPanUpdate: (d) => setState(() {
-                    pos = p;
-                    width += d.delta.dx;
-                  }),
-                  child: const MouseRegion(
-                    cursor: SystemMouseCursors.resizeDownRight,
-                    child: SizedBox(width: 18, height: 18, child: Icon(Icons.south_east, size: 12, color: Colors.white54)),
+        child: Column(
+          children: [
+            GestureDetector(
+              onPanUpdate: (d) => setState(() => pos = p + d.delta),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.move,
+                child: Container(
+                  height: 28,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  color: context.ez.raised,
+                  child: Row(
+                    children: [
+                      const HeadText('Karaoke output', color: EzColors.brass),
+                      const Spacer(),
+                      if (AppScope.secondScreenOf(context) case final second?)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 10),
+                          child: Tooltip(
+                            message: second.isOpen
+                                ? 'Close the second-screen output'
+                                : 'Show the lyrics or video on a second screen (a TV or projector)',
+                            child: InkWell(
+                              onTap: second.toggle,
+                              child: Row(
+                                children: [
+                                  Icon(Icons.connected_tv, size: 16, color: second.isOpen ? EzColors.cyan : null),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    second.isOpen ? 'On 2nd screen' : '2nd screen',
+                                    style: TextStyle(fontSize: 11, color: second.isOpen ? EzColors.cyan : null),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      Tooltip(
+                        message: 'Full screen (Esc to exit)',
+                        child: InkWell(onTap: widget.onFullScreen, child: const Icon(Icons.fullscreen, size: 18)),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ]),
-          ),
-        ]),
+            ),
+            Expanded(
+              child: Stack(
+                children: [
+                  const Positioned.fill(child: KaraokeScreen()),
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: GestureDetector(
+                      onPanUpdate: (d) => setState(() {
+                        pos = p;
+                        width += d.delta.dx;
+                      }),
+                      child: const MouseRegion(
+                        cursor: SystemMouseCursors.resizeDownRight,
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: Icon(Icons.south_east, size: 12, color: Colors.white54),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -47,17 +47,17 @@ class _EzLogoState extends State<EzLogo> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) => Semantics(
-        label: 'EZtiger logo',
-        image: true,
-        child: RotationTransition(
-          turns: _c,
-          child: Image.asset(
-            EzLogo.asset,
-            width: widget.size,
-            height: widget.size,
-            filterQuality: FilterQuality.medium,
-            errorBuilder: (_, _, _) => SizedBox(width: widget.size, height: widget.size),
-          ),
-        ),
-      );
+    label: 'EZtiger logo',
+    image: true,
+    child: RotationTransition(
+      turns: _c,
+      child: Image.asset(
+        EzLogo.asset,
+        width: widget.size,
+        height: widget.size,
+        filterQuality: FilterQuality.medium,
+        errorBuilder: (_, _, _) => SizedBox(width: widget.size, height: widget.size),
+      ),
+    ),
+  );
 }

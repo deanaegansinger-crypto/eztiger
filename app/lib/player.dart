@@ -67,6 +67,9 @@ class KaraokeEngine extends ChangeNotifier {
   /// The CDG lyrics screen (300x216), or null when the track has none.
   final ValueNotifier<ui.Image?> cdgFrame = ValueNotifier(null);
 
+  /// The same screen as raw RGBA bytes, for the second-screen window.
+  Uint8List? cdgPixels;
+
   bool get isVideo => current?.kind == 'video';
   bool get hasCdg => _cdg != null;
 
@@ -78,6 +81,7 @@ class KaraokeEngine extends ChangeNotifier {
     duration = Duration.zero;
     _cdg = null;
     cdgFrame.value = null;
+    cdgPixels = null;
     notifyListeners();
     try {
       var media = track.path;
@@ -114,6 +118,7 @@ class KaraokeEngine extends ChangeNotifier {
     current = null;
     _cdg = null;
     cdgFrame.value = null;
+    cdgPixels = null;
     position = Duration.zero;
     notifyListeners();
   }
@@ -161,10 +166,10 @@ class KaraokeEngine extends ChangeNotifier {
     _rendering = true;
     final pixels = Uint8List.fromList(cdg.rgba());
     final completer = Completer<ui.Image>();
-    ui.decodeImageFromPixels(
-        pixels, CdgDecoder.width, CdgDecoder.height, ui.PixelFormat.rgba8888, completer.complete);
+    ui.decodeImageFromPixels(pixels, CdgDecoder.width, CdgDecoder.height, ui.PixelFormat.rgba8888, completer.complete);
     final image = await completer.future;
     if (identical(cdg, _cdg)) {
+      cdgPixels = pixels;
       cdgFrame.value?.dispose();
       cdgFrame.value = image;
     } else {

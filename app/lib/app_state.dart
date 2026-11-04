@@ -4,6 +4,7 @@ import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/foundation.dart';
 
 import 'player.dart';
+import 'ui/common.dart' show SongDrag;
 
 enum PlayMode { single, autoplay }
 
@@ -44,6 +45,13 @@ class AppState extends ChangeNotifier {
   List<QueueEntry> queue = [];
   int? nowPlayingQueueId;
   List<Playlist> playlists = [];
+
+  // Selection in the results list (indexes into [results]), and songs
+  // copied with Ctrl+C.
+  final Set<int> selection = {};
+  int? _anchor;
+  List<Track> copied = [];
+  String _copiedText = '';
 
   bool scanning = false;
   String status = '';
@@ -101,16 +109,18 @@ class AppState extends ChangeNotifier {
     status = 'Scanning library…';
     notifyListeners();
     try {
-      final report = await scanner.scanAll(onProgress: (n, dir) {
-        if (n % 20 == 0) {
-          status = 'Scanning… $n folders';
-          notifyListeners();
-        }
-      });
+      final report = await scanner.scanAll(
+        onProgress: (n, dir) {
+          if (n % 20 == 0) {
+            status = 'Scanning… $n folders';
+            notifyListeners();
+          }
+        },
+      );
       status = report.missingRoots.isNotEmpty
           ? 'Not found: ${report.missingRoots.join(', ')} (nothing changed)'
           : '${report.tracks} tracks'
-              '${report.changed ? ' · ${report.added} new, ${report.updated} updated, ${report.removed} removed' : ''}';
+                '${report.changed ? ' · ${report.added} new, ${report.updated} updated, ${report.removed} removed' : ''}';
     } catch (e) {
       status = 'Scan failed: $e';
     }
@@ -173,22 +183,22 @@ class AppState extends ChangeNotifier {
         results = await db.search.search(query, folderId: selectedFolderId, limit: 500);
       case ResultsView.playlist:
         final id = selectedPlaylistId;
-        results = id == null
-            ? []
-            : (await db.playlists.tracks(id)).map((t) => SearchGroup([t])).toList();
+        results = id == null ? [] : (await db.playlists.tracks(id)).map((t) => SearchGroup([t])).toList();
       case ResultsView.history:
         history = await db.history.recent(limit: 500);
         results = history.map((h) => SearchGroup([h.track])).toList();
     }
+    selection.clear();
+    _anchor = null;
     notifyListeners();
   }
 
   String get resultsTitle => switch (view) {
-        ResultsView.search => selectedFolder?.name ?? 'All folders',
-        ResultsView.playlist =>
-          playlists.where((p) => p.id == selectedPlaylistId).map((p) => p.name).firstOrNull ?? 'Playlist',
-        ResultsView.history => 'History',
-      };
+    ResultsView.search => selectedFolder?.name ?? 'All folders',
+    ResultsView.playlist =>
+      playlists.where((p) => p.id == selectedPlaylistId).map((p) => p.name).firstOrNull ?? 'Playlist',
+    ResultsView.history => 'History',
+  };
 
   Future<void> editTags(Track t, {required String title, required String artist, required TrackType type}) async {
     await db.tracks.editTags(t.id, title: title, artist: artist, type: type);
@@ -314,6 +324,153 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // ----------------------------------------------------------- selection
+
+  /// A click on result [i]: plain click selects just it, Ctrl toggles it,
+  /// Shift selects the block from the last click.
+  void selectRow(int i, {bool shift = false, bool ctrl = false}) {
+    if (shift && _anchor != null) {
+      if (!ctrl) selection.clear();
+      final a = _anchor!, lo = a < i ? a : i, hi = a < i ? i : a;
+      for (var k = lo; k <= hi; k++) {
+        selection.add(k);
+      }
+    } else if (ctrl) {
+      selection.contains(i) ? selection.remove(i) : selection.add(i);
+      _anchor = i;
+    } else {
+      selection
+        ..clear()
+        ..add(i);
+      _anchor = i;
+    }
+    notifyListeners();
+  }
+
+  void selectAll() {
+    selection
+      ..clear()
+      ..addAll(List.generate(results.length, (i) => i));
+    notifyListeners();
+  }
+
+  void clearSelection() {
+    selection.clear();
+    notifyListeners();
+  }
+
+  /// The rows being acted on: the selection, or just [orRow] when it is not
+  /// part of it.
+  List<int> selectedRows({int? orRow}) {
+    if (orRow != null && !selection.contains(orRow)) return [orRow];
+    return selection.where((i) => i < results.length).toList()..sort();
+  }
+
+  /// The selected songs in list order, or just row [orRow] when it is not
+  /// part of the selection.
+  List<Track> selectedTracks({int? orRow}) {
+    if (orRow != null && !selection.contains(orRow)) return [results[orRow].primary];
+    final rows = selection.where((i) => i < results.length).toList()..sort();
+    return [for (final i in rows) results[i].primary];
+  }
+
+  /// Ctrl+C: remembers the songs, and puts "Title - Artist" lines on the
+  /// Windows clipboard so they can be pasted into Notepad or an email.
+  String copy(List<Track> tracks) {
+    copied = tracks;
+    _copiedText = tracks.map((t) => t.artist == null ? t.title : '${t.title} - ${t.artist}').join('\r\n');
+    status = 'Copied ${tracks.length} ${tracks.length == 1 ? 'song' : 'songs'}';
+    notifyListeners();
+    return _copiedText;
+  }
+
+  /// Turns pasted clipboard text into songs: the songs copied here if the
+  /// text is ours, otherwise the best match for each line of a song list.
+  Future<List<Track>> songsFromClipboard(String? text) async {
+    String norm(String x) => x.replaceAll('\r\n', '\n').trim();
+    if (text == null || norm(text).isEmpty || (copied.isNotEmpty && norm(text) == norm(_copiedText))) return copied;
+    final matches = await db.search.matchList(text);
+    final missing = [
+      for (final m in matches)
+        if (m.$2 == null) m.$1,
+    ];
+    status =
+        'Matched ${matches.length - missing.length} of ${matches.length} lines'
+        '${missing.isEmpty ? '' : ' · not found: ${missing.take(5).join(', ')}${missing.length > 5 ? '…' : ''}'}';
+    notifyListeners();
+    return [
+      for (final m in matches)
+        if (m.$2 != null) m.$2!,
+    ];
+  }
+
+  /// Pastes clipboard [text] into a playlist (see [songsFromClipboard]).
+  Future<void> paste(int playlistId, String? text) async {
+    final tracks = await songsFromClipboard(text);
+    final note = status.startsWith('Matched') ? status : null;
+    await addToPlaylist(playlistId, tracks);
+    if (note != null) {
+      status = note.replaceFirst('Matched', 'Pasted');
+      notifyListeners();
+    }
+  }
+
+  /// Songs dropped at position [at] in a playlist. Songs dragged within the
+  /// same playlist are moved, anything else is added.
+  Future<void> dropIntoPlaylist(int playlistId, SongDrag d, int at) async {
+    if (d.playlistId == playlistId) {
+      await db.playlists.moveBlock(playlistId, d.positions, at);
+    } else {
+      await db.playlists.insertAll(playlistId, d.tracks.map((t) => t.id), at: at);
+    }
+    await _reloadPlaylists();
+    if (view == ResultsView.playlist && selectedPlaylistId == playlistId) await refreshResults();
+  }
+
+  /// Songs dropped at position [at] in the queue (moved if they came from it).
+  Future<void> dropIntoQueue(SongDrag d, int at) async {
+    if (d.queueIds.isNotEmpty) {
+      await db.queue.moveBlock(d.queueIds, at);
+      await _reloadQueue();
+      return;
+    }
+    final wasEmpty = queue.isEmpty;
+    await db.queue.insertAll(d.tracks.map((t) => t.id), at: at);
+    await _reloadQueue();
+    if (wasEmpty && engine.current == null && autocue && queue.isNotEmpty) await _cue(queue.first, autostart: false);
+  }
+
+  /// Songs dropped on the player: the first plays now, the rest go to the
+  /// top of the queue so they come next.
+  Future<void> dropOnPlayer(SongDrag d) async {
+    if (d.tracks.isEmpty) return;
+    if (d.queueIds.isNotEmpty) {
+      final e = queue.where((q) => q.id == d.queueIds.first).firstOrNull;
+      if (e != null) await playEntry(e);
+      return;
+    }
+    if (d.tracks.length > 1) {
+      await db.queue.insertAll(d.tracks.skip(1).map((t) => t.id), at: 0);
+      await _reloadQueue();
+    }
+    await playNow(d.tracks.first);
+  }
+
+  Future<void> enqueueAll(List<Track> tracks) async {
+    for (final t in tracks) {
+      await enqueue(t);
+    }
+  }
+
+  /// Removes the selected rows from the open playlist.
+  Future<void> removeSelectedFromPlaylist() async {
+    final id = selectedPlaylistId;
+    if (view != ResultsView.playlist || id == null || selection.isEmpty) return;
+    await db.playlists.removePositions(id, selection.toList());
+    await _reloadPlaylists();
+    await refreshResults();
+  }
+
   // ----------------------------------------------------------- playlists
 
   Future<void> _reloadPlaylists() async {
@@ -321,14 +478,20 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> createPlaylist(String name) async {
-    if (name.trim().isEmpty) return;
+  /// Makes a playlist, optionally filled with [tracks]. Returns its id, or
+  /// null when the name is empty or taken.
+  Future<int?> createPlaylist(String name, {List<Track> tracks = const []}) async {
+    if (name.trim().isEmpty) return null;
+    int? id;
     try {
-      await db.playlists.create(name);
+      id = await db.playlists.create(name);
+      if (tracks.isNotEmpty) await db.playlists.addAll(id, tracks.map((t) => t.id));
+      status = 'Made "${name.trim()}"${tracks.isEmpty ? '' : ' with ${tracks.length} songs'}';
     } catch (_) {
       status = 'There is already a playlist called "$name"';
     }
     await _reloadPlaylists();
+    return id;
   }
 
   Future<void> deletePlaylist(Playlist p) async {
@@ -341,8 +504,11 @@ class AppState extends ChangeNotifier {
     await refreshResults();
   }
 
-  Future<void> addToPlaylist(int playlistId, int trackId) async {
-    await db.playlists.add(playlistId, trackId);
+  Future<void> addToPlaylist(int playlistId, List<Track> tracks) async {
+    if (tracks.isEmpty) return;
+    await db.playlists.addAll(playlistId, tracks.map((t) => t.id));
+    final name = playlists.where((p) => p.id == playlistId).map((p) => p.name).firstOrNull ?? 'playlist';
+    status = 'Added ${tracks.length} ${tracks.length == 1 ? 'song' : 'songs'} to $name';
     await _reloadPlaylists();
     if (view == ResultsView.playlist && selectedPlaylistId == playlistId) await refreshResults();
   }

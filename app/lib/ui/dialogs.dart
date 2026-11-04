@@ -25,18 +25,18 @@ Future<String?> askText(BuildContext context, {required String title, required S
 }
 
 Future<Track?> pickVersion(BuildContext context, SearchGroup group) => showDialog<Track>(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: Text('Versions of ${group.primary.title}'),
-        children: [
-          for (final t in group.versions)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, t),
-              child: Text('${t.type.label}  ${t.version ?? ''}  ·  ${t.fileName}', style: const TextStyle(fontSize: 12)),
-            ),
-        ],
-      ),
-    );
+  context: context,
+  builder: (context) => SimpleDialog(
+    title: Text('Versions of ${group.primary.title}'),
+    children: [
+      for (final t in group.versions)
+        SimpleDialogOption(
+          onPressed: () => Navigator.pop(context, t),
+          child: Text('${t.type.label}  ${t.version ?? ''}  ·  ${t.fileName}', style: const TextStyle(fontSize: 12)),
+        ),
+    ],
+  ),
+);
 
 /// "✏️ Edit tags…": Title, Artist, Type, with the location shown read-only.
 Future<void> showEditTags(BuildContext context, Track t) async {
@@ -51,21 +51,36 @@ Future<void> showEditTags(BuildContext context, Track t) async {
         title: const Text('✏️ Edit tags'),
         content: SizedBox(
           width: 420,
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            TextField(key: const Key('edit-title'), controller: title, decoration: const InputDecoration(labelText: 'Title')),
-            TextField(key: const Key('edit-artist'), controller: artist, decoration: const InputDecoration(labelText: 'Artist')),
-            const SizedBox(height: 12),
-            const Text('Type', style: TextStyle(fontSize: 12)),
-            const SizedBox(height: 4),
-            Segmented<TrackType>(
-              options: {for (final v in TrackType.values) v: v.label},
-              value: type,
-              onChanged: (v) => setState(() => type = v),
-            ),
-            const SizedBox(height: 12),
-            const Text('Location', style: TextStyle(fontSize: 12)),
-            SelectableText(t.path, style: TextStyle(fontFamily: vfdFont, fontSize: 11, color: context.ez.textDim)),
-          ]),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                key: const Key('edit-title'),
+                controller: title,
+                decoration: const InputDecoration(labelText: 'Title'),
+              ),
+              TextField(
+                key: const Key('edit-artist'),
+                controller: artist,
+                decoration: const InputDecoration(labelText: 'Artist'),
+              ),
+              const SizedBox(height: 12),
+              const Text('Type', style: TextStyle(fontSize: 12)),
+              const SizedBox(height: 4),
+              Segmented<TrackType>(
+                options: {for (final v in TrackType.values) v: v.label},
+                value: type,
+                onChanged: (v) => setState(() => type = v),
+              ),
+              const SizedBox(height: 12),
+              const Text('Location', style: TextStyle(fontSize: 12)),
+              SelectableText(
+                t.path,
+                style: TextStyle(fontFamily: vfdFont, fontSize: 11, color: context.ez.textDim),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),

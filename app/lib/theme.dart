@@ -41,10 +41,10 @@ class EzColors extends ThemeExtension<EzColors> {
   final Color bg, panel, raised, text, textDim, border;
 
   static Color forType(String label) => switch (label) {
-        'CDG' => cyan,
-        'MP4' => brass,
-        _ => mp3,
-      };
+    'CDG' => cyan,
+    'MP4' => brass,
+    _ => mp3,
+  };
 
   @override
   EzColors copyWith() => this;
