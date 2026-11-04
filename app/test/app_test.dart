@@ -371,12 +371,34 @@ void main() {
     final t = state.results.first.primary;
     state.toggleAutocue(); // off, so adding doesn't cue
     await tester.runAsync(() => state.enqueue(t));
-    state.autocue = true;
     // A fresh start: init must not load a song (the window isn't up yet).
     final fresh = AppState(db, KaraokeEngine(FakeBackend()));
     await tester.runAsync(fresh.init);
     expect(fresh.engine.current, isNull);
+    fresh.autocue = true;
     await tester.runAsync(fresh.startUp);
+    expect(fresh.engine.current?.id, t.id);
+    expect(fresh.engine.playing, isFalse);
+  });
+
+  testWidgets('settings and the loaded song come back next time', (tester) async {
+    await pumpApp(tester);
+    final t = state.results.firstWhere((g) => g.primary.title == 'Livin On A Prayer').primary;
+    await tester.runAsync(() async {
+      state.setMode(PlayMode.autoplay);
+      state.toggleCrossfade();
+      await state.engine.setVolume(55);
+      await state.playNow(t, autostart: false);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    final fresh = AppState(db, KaraokeEngine(FakeBackend()));
+    await tester.runAsync(() async {
+      await fresh.init();
+      await fresh.startUp();
+    });
+    expect(fresh.mode, PlayMode.autoplay);
+    expect(fresh.crossfade, isTrue);
+    expect(fresh.engine.volume, 55);
     expect(fresh.engine.current?.id, t.id);
     expect(fresh.engine.playing, isFalse);
   });
