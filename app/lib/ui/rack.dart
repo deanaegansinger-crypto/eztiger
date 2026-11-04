@@ -47,7 +47,10 @@ class Rack extends StatelessWidget {
 class _BrandRow extends StatelessWidget {
   const _BrandRow();
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ListenableBuilder(listenable: AppScope.of(context).engine, builder: (context, _) => _build(context));
+
+  Widget _build(BuildContext context) {
     final s = AppScope.of(context);
     return Row(
       children: [
@@ -76,7 +79,10 @@ class PlayerStrip extends StatelessWidget {
   const PlayerStrip({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ListenableBuilder(listenable: AppScope.of(context).engine, builder: (context, _) => _build(context));
+
+  Widget _build(BuildContext context) {
     final s = AppScope.of(context);
     final e = s.engine;
     final t = e.current;
@@ -199,7 +205,10 @@ class _SeekBarState extends State<SeekBar> {
   double? _dragMs; // while the thumb is being dragged
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ListenableBuilder(listenable: AppScope.of(context).engine, builder: (context, _) => _build(context));
+
+  Widget _build(BuildContext context) {
     final e = AppScope.of(context).engine;
     final total = e.duration.inMilliseconds.toDouble();
     final ready = e.current != null && total > 0;
@@ -252,7 +261,10 @@ class _SeekBarState extends State<SeekBar> {
 class _VolumeRow extends StatelessWidget {
   const _VolumeRow();
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ListenableBuilder(listenable: AppScope.of(context).engine, builder: (context, _) => _build(context));
+
+  Widget _build(BuildContext context) {
     final e = AppScope.of(context).engine;
     return Row(
       children: [

@@ -24,10 +24,7 @@ class EztigerApp extends StatelessWidget {
         title: 'EZtiger',
         debugShowCheckedModeBanner: false,
         theme: buildTheme(state.dark),
-        home: ListenableBuilder(
-          listenable: state.engine,
-          builder: (context, _) => HomeScreen(setFullScreen: setFullScreen),
-        ),
+        home: HomeScreen(setFullScreen: setFullScreen),
       ),
     ),
   );

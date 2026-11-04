@@ -9,7 +9,10 @@ class KaraokeScreen extends StatelessWidget {
   const KaraokeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ListenableBuilder(listenable: AppScope.of(context).engine, builder: (context, _) => _build(context));
+
+  Widget _build(BuildContext context) {
     final s = AppScope.of(context);
     final e = s.engine;
     final video = AppScope.videoOf(context);
