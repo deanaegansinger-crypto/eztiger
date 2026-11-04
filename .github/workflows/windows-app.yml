@@ -1,0 +1,80 @@
+name: Windows app
+
+on:
+  push:
+    branches: [main, windows-app]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+
+      - name: Get packages
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build
+        run: flutter build windows --release
+
+      - name: Check the build has everything it needs
+        shell: pwsh
+        run: |
+          $dir = "build\windows\x64\runner\Release"
+          Get-ChildItem $dir -Recurse | Select-Object FullName, Length | Format-Table -AutoSize | Out-String -Width 300
+          foreach ($f in @("eztiger.exe", "flutter_windows.dll")) {
+            if (-not (Test-Path "$dir\$f")) { throw "missing $f" }
+          }
+          if (-not (Get-ChildItem $dir -Recurse -Filter "*mpv*.dll")) { throw "missing libmpv" }
+          if (-not (Get-ChildItem $dir -Recurse -Filter "*sqlite3*.dll")) { throw "missing sqlite3.dll" }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+
+      - name: Make the installer
+        shell: pwsh
+        working-directory: installer
+        run: |
+          $version = (Select-String -Path ..\app\pubspec.yaml -Pattern '^version:\s*([0-9.]+)').Matches[0].Groups[1].Value
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DSourceDir=..\app\build\windows\x64\runner\Release" eztiger.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EZtiger-Setup
+          path: installer/Output/EZtiger-Setup.exe
+
+      - name: Publish a test download
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.APP_VERSION }}-build.${{ github.run_number }}
+          name: EZtiger ${{ env.APP_VERSION }} (test build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          files: installer/Output/EZtiger-Setup.exe
+          body: |
+            Test build from `${{ github.ref_name }}`.
+            Download **EZtiger-Setup.exe** below and run it. Windows may say "Windows protected your PC" because the installer isn't signed yet: click **More info**, then **Run anyway**.
