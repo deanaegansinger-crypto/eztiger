@@ -9,6 +9,7 @@ import '../theme.dart';
 import 'common.dart';
 import 'dialogs.dart';
 import 'logo.dart';
+import 'read_me.dart';
 
 /// The left column of the mockup: player, settings, library, search and
 /// results.
@@ -63,6 +64,14 @@ class _BrandRow extends StatelessWidget {
         const SizedBox(width: 6),
         Text('BY DEANO', style: TextStyle(fontSize: 10, color: context.ez.textDim, letterSpacing: 1.5)),
         const Spacer(),
+        TextButton.icon(
+          key: const Key('read-me'),
+          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+          onPressed: () => showReadMe(context),
+          icon: const Icon(Icons.help_outline, size: 16, color: EzColors.cyan),
+          label: const Text('Read me', style: TextStyle(fontSize: 11, color: EzColors.cyan)),
+        ),
+        const SizedBox(width: 6),
         Segmented<bool>(
           options: const {true: 'Dark', false: 'Light'},
           value: s.dark,

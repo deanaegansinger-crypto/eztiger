@@ -337,13 +337,23 @@ class AppState extends ChangeNotifier {
   /// Autocue: whenever the player is empty, the top of the queue is loaded
   /// paused, ready to go.
   Future<void> _autocue() async {
-    if (autocue && engine.current == null && !_fading && queue.isNotEmpty) {
-      await _cue(queue.first, autostart: false);
+    final next = upNext;
+    if (autocue && engine.current == null && !_fading && next != null) {
+      await _cue(next, autostart: false);
     }
   }
 
-  /// The song that plays after the current one.
-  QueueEntry? get upNext => queue.where((e) => e.id != nowPlayingQueueId).firstOrNull;
+  /// The song that plays after the current one: the first in the queue not
+  /// yet played. Played songs stay in the queue, marked played.
+  QueueEntry? get upNext => queue.where((e) => !e.played && e.id != nowPlayingQueueId).firstOrNull;
+
+  int get playedCount => queue.where((e) => e.played).length;
+
+  /// Takes the played songs off the queue.
+  Future<void> clearPlayed() async {
+    await db.queue.clearPlayed();
+    await _reloadQueue();
+  }
 
   Future<void> removeFromQueue(QueueEntry e) async {
     await db.queue.remove(e.id);
@@ -393,7 +403,8 @@ class AppState extends ChangeNotifier {
 
   Future<void> playPause() async {
     if (engine.current == null) {
-      if (queue.isNotEmpty) await playEntry(queue.first);
+      final next = upNext;
+      if (next != null) await playEntry(next);
       return;
     }
     await engine.playPause();
@@ -402,8 +413,9 @@ class AppState extends ChangeNotifier {
   /// ⏭: the current song counts as sung, and the next one starts.
   Future<void> next({Duration? fadeIn}) async {
     await _finishCurrent();
-    if (queue.isNotEmpty) {
-      await _cue(queue.first, autostart: true, fadeIn: fadeIn);
+    final up = upNext;
+    if (up != null) {
+      await _cue(up, autostart: true, fadeIn: fadeIn);
     } else {
       await engine.stop();
     }
@@ -441,14 +453,15 @@ class AppState extends ChangeNotifier {
   Future<void> _onTrackFinished() async {
     if (_fading) return; // the crossfade moves on to the next song itself
     await _finishCurrent();
-    if (queue.isEmpty) {
+    final next = upNext;
+    if (next == null) {
       await engine.stop();
       return;
     }
     if (mode == PlayMode.autoplay || crossfade) {
-      await _cue(queue.first, autostart: true, fadeIn: crossfade ? fadeInTime : null);
+      await _cue(next, autostart: true, fadeIn: crossfade ? fadeInTime : null);
     } else if (autocue) {
-      await _cue(queue.first, autostart: false); // ready to go, paused
+      await _cue(next, autostart: false); // ready to go, paused
     } else {
       await engine.stop();
     }

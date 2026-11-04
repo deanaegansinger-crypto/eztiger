@@ -250,7 +250,8 @@ VALUES(?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM queue))''', [trackId, 
 
   Future<List<QueueEntry>> all() async {
     final rows = await db.rawQuery('''
-SELECT t.*, f.path AS folder_path, q.id AS q_id, q.singer AS q_singer, q.position AS q_position
+SELECT t.*, f.path AS folder_path, q.id AS q_id, q.singer AS q_singer, q.position AS q_position,
+  q.played_at AS q_played, (SELECT MAX(h.sung_at) FROM singer_history h WHERE h.track_id = q.track_id) AS q_last
 FROM queue q JOIN tracks t ON t.id = q.track_id JOIN folders f ON f.id = t.folder_id
 ORDER BY q.position''');
     return rows
@@ -258,7 +259,9 @@ ORDER BY q.position''');
             id: r['q_id'] as int,
             position: r['q_position'] as int,
             singer: r['q_singer'] as String?,
-            track: Track.fromRow(r)))
+            track: Track.fromRow(r),
+            playedAt: _time(r['q_played']),
+            lastSung: _time(r['q_last'])))
         .toList();
   }
 
@@ -305,17 +308,25 @@ ORDER BY q.position''');
         }
       });
 
-  /// Call when a queued song has been sung: logs it to history and takes it
-  /// off the queue, in one step.
+  static DateTime? _time(Object? ms) => ms is int ? DateTime.fromMillisecondsSinceEpoch(ms) : null;
+
+  /// Call when a queued song has been sung: logs it to history and marks it
+  /// played. It stays in the queue (see [clearPlayed]).
   Future<void> markSung(int queueId, {DateTime? at}) => db.transaction((txn) async {
         final rows = await txn.query('queue', where: 'id = ?', whereArgs: [queueId]);
         if (rows.isEmpty) return;
+        final when = (at ?? DateTime.now()).millisecondsSinceEpoch;
         await txn.insert('singer_history', {
           'track_id': rows.first['track_id'],
           'singer': rows.first['singer'],
-          'sung_at': (at ?? DateTime.now()).millisecondsSinceEpoch,
+          'sung_at': when,
         });
-        await txn.delete('queue', where: 'id = ?', whereArgs: [queueId]);
+        await txn.update('queue', {'played_at': when}, where: 'id = ?', whereArgs: [queueId]);
+      });
+
+  /// Takes the played songs off the queue.
+  Future<void> clearPlayed() => db.transaction((txn) async {
+        await txn.delete('queue', where: 'played_at IS NOT NULL');
         await _renumber(txn);
       });
 

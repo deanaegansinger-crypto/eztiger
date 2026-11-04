@@ -66,7 +66,7 @@ void main() {
 
     await tester.runAsync(() => state.enqueue(state.results.first.primary));
     await tester.pump();
-    expect(find.textContaining('QUEUE · 1 SONG'), findsOneWidget);
+    expect(find.textContaining('QUEUE · 1 TO SING'), findsOneWidget);
     // Autocue loads the first song paused.
     expect(state.engine.current?.title, 'Livin On A Prayer');
     expect(backend.calls, contains('pause'));
@@ -82,8 +82,17 @@ void main() {
       await state.next();
     });
     await tester.pump();
-    expect(state.queue.length, 1);
+    // The sung song stays in the queue, ticked, with its time and singer.
+    expect(state.queue.length, 2);
+    expect(state.queue.first.played, isTrue);
+    expect(state.playedCount, 1);
+    expect(find.textContaining('1 TO SING · 1 PLAYED'), findsOneWidget);
+    expect(find.byIcon(Icons.check), findsOneWidget);
     expect(state.engine.current?.id, tracks[1].id);
+    await tester.tap(find.byKey(const Key('clear-played')));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump();
+    expect(state.queue.length, 1);
     final sung = await tester.runAsync(() => db.history.recent());
     expect(sung!.single.singer, 'Dean');
   });
@@ -350,7 +359,7 @@ void main() {
     });
     expect(state.engine.current?.id, tracks[1].id, reason: 'moves on exactly one song');
     expect(state.engine.playing, isTrue);
-    expect(state.queue.length, 2);
+    expect(state.queue.where((e) => !e.played).length, 2);
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 2300)));
     expect(backend.volume, 80); // faded back in
   });
@@ -470,5 +479,16 @@ void main() {
     });
     expect(state.engine.current?.id, tracks[1].id);
     expect(backend.volume, closeTo(80 / 3, 1)); // the next song starts at a third, then fades up
+  });
+
+  testWidgets('the Read me sheet opens from the top', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('read-me')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('EZtiger · Read me'), findsOneWidget);
+    expect(find.textContaining('Autocue loads the next song'), findsOneWidget);
+    await tester.tap(find.text('Close'));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('EZtiger · Read me'), findsNothing);
   });
 }

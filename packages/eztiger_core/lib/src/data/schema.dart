@@ -11,7 +11,8 @@
 ///   writes them, so edits survive every rescan.
 library;
 
-const int schemaVersion = 1;
+/// 2: queue.played_at (played songs stay in the queue).
+const int schemaVersion = 2;
 
 /// Bump when the filename parser or classification rules change. A scan that
 /// sees a different value re-parses every track (as UPDATEs, ids unchanged).
@@ -93,7 +94,8 @@ CREATE TABLE queue (
   id        INTEGER PRIMARY KEY,
   track_id  INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
   singer    TEXT,
-  position  INTEGER NOT NULL
+  position  INTEGER NOT NULL,
+  played_at INTEGER
 )''',
   '''
 CREATE TABLE singer_history (
