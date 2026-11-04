@@ -58,6 +58,20 @@ Future<void> indexTracks(DatabaseExecutor ex, List<int> ids, {bool freshTable = 
 }
 
 class SearchDao {
+  /// Finds the best match for each line of a pasted song list, such as a set
+  /// list typed in Notepad or copied from Excel. Blank lines are skipped;
+  /// a line with no match comes back with a null track.
+  Future<List<(String, Track?)>> matchList(String text) async {
+    final out = <(String, Track?)>[];
+    for (final raw in text.split(RegExp(r'\r?\n'))) {
+      final line = cleanListLine(raw);
+      if (line.isEmpty) continue;
+      final hits = await search(line, limit: 1);
+      out.add((line, hits.isEmpty ? null : hits.first.primary));
+    }
+    return out;
+  }
+
   SearchDao(this.db, this.hasFts);
   final Database db;
   final bool hasFts;
@@ -217,4 +231,15 @@ ORDER BY COALESCE(t.user_title, t.title) COLLATE NOCASE LIMIT ?''', args);
     }
     return bestD <= max ? best : null;
   }
+}
+
+/// Tidies one line of a pasted song list: drops numbering ("1.", "02 -"),
+/// bullets, file extensions and Excel tabs.
+String cleanListLine(String raw) {
+  var s = raw.replaceAll('\t', ' - ').trim();
+  s = s.replaceFirst(RegExp(r'^[\-\*•·]+\s*'), '');
+  s = s.replaceFirst(RegExp(r'^\d{1,3}\s*[.):\-]\s*'), '');
+  s = s.replaceFirst(RegExp(r'\.(mp3|cdg|zip|mp4|wav|avi|mkv|m4a|wma)$', caseSensitive: false), '');
+  s = s.replaceAll(RegExp(r'(\s*-\s*)+$'), '');
+  return s.trim();
 }

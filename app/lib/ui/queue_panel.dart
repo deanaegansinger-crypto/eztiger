@@ -13,8 +13,8 @@ class QueuePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
-    return DragTarget<Track>(
-      onAcceptWithDetails: (d) => s.enqueue(d.data),
+    return DragTarget<List<Track>>(
+      onAcceptWithDetails: (d) => s.enqueueAll(d.data),
       builder: (context, cand, _) => Container(
         decoration: BoxDecoration(
           color: context.ez.panel.withValues(alpha: 0.94),

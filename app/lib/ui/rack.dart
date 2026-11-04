@@ -1,6 +1,8 @@
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_state.dart';
 import '../theme.dart';
@@ -251,7 +253,14 @@ class _LibraryTabsState extends State<LibraryTabs> {
       Row(children: [
         _TabButton(label: '📁 Library', selected: tab == 0, onTap: () => setState(() => tab = 0)),
         const SizedBox(width: 6),
-        _TabButton(label: '★ Playlists', selected: tab == 1, onTap: () => setState(() => tab = 1)),
+        DragTarget<List<Track>>(
+          onWillAcceptWithDetails: (_) {
+            if (tab != 1) setState(() => tab = 1);
+            return false;
+          },
+          builder: (context, _, _) =>
+              _TabButton(label: '★ Playlists', selected: tab == 1, onTap: () => setState(() => tab = 1)),
+        ),
         const Spacer(),
         if (tab == 0) const _AddFolderButton(),
       ]),
@@ -436,13 +445,26 @@ class PlaylistsPanel extends StatelessWidget {
     final s = AppScope.of(context);
     return ListView(shrinkWrap: true, children: [
       Row(children: [
-        TextButton(
-          style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: EzColors.brass),
-          onPressed: () async {
-            final name = await askText(context, title: 'New playlist', label: 'Name');
-            if (name != null) await s.createPlaylist(name);
+        DragTarget<List<Track>>(
+          onAcceptWithDetails: (d) async {
+            final name = await askText(context, title: 'New playlist with ${d.data.length} songs', label: 'Name');
+            if (name != null) await s.createPlaylist(name, tracks: d.data);
           },
-          child: const Text('+ Create', style: TextStyle(fontSize: 11)),
+          builder: (context, cand, _) => Container(
+            decoration: BoxDecoration(
+              color: cand.isNotEmpty ? EzColors.cyan.withValues(alpha: 0.25) : null,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: TextButton(
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: EzColors.brass),
+              onPressed: () async {
+                final name = await askText(context, title: 'New playlist', label: 'Name');
+                if (name != null) await s.createPlaylist(name);
+              },
+              child: Text(cand.isNotEmpty ? '+ Drop here for a new playlist' : '+ Create',
+                  style: const TextStyle(fontSize: 11)),
+            ),
+          ),
         ),
         const Spacer(),
         TextButton(
@@ -451,23 +473,44 @@ class PlaylistsPanel extends StatelessWidget {
           child: const Text('🕘 History', style: TextStyle(fontSize: 11)),
         ),
       ]),
+      if (s.playlists.isEmpty)
+        Padding(
+          padding: const EdgeInsets.all(6),
+          child: Text('Drag songs onto "+ Create" to make a playlist.',
+              style: TextStyle(fontSize: 11, color: context.ez.textDim)),
+        ),
       for (final p in s.playlists)
-        DragTarget<Track>(
-          onAcceptWithDetails: (d) => s.addToPlaylist(p.id, d.data.id),
+        DragTarget<List<Track>>(
+          onAcceptWithDetails: (d) => s.addToPlaylist(p.id, d.data),
           builder: (context, cand, _) => GestureDetector(
             onSecondaryTapDown: (d) async {
-              final c = await showMenuAt<String>(context, d.globalPosition, const [
-                PopupMenuItem(value: 'queue', child: Text('Save the queue into this playlist')),
-                PopupMenuItem(value: 'delete', child: Text('Delete playlist')),
+              final c = await showMenuAt<String>(context, d.globalPosition, [
+                const PopupMenuItem(value: 'open', child: Text('Open')),
+                PopupMenuItem(
+                    value: 'paste',
+                    child: Text(s.copied.isEmpty ? '📋 Paste songs or a song list' : '📋 Paste ${s.copied.length} copied songs')),
+                const PopupMenuItem(value: 'queue', child: Text('Save the queue into this playlist')),
+                const PopupMenuItem(value: 'toqueue', child: Text('➕ Add the whole playlist to the queue')),
+                const PopupMenuItem(value: 'delete', child: Text('Delete playlist')),
               ]);
-              if (c == 'queue') await s.saveQueueTo(p.id);
-              if (c == 'delete') await s.deletePlaylist(p);
+              switch (c) {
+                case 'open':
+                  await s.openPlaylist(p);
+                case 'paste':
+                  await pasteInto(s, p.id);
+                case 'queue':
+                  await s.saveQueueTo(p.id);
+                case 'toqueue':
+                  await s.enqueueAll(await s.db.playlists.tracks(p.id));
+                case 'delete':
+                  await s.deletePlaylist(p);
+              }
             },
             child: InkWell(
               onTap: () => s.openPlaylist(p),
               child: Container(
                 color: cand.isNotEmpty
-                    ? EzColors.cyan.withValues(alpha: 0.2)
+                    ? EzColors.cyan.withValues(alpha: 0.25)
                     : (s.view == ResultsView.playlist && s.selectedPlaylistId == p.id
                         ? EzColors.brass.withValues(alpha: 0.18)
                         : null),
@@ -483,6 +526,13 @@ class PlaylistsPanel extends StatelessWidget {
         ),
     ]);
   }
+}
+
+/// Pastes into a playlist: songs copied with Ctrl+C, or a song list copied
+/// from Notepad, Word or Excel (one song per line).
+Future<void> pasteInto(AppState s, int playlistId) async {
+  final data = await Clipboard.getData(Clipboard.kTextPlain);
+  await s.paste(playlistId, data?.text);
 }
 
 class SearchBox extends StatefulWidget {
@@ -544,8 +594,43 @@ class TypeChip extends StatelessWidget {
   }
 }
 
-class ResultsTable extends StatelessWidget {
+class ResultsTable extends StatefulWidget {
   const ResultsTable({super.key});
+  @override
+  State<ResultsTable> createState() => _ResultsTableState();
+}
+
+class _ResultsTableState extends State<ResultsTable> {
+  final focus = FocusNode(debugLabel: 'results');
+
+  @override
+  void dispose() {
+    focus.dispose();
+    super.dispose();
+  }
+
+  KeyEventResult _onKey(AppState s, KeyEvent e) {
+    if (e is! KeyDownEvent) return KeyEventResult.ignored;
+    final ctrl = HardwareKeyboard.instance.isControlPressed;
+    final k = e.logicalKey;
+    if (ctrl && k == LogicalKeyboardKey.keyA) {
+      s.selectAll();
+    } else if (ctrl && k == LogicalKeyboardKey.keyC) {
+      final tracks = s.selectedTracks();
+      if (tracks.isNotEmpty) Clipboard.setData(ClipboardData(text: s.copy(tracks)));
+    } else if (ctrl && k == LogicalKeyboardKey.keyV && s.view == ResultsView.playlist && s.selectedPlaylistId != null) {
+      pasteInto(s, s.selectedPlaylistId!);
+    } else if ((k == LogicalKeyboardKey.delete || k == LogicalKeyboardKey.backspace) && s.view == ResultsView.playlist) {
+      s.removeSelectedFromPlaylist();
+    } else if (k == LogicalKeyboardKey.enter) {
+      s.enqueueAll(s.selectedTracks());
+    } else if (k == LogicalKeyboardKey.escape && s.selection.isNotEmpty) {
+      s.clearSelection();
+    } else {
+      return KeyEventResult.ignored;
+    }
+    return KeyEventResult.handled;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -556,24 +641,36 @@ class ResultsTable extends StatelessWidget {
       ResultsView.playlist => 'Playlist',
       ResultsView.history => 'Sung',
     };
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text('$label · ${s.resultsTitle} · ${groups.length} ${groups.length == 1 ? 'match' : 'matches'}',
-          style: TextStyle(fontSize: 11, color: context.ez.textDim)),
-      const SizedBox(height: 4),
-      const _ResultsHeader(),
-      Expanded(
-        child: groups.isEmpty
-            ? Center(
-                child: Text(
-                    s.roots.isEmpty ? 'Add a folder to start.' : (s.scanning ? 'Scanning…' : 'Nothing found.'),
-                    style: TextStyle(color: context.ez.textDim)))
-            : ListView.builder(
-                itemCount: groups.length,
-                itemExtent: 26,
-                itemBuilder: (context, i) => ResultRow(group: groups[i], index: i),
-              ),
-      ),
-    ]);
+    final n = s.selection.length;
+    return Focus(
+      focusNode: focus,
+      onKeyEvent: (_, e) => _onKey(s, e),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(
+            '$label · ${s.resultsTitle} · ${groups.length} ${groups.length == 1 ? 'match' : 'matches'}'
+            '${n > 1 ? ' · $n selected (drag them, or Ctrl+C)' : ''}',
+            style: TextStyle(fontSize: 11, color: context.ez.textDim)),
+        const SizedBox(height: 4),
+        const _ResultsHeader(),
+        Expanded(
+          child: groups.isEmpty
+              ? Center(
+                  child: Text(
+                      s.view == ResultsView.playlist
+                          ? 'Empty playlist. Drag songs onto it, or right-click it and paste.'
+                          : s.roots.isEmpty
+                              ? 'Add a folder to start.'
+                              : (s.scanning ? 'Scanning…' : 'Nothing found.'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: context.ez.textDim)))
+              : ListView.builder(
+                  itemCount: groups.length,
+                  itemExtent: 26,
+                  itemBuilder: (context, i) => ResultRow(group: groups[i], index: i, focus: focus),
+                ),
+        ),
+      ]),
+    );
   }
 }
 
@@ -592,19 +689,30 @@ class _ResultsHeader extends StatelessWidget {
       );
 }
 
-class ResultRow extends StatelessWidget {
-  const ResultRow({super.key, required this.group, required this.index});
+class ResultRow extends StatefulWidget {
+  const ResultRow({super.key, required this.group, required this.index, this.focus});
   final SearchGroup group;
   final int index;
+  final FocusNode? focus;
+  @override
+  State<ResultRow> createState() => _ResultRowState();
+}
+
+class _ResultRowState extends State<ResultRow> {
+  bool _dragged = false;
 
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
+    final group = widget.group, index = widget.index;
     final t = group.primary;
+    final selected = s.selection.contains(index);
     final row = InkWell(
       onDoubleTap: () => s.enqueue(t),
       child: Container(
-        color: index.isOdd ? context.ez.raised.withValues(alpha: 0.4) : null,
+        color: selected
+            ? EzColors.brass.withValues(alpha: 0.28)
+            : (index.isOdd ? context.ez.raised.withValues(alpha: 0.4) : null),
         padding: const EdgeInsets.symmetric(horizontal: 6),
         child: Row(children: [
           Expanded(
@@ -635,43 +743,75 @@ class ResultRow extends StatelessWidget {
         ]),
       ),
     );
-    return GestureDetector(
-      onSecondaryTapDown: (d) => trackMenu(context, d.globalPosition, group, playlistPosition: s.view == ResultsView.playlist ? index : null),
-      child: Draggable<Track>(
-        data: t,
-        dragAnchorStrategy: pointerDragAnchorStrategy,
-        feedback: Material(
-          color: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: EzColors.brass, borderRadius: BorderRadius.circular(6)),
-            child: Text(t.title, style: const TextStyle(color: EzColors.onBrass, fontWeight: FontWeight.w700, fontSize: 12)),
+    final dragging = s.selectedTracks(orRow: index);
+    return Listener(
+      onPointerDown: (e) {
+        widget.focus?.requestFocus();
+        _dragged = false;
+        final keys = HardwareKeyboard.instance;
+        final shift = keys.isShiftPressed, ctrl = keys.isControlPressed;
+        if (e.buttons == kSecondaryMouseButton) {
+          if (!selected) s.selectRow(index);
+        } else if (shift || ctrl) {
+          s.selectRow(index, shift: shift, ctrl: ctrl);
+        } else if (!selected) {
+          s.selectRow(index);
+        }
+      },
+      onPointerUp: (e) {
+        final keys = HardwareKeyboard.instance;
+        // A plain click inside a block (without dragging) narrows it to one row.
+        if (!_dragged && selected && s.selection.length > 1 && !keys.isShiftPressed && !keys.isControlPressed &&
+            e.kind == PointerDeviceKind.mouse && e.buttons == 0 && e.down == false) {
+          s.selectRow(index);
+        }
+      },
+      child: GestureDetector(
+        onSecondaryTapDown: (d) => trackMenu(context, d.globalPosition, group,
+            tracks: s.selectedTracks(orRow: index)),
+        child: Draggable<List<Track>>(
+          data: dragging,
+          dragAnchorStrategy: pointerDragAnchorStrategy,
+          onDragStarted: () => _dragged = true,
+          feedback: Material(
+            color: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: EzColors.brass, borderRadius: BorderRadius.circular(6)),
+              child: Text(dragging.length == 1 ? t.title : '${dragging.length} songs',
+                  style: const TextStyle(color: EzColors.onBrass, fontWeight: FontWeight.w700, fontSize: 12)),
+            ),
           ),
+          child: row,
         ),
-        child: row,
       ),
     );
   }
 }
 
-/// Right-click menu for a song.
-Future<void> trackMenu(BuildContext context, Offset at, SearchGroup group, {int? playlistPosition}) async {
+/// Right-click menu for one song or a block of selected songs.
+Future<void> trackMenu(BuildContext context, Offset at, SearchGroup group, {required List<Track> tracks}) async {
   final s = AppScope.of(context);
   final t = group.primary;
+  final many = tracks.length > 1;
+  final n = '${tracks.length} songs';
+  final inPlaylist = s.view == ResultsView.playlist;
   final choice = await showMenuAt<String>(context, at, [
-    const PopupMenuItem(value: 'queue', child: Text('➕ Add to queue')),
-    const PopupMenuItem(value: 'singer', child: Text('🎤 Add to queue with singer…')),
-    const PopupMenuItem(value: 'play', child: Text('▶ Play now')),
-    if (group.versions.length > 1) const PopupMenuItem(value: 'versions', child: Text('🎚 Other versions…')),
+    PopupMenuItem(value: 'queue', child: Text(many ? '➕ Add $n to the queue' : '➕ Add to queue')),
+    if (!many) const PopupMenuItem(value: 'singer', child: Text('🎤 Add to queue with singer…')),
+    if (!many) const PopupMenuItem(value: 'play', child: Text('▶ Play now')),
+    if (!many && group.versions.length > 1) const PopupMenuItem(value: 'versions', child: Text('🎚 Other versions…')),
     const PopupMenuDivider(),
+    PopupMenuItem(value: 'new', child: Text(many ? '★ New playlist from these $n…' : '★ New playlist with this song…')),
     for (final p in s.playlists) PopupMenuItem(value: 'pl:${p.id}', child: Text('★ Add to ${p.name}')),
-    if (playlistPosition != null) const PopupMenuItem(value: 'unlist', child: Text('Remove from this playlist')),
-    const PopupMenuItem(value: 'edit', child: Text('✏️ Edit tags…')),
+    PopupMenuItem(value: 'copy', child: Text(many ? '📋 Copy $n   Ctrl+C' : '📋 Copy   Ctrl+C')),
+    if (inPlaylist) PopupMenuItem(value: 'unlist', child: Text(many ? 'Remove $n from this playlist   Del' : 'Remove from this playlist   Del')),
+    if (!many) const PopupMenuItem(value: 'edit', child: Text('✏️ Edit tags…')),
   ]);
   if (!context.mounted || choice == null) return;
   switch (choice) {
     case 'queue':
-      await s.enqueue(t);
+      await s.enqueueAll(tracks);
     case 'singer':
       final name = await askText(context, title: 'Who is singing?', label: 'Singer');
       if (name != null) await s.enqueue(t, singer: name);
@@ -680,12 +820,17 @@ Future<void> trackMenu(BuildContext context, Offset at, SearchGroup group, {int?
     case 'versions':
       final v = await pickVersion(context, group);
       if (v != null) await s.enqueue(v);
+    case 'new':
+      final name = await askText(context, title: 'New playlist', label: 'Name');
+      if (name != null) await s.createPlaylist(name, tracks: tracks);
+    case 'copy':
+      await Clipboard.setData(ClipboardData(text: s.copy(tracks)));
     case 'unlist':
-      await s.removeFromPlaylist(playlistPosition!);
+      await s.removeSelectedFromPlaylist();
     case 'edit':
       await showEditTags(context, t);
     default:
-      if (choice.startsWith('pl:')) await s.addToPlaylist(int.parse(choice.substring(3)), t.id);
+      if (choice.startsWith('pl:')) await s.addToPlaylist(int.parse(choice.substring(3)), tracks);
   }
 }
 

@@ -2,20 +2,26 @@ import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import '../second_screen.dart';
 import '../theme.dart';
 
 /// Gives every widget below it the [AppState], and rebuilds them when it
 /// changes.
 class AppScope extends InheritedNotifier<AppState> {
-  const AppScope({super.key, required AppState state, required super.child, this.videoBuilder})
+  const AppScope({super.key, required AppState state, required super.child, this.videoBuilder, this.secondScreen})
       : super(notifier: state);
 
   /// Builds the video surface for video tracks (null in tests).
   final WidgetBuilder? videoBuilder;
 
+  /// Opens the output on a second screen (null in tests).
+  final SecondScreen? secondScreen;
+
   static AppState of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<AppScope>()!.notifier!;
   static WidgetBuilder? videoOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AppScope>()!.videoBuilder;
+  static SecondScreen? secondScreenOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AppScope>()!.secondScreen;
 }
 
 /// The rounded "raised" box used all over the mockup.

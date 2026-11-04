@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
@@ -12,10 +13,15 @@ import 'package:window_manager/window_manager.dart';
 import 'app_state.dart';
 import 'media_kit_backend.dart';
 import 'player.dart';
+import 'second_screen.dart';
 import 'ui/app.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // The second-screen output is a separate window that starts here too.
+  final thisWindow = await WindowController.fromCurrentEngine();
+  if (isOutputWindow(thisWindow.arguments)) return runOutputWindow();
+
   MediaKit.ensureInitialized();
   await windowManager.ensureInitialized();
   await windowManager.waitUntilReadyToShow(
@@ -40,5 +46,6 @@ Future<void> main() async {
     state: state,
     videoBuilder: (_) => Video(controller: backend.video, controls: NoVideoControls, fill: Colors.black),
     setFullScreen: windowManager.setFullScreen,
+    secondScreen: SecondScreen(engine),
   ));
 }

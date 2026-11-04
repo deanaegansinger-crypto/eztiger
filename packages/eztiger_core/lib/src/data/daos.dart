@@ -159,6 +159,25 @@ INSERT INTO playlist_tracks(playlist_id, track_id, position)
 VALUES(?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_tracks WHERE playlist_id = ?))''',
       [playlistId, trackId, playlistId]);
 
+  /// Adds several songs to the end of a playlist, in order.
+  Future<void> addAll(int playlistId, Iterable<int> trackIds) => db.transaction((txn) async {
+        final r = await txn.rawQuery(
+            'SELECT COALESCE(MAX(position), -1) + 1 AS n FROM playlist_tracks WHERE playlist_id = ?', [playlistId]);
+        var pos = r.first['n'] as int;
+        for (final id in trackIds) {
+          await txn.insert('playlist_tracks', {'playlist_id': playlistId, 'track_id': id, 'position': pos++});
+        }
+      });
+
+  /// Removes the songs at [positions] (0-based) in one go.
+  Future<void> removePositions(int playlistId, Iterable<int> positions) => db.transaction((txn) async {
+        for (final p in positions) {
+          await txn.delete('playlist_tracks',
+              where: 'playlist_id = ? AND position = ?', whereArgs: [playlistId, p]);
+        }
+        await _renumber(txn, playlistId);
+      });
+
   /// Saves the current queue as a playlist ("drag songs from the queue onto
   /// a folder to save them for next time").
   Future<void> addQueue(int playlistId) async {

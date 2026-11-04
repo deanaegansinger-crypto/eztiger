@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import '../second_screen.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'home.dart';
 
 class EztigerApp extends StatelessWidget {
-  const EztigerApp({super.key, required this.state, this.videoBuilder, this.setFullScreen});
+  const EztigerApp({super.key, required this.state, this.videoBuilder, this.setFullScreen, this.secondScreen});
+  final SecondScreen? secondScreen;
   final AppState state;
   final WidgetBuilder? videoBuilder;
   final Future<void> Function(bool)? setFullScreen;
@@ -15,8 +17,9 @@ class EztigerApp extends StatelessWidget {
   Widget build(BuildContext context) => AppScope(
         state: state,
         videoBuilder: videoBuilder,
+        secondScreen: secondScreen,
         child: ListenableBuilder(
-          listenable: state,
+          listenable: Listenable.merge([state, ?secondScreen]),
           builder: (context, _) => MaterialApp(
             title: 'EZtiger',
             debugShowCheckedModeBanner: false,

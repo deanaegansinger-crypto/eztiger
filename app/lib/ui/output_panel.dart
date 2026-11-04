@@ -87,6 +87,24 @@ class _OutputPanelState extends State<OutputPanel> {
                 child: Row(children: [
                   const HeadText('Karaoke output', color: EzColors.brass),
                   const Spacer(),
+                  if (AppScope.secondScreenOf(context) case final second?)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 10),
+                      child: Tooltip(
+                        message: second.isOpen
+                            ? 'Close the second-screen output'
+                            : 'Show the lyrics or video on a second screen (a TV or projector)',
+                        child: InkWell(
+                          onTap: second.toggle,
+                          child: Row(children: [
+                            Icon(Icons.connected_tv, size: 16, color: second.isOpen ? EzColors.cyan : null),
+                            const SizedBox(width: 4),
+                            Text(second.isOpen ? 'On 2nd screen' : '2nd screen',
+                                style: TextStyle(fontSize: 11, color: second.isOpen ? EzColors.cyan : null)),
+                          ]),
+                        ),
+                      ),
+                    ),
                   Tooltip(
                     message: 'Full screen (Esc to exit)',
                     child: InkWell(onTap: widget.onFullScreen, child: const Icon(Icons.fullscreen, size: 18)),

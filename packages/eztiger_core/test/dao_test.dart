@@ -59,4 +59,31 @@ void main() {
     await lib.db.playlists.add(pl, ids[0]);
     expect(await lib.db.playlists.tracks(pl), hasLength(2));
   });
+
+  test('playlists: add a block of songs, remove several at once', () async {
+    final pl = await lib.db.playlists.create('Block');
+    await lib.db.playlists.add(pl, ids[2]);
+    await lib.db.playlists.addAll(pl, [ids[0], ids[1], ids[2]]);
+    expect((await lib.db.playlists.tracks(pl)).map((t) => t.title), ['Shallow', 'Africa', 'Piano Man', 'Shallow']);
+    await lib.db.playlists.removePositions(pl, [0, 2]);
+    expect((await lib.db.playlists.tracks(pl)).map((t) => t.title), ['Africa', 'Shallow']);
+    await lib.db.playlists.add(pl, ids[1]);
+    expect((await lib.db.playlists.tracks(pl)).last.title, 'Piano Man');
+  });
+
+  test('a pasted song list is matched line by line', () async {
+    final m = await lib.db.search.matchList('''
+1. Africa - Toto
+02 - Billy Joel\tPiano Man
+
+• shallow.mp3
+Nothing Like This At All
+''');
+    expect(m.map((e) => '${e.$1} => ${e.$2?.title}'), [
+      'Africa - Toto => Africa',
+      'Billy Joel - Piano Man => Piano Man',
+      'shallow => Shallow',
+      'Nothing Like This At All => null',
+    ]);
+  });
 }
