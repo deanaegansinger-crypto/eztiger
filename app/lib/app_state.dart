@@ -377,7 +377,7 @@ class AppState extends ChangeNotifier {
   Future<void> playNow(Track t, {bool autostart = true}) async {
     nowPlayingQueueId = null;
     _endFade();
-    await engine.load(t, autostart: autostart);
+    await engine.load(t, autostart: autostart, skipSilence: autocue);
     notifyListeners();
   }
 
@@ -405,7 +405,14 @@ class AppState extends ChangeNotifier {
   Future<void> _cue(QueueEntry e, {required bool autostart, Duration? fadeIn}) async {
     nowPlayingQueueId = e.id;
     _endFade();
-    await engine.load(e.track, singer: e.singer, autostart: autostart, fadeIn: fadeIn);
+    // Autocue (and a crossfade) start the song at its first note.
+    await engine.load(
+      e.track,
+      singer: e.singer,
+      autostart: autostart,
+      fadeIn: fadeIn,
+      skipSilence: autocue || fadeIn != null,
+    );
     notifyListeners();
   }
 
@@ -437,13 +444,16 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Crossfade: near the end of a song, when another song is queued, fade
-  /// it out and bring the next one in. Works in either play mode.
+  /// Crossfade: near the end of the music (before any silence at the end of
+  /// the file), when another song is queued, fade it out and bring the next
+  /// one in at its first note. Works in either play mode.
   void _watchForCrossfade() {
     if (!crossfade || _fading || !engine.playing || engine.current == null || upNext == null) return;
-    if (engine.duration < fadeOutTime * 2) return;
-    final left = engine.duration - engine.position;
-    if (left > fadeOutTime || left <= Duration.zero) return;
+    final end = engine.audioEnd;
+    if (end < fadeOutTime * 2) return;
+    var left = end - engine.position;
+    if (left > fadeOutTime) return;
+    if (left < const Duration(milliseconds: 300)) left = const Duration(milliseconds: 300); // already in the silence
     if (identical(engine.current, _noFadeFor)) return;
     _fading = true;
     final token = ++_fadeToken;

@@ -21,11 +21,16 @@ void main() {
   late FakeBackend backend;
   late AppState state;
 
+  /// Where the music starts and ends, by file name (none: unknown).
+  final edges = <String, AudioEdges>{};
+  Future<AudioEdges?> scan(String path) async => edges[path.split(RegExp(r'[\\/]')).last];
+
   setUp(() async {
+    edges.clear();
     lib = makeLibrary();
     db = await EztigerDatabase.open(databaseFactoryFfiNoIsolate, inMemoryDatabasePath);
     backend = FakeBackend();
-    state = AppState(db, KaraokeEngine(backend));
+    state = AppState(db, KaraokeEngine(backend, scanEdges: scan));
   });
 
   tearDown(() async {
@@ -372,7 +377,7 @@ void main() {
     state.toggleAutocue(); // off, so adding doesn't cue
     await tester.runAsync(() => state.enqueue(t));
     // A fresh start: init must not load a song (the window isn't up yet).
-    final fresh = AppState(db, KaraokeEngine(FakeBackend()));
+    final fresh = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan));
     await tester.runAsync(fresh.init);
     expect(fresh.engine.current, isNull);
     fresh.autocue = true;
@@ -391,7 +396,7 @@ void main() {
       await state.playNow(t, autostart: false);
       await Future<void>.delayed(const Duration(milliseconds: 100));
     });
-    final fresh = AppState(db, KaraokeEngine(FakeBackend()));
+    final fresh = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan));
     await tester.runAsync(() async {
       await fresh.init();
       await fresh.startUp();
@@ -401,5 +406,47 @@ void main() {
     expect(fresh.engine.volume, 55);
     expect(fresh.engine.current?.id, t.id);
     expect(fresh.engine.playing, isFalse);
+  });
+
+  void silentEnds() {
+    for (final f in ['Abba - Waterloo.mp3', 'Queen - Bohemian Rhapsody.mp4', 'Bon Jovi - Livin On A Prayer.mp3']) {
+      edges[f] = const AudioEdges(Duration(seconds: 10), Duration(seconds: 170), Duration(minutes: 3));
+    }
+  }
+
+  testWidgets('autocue starts a song at its first note, past the silence', (tester) async {
+    await pumpApp(tester);
+    silentEnds();
+    final t = state.results.first.primary;
+    await tester.runAsync(() => state.enqueue(t));
+    expect(state.engine.current?.id, t.id);
+    expect(backend.opensAt.last, const Duration(milliseconds: 9850));
+    expect(state.engine.cueStart, const Duration(milliseconds: 9850));
+    await tester.runAsync(state.previous); // ⏮ goes back to the first note
+    expect(backend.seeks.last, const Duration(milliseconds: 9850));
+
+    // With Autocue off, songs play from the very start.
+    state.toggleAutocue();
+    await tester.runAsync(() => state.playNow(state.results.last.primary, autostart: false));
+    expect(backend.opensAt.last, Duration.zero);
+  });
+
+  testWidgets('crossfade fades before the silence at the end, into the next first note', (tester) async {
+    await pumpApp(tester);
+    silentEnds();
+    final tracks = state.results.map((g) => g.primary).toList();
+    state.toggleAutocue(); // off: the crossfade still skips the next song's silence
+    state.toggleCrossfade();
+    await tester.runAsync(() async {
+      await state.enqueue(tracks[0]);
+      await state.enqueue(tracks[1]);
+      await state.playEntry(state.queue.first);
+      backend.at(const Duration(seconds: 165)); // 5 s before the music ends, 15 s before the file does
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(backend.volume, lessThan(80)); // fading
+      await Future<void>.delayed(const Duration(milliseconds: 5000));
+    });
+    expect(state.engine.current?.id, tracks[1].id);
+    expect(backend.opensAt.last, const Duration(milliseconds: 9850));
   });
 }

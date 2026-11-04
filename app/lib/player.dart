@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:ui' as ui;
 
 import 'package:archive/archive_io.dart';
@@ -10,7 +11,8 @@ import 'package:path/path.dart' as p;
 /// What the karaoke engine needs from an audio/video player. The real one
 /// is media_kit (libmpv); tests use a fake.
 abstract class MediaBackend {
-  Future<void> open(String path);
+  /// Opens [path] paused, at [start] if given.
+  Future<void> open(String path, {Duration? start});
   Future<void> play();
   Future<void> pause();
   Future<void> stop();
@@ -29,7 +31,8 @@ abstract class MediaBackend {
 /// and for CDG karaoke the lyrics screen, kept in step with the audio
 /// position.
 class KaraokeEngine extends ChangeNotifier {
-  KaraokeEngine(this.backend) {
+  KaraokeEngine(this.backend, {Future<AudioEdges?> Function(String path)? scanEdges})
+    : scanEdges = scanEdges ?? _scanInIsolate {
     _subs = [
       backend.position.listen(_onPosition),
       backend.duration.listen((d) {
@@ -47,6 +50,26 @@ class KaraokeEngine extends ChangeNotifier {
   }
 
   final MediaBackend backend;
+
+  /// Finds where the music starts and ends in a file (see [findAudioEdges]).
+  final Future<AudioEdges?> Function(String path) scanEdges;
+  static Future<AudioEdges?> _scanInIsolate(String path) => Isolate.run(() => findAudioEdges(path));
+  final Map<String, AudioEdges?> _edgeCache = {};
+
+  /// Where the music starts and ends in the loaded song, when known.
+  AudioEdges? edges;
+
+  /// Where the song was cued: its first sound when the silence at the start
+  /// was skipped, otherwise the very start. ⏮ goes back here.
+  Duration cueStart = Duration.zero;
+
+  /// The end of the music, before any silence at the end of the file.
+  Duration get audioEnd {
+    final end = edges?.end;
+    if (end == null || duration == Duration.zero) return duration;
+    return end < duration ? end : duration;
+  }
+
   late final List<StreamSubscription<Object?>> _subs;
 
   Track? current;
@@ -80,9 +103,19 @@ class KaraokeEngine extends ChangeNotifier {
   bool get _fading => _rampId == _fadeId;
 
   /// [fadeIn] starts the song silent and brings the volume up over that time.
-  Future<void> load(Track track, {String? singer, bool autostart = true, Duration? fadeIn}) async {
+  /// [skipSilence] starts the song at its first sound, past any silence at
+  /// the start of the file.
+  Future<void> load(
+    Track track, {
+    String? singer,
+    bool autostart = true,
+    Duration? fadeIn,
+    bool skipSilence = false,
+  }) async {
     _fadeId++;
     error = null;
+    edges = null;
+    cueStart = Duration.zero;
     current = track;
     this.singer = singer;
     position = Duration.zero;
@@ -103,7 +136,13 @@ class KaraokeEngine extends ChangeNotifier {
         _cdg = CdgDecoder(await File(cdgPath).readAsBytes());
         await _render();
       }
-      await backend.open(media);
+      edges = await _edgesOf(media);
+      final first = edges?.start ?? Duration.zero;
+      if (skipSilence && first > const Duration(milliseconds: 400)) {
+        cueStart = first - const Duration(milliseconds: 150); // a breath before the first note
+      }
+      position = cueStart;
+      await backend.open(media, start: cueStart == Duration.zero ? null : cueStart);
       final fading = fadeIn != null && autostart && !muted;
       await backend.setVolume(muted || fading ? 0 : volume);
       if (autostart) {
@@ -139,7 +178,16 @@ class KaraokeEngine extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> restart() => backend.seek(Duration.zero);
+  Future<void> restart() => backend.seek(cueStart);
+
+  Future<AudioEdges?> _edgesOf(String path) async {
+    if (_edgeCache.containsKey(path)) return _edgeCache[path];
+    AudioEdges? e;
+    try {
+      e = await scanEdges(path).timeout(const Duration(seconds: 3));
+    } catch (_) {}
+    return _edgeCache[path] = e;
+  }
 
   Future<void> seek(Duration to) => backend.seek(to);
 

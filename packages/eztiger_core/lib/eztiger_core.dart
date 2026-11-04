@@ -3,6 +3,7 @@
 /// Pure Dart, no Flutter. The Flutter app depends on this package.
 library;
 
+export 'src/audio/audio_edges.dart';
 export 'src/cdg/cdg_decoder.dart';
 export 'src/data/database.dart';
 export 'src/data/daos.dart' hide trackSelect;
