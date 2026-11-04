@@ -237,4 +237,26 @@ void main() {
     await tester.runAsync(() => state.dropIntoQueue(SongDrag([last.track], queueIds: [last.id]), 0));
     expect(state.queue.map((e) => e.track.id), [tracks[1].id, tracks[0].id, tracks[2].id]);
   });
+
+  testWidgets('the player display follows the player by itself', (tester) async {
+    await pumpApp(tester);
+    await tester.runAsync(() => state.playNow(state.results.first.primary));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump();
+    expect(find.byIcon(Icons.pause), findsOneWidget);
+    // Only the player changes from here on: no AppState notifications.
+    await tester.runAsync(() async {
+      await backend.pause();
+      backend.at(const Duration(seconds: 65));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+    expect(find.byIcon(Icons.play_arrow), findsOneWidget);
+    expect(find.text('01:05'), findsOneWidget); // seek bar, elapsed
+    expect(find.text('-01:55'), findsOneWidget); // seek bar, remaining
+    expect(find.textContaining('01:05 / 03:00'), findsOneWidget); // the display
+    final slider = tester.widget<Slider>(find.byKey(const Key('seek')));
+    expect(slider.value, 65000);
+    expect(slider.max, 180000);
+  });
 }
