@@ -48,7 +48,9 @@ class SecondScreen extends ChangeNotifier {
 
   Future<void> open() async {
     if (isOpen) return;
-    _window = await WindowController.create(const WindowConfiguration(arguments: outputWindowArgs, hiddenAtLaunch: true));
+    _window = await WindowController.create(
+      const WindowConfiguration(arguments: outputWindowArgs, hiddenAtLaunch: true),
+    );
     await _window!.show();
     _windows ??= onWindowsChanged.listen((_) => _checkStillOpen());
     _sentTrack = null;
@@ -152,11 +154,13 @@ Future<void> runOutputWindow() async {
 
   final out = _OutputModel()..fullScreen = fullScreen;
   await _channel.setMethodCallHandler(out.handle);
-  runApp(MaterialApp(
-    debugShowCheckedModeBanner: false,
-    theme: buildTheme(true),
-    home: _OutputView(model: out),
-  ));
+  runApp(
+    MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: buildTheme(true),
+      home: _OutputView(model: out),
+    ),
+  );
 }
 
 class _OutputModel extends ChangeNotifier {
@@ -228,50 +232,65 @@ class _OutputView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): () => model.setFullScreen(false),
-          const SingleActivator(LogicalKeyboardKey.f11): () => model.setFullScreen(!model.fullScreen),
-        },
-        child: Focus(
-          autofocus: true,
-          child: Scaffold(
-            backgroundColor: Colors.black,
-            body: GestureDetector(
-              onDoubleTap: () => model.setFullScreen(!model.fullScreen),
-              child: ListenableBuilder(
-                listenable: model,
-                builder: (context, _) {
-                  final v = model.video;
-                  if (v != null) return Video(controller: v, controls: NoVideoControls, fill: Colors.black);
-                  final img = model.cdg;
-                  if (img != null) {
-                    return Center(
-                      child: AspectRatio(
-                        aspectRatio: 300 / 216,
-                        child: RawImage(image: img, fit: BoxFit.fill, filterQuality: FilterQuality.none),
+    bindings: {
+      const SingleActivator(LogicalKeyboardKey.escape): () => model.setFullScreen(false),
+      const SingleActivator(LogicalKeyboardKey.f11): () => model.setFullScreen(!model.fullScreen),
+    },
+    child: Focus(
+      autofocus: true,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: GestureDetector(
+          onDoubleTap: () => model.setFullScreen(!model.fullScreen),
+          child: ListenableBuilder(
+            listenable: model,
+            builder: (context, _) {
+              final v = model.video;
+              if (v != null) return Video(controller: v, controls: NoVideoControls, fill: Colors.black);
+              final img = model.cdg;
+              if (img != null) {
+                return Center(
+                  child: AspectRatio(
+                    aspectRatio: 300 / 216,
+                    child: RawImage(image: img, fit: BoxFit.fill, filterQuality: FilterQuality.none),
+                  ),
+                );
+              }
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const EzLogo(size: 160),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'EZTIGER',
+                      style: TextStyle(
+                        fontSize: 64,
+                        fontWeight: FontWeight.w900,
+                        color: EzColors.brass,
+                        letterSpacing: 10,
                       ),
-                    );
-                  }
-                  return Center(
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      const EzLogo(size: 160),
-                      const SizedBox(height: 12),
-                      const Text('EZTIGER',
-                          style: TextStyle(fontSize: 64, fontWeight: FontWeight.w900, color: EzColors.brass, letterSpacing: 10)),
-                      const SizedBox(height: 16),
-                      Text(model.title ?? 'Up next…', textAlign: TextAlign.center, style: const TextStyle(fontSize: 36, color: EzColors.cyan)),
-                      if (model.artist != null) Text(model.artist!, style: const TextStyle(fontSize: 24, color: EzColors.vfdSub)),
-                      if (model.singer != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: Text('🎤 ${model.singer}', style: const TextStyle(fontSize: 28, color: Colors.white70)),
-                        ),
-                    ]),
-                  );
-                },
-              ),
-            ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      model.title ?? 'Up next…',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 36, color: EzColors.cyan),
+                    ),
+                    if (model.artist != null)
+                      Text(model.artist!, style: const TextStyle(fontSize: 24, color: EzColors.vfdSub)),
+                    if (model.singer != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text('🎤 ${model.singer}', style: const TextStyle(fontSize: 28, color: Colors.white70)),
+                      ),
+                  ],
+                ),
+              );
+            },
           ),
         ),
-      );
+      ),
+    ),
+  );
 }

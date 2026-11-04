@@ -15,20 +15,20 @@ class EztigerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AppScope(
-        state: state,
-        videoBuilder: videoBuilder,
-        secondScreen: secondScreen,
-        child: ListenableBuilder(
-          listenable: Listenable.merge([state, ?secondScreen]),
-          builder: (context, _) => MaterialApp(
-            title: 'EZtiger',
-            debugShowCheckedModeBanner: false,
-            theme: buildTheme(state.dark),
-            home: ListenableBuilder(
-              listenable: state.engine,
-              builder: (context, _) => HomeScreen(setFullScreen: setFullScreen),
-            ),
-          ),
+    state: state,
+    videoBuilder: videoBuilder,
+    secondScreen: secondScreen,
+    child: ListenableBuilder(
+      listenable: Listenable.merge([state, ?secondScreen]),
+      builder: (context, _) => MaterialApp(
+        title: 'EZtiger',
+        debugShowCheckedModeBanner: false,
+        theme: buildTheme(state.dark),
+        home: ListenableBuilder(
+          listenable: state.engine,
+          builder: (context, _) => HomeScreen(setFullScreen: setFullScreen),
         ),
-      );
+      ),
+    ),
+  );
 }

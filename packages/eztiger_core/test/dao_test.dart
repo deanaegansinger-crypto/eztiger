@@ -86,4 +86,25 @@ Nothing Like This At All
       'Nothing Like This At All => null',
     ]);
   });
+
+  test('songs drop in at any spot, and blocks move', () async {
+    final pl = await lib.db.playlists.create('Order');
+    await lib.db.playlists.addAll(pl, [ids[0], ids[1]]);
+    await lib.db.playlists.insertAll(pl, [ids[2]], at: 1);
+    expect((await lib.db.playlists.tracks(pl)).map((t) => t.title), ['Africa', 'Shallow', 'Piano Man']);
+    await lib.db.playlists.moveBlock(pl, [0, 1], 3);
+    expect((await lib.db.playlists.tracks(pl)).map((t) => t.title), ['Piano Man', 'Africa', 'Shallow']);
+    await lib.db.playlists.moveBlock(pl, [2], 0);
+    expect((await lib.db.playlists.tracks(pl)).map((t) => t.title), ['Shallow', 'Piano Man', 'Africa']);
+
+    await lib.db.queue.add(ids[0]);
+    await lib.db.queue.add(ids[1]);
+    await lib.db.queue.insertAll([ids[2]], at: 0);
+    var q = await lib.db.queue.all();
+    expect(q.map((e) => e.track.title), ['Shallow', 'Africa', 'Piano Man']);
+    expect(q.map((e) => e.position), [0, 1, 2]);
+    await lib.db.queue.moveBlock([q[0].id, q[1].id], 3);
+    q = await lib.db.queue.all();
+    expect(q.map((e) => e.track.title), ['Piano Man', 'Shallow', 'Africa']);
+  });
 }

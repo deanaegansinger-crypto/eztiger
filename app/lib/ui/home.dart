@@ -41,13 +41,23 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Scaffold(
           body: fullScreen
               ? GestureDetector(onDoubleTap: () => _setFull(false), child: const KaraokeScreen())
-              : LayoutBuilder(builder: (context, c) {
-                  final rackWidth = (c.maxWidth * 0.42).clamp(400.0, 620.0);
-                  return Row(children: [
-                    SizedBox(width: rackWidth, child: const Rack()),
-                    Expanded(child: _Stage(queueHeight: queueHeight, onResize: (h) => setState(() => queueHeight = h), onFullScreen: () => _setFull(true))),
-                  ]);
-                }),
+              : LayoutBuilder(
+                  builder: (context, c) {
+                    final rackWidth = (c.maxWidth * 0.42).clamp(400.0, 620.0);
+                    return Row(
+                      children: [
+                        SizedBox(width: rackWidth, child: const Rack()),
+                        Expanded(
+                          child: _Stage(
+                            queueHeight: queueHeight,
+                            onResize: (h) => setState(() => queueHeight = h),
+                            onFullScreen: () => _setFull(true),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
         ),
       ),
     );
@@ -70,26 +80,30 @@ class _Stage extends StatelessWidget {
           colors: [EzColors.brassDim.withValues(alpha: 0.25), context.ez.bg],
         ),
       ),
-      child: LayoutBuilder(builder: (context, c) {
-        final qh = queueHeight.clamp(120.0, c.maxHeight * 0.7);
-        return Stack(children: [
-          Positioned(left: 12, right: 12, top: 12, height: qh, child: const QueuePanel()),
-          Positioned(
-            left: 12,
-            right: 12,
-            top: 12 + qh,
-            height: 10,
-            child: GestureDetector(
-              onVerticalDragUpdate: (d) => onResize(qh + d.delta.dy),
-              child: MouseRegion(
-                cursor: SystemMouseCursors.resizeRow,
-                child: Center(child: Container(width: 40, height: 3, color: context.ez.border)),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final qh = queueHeight.clamp(120.0, c.maxHeight * 0.7);
+          return Stack(
+            children: [
+              Positioned(left: 12, right: 12, top: 12, height: qh, child: const QueuePanel()),
+              Positioned(
+                left: 12,
+                right: 12,
+                top: 12 + qh,
+                height: 10,
+                child: GestureDetector(
+                  onVerticalDragUpdate: (d) => onResize(qh + d.delta.dy),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.resizeRow,
+                    child: Center(child: Container(width: 40, height: 3, color: context.ez.border)),
+                  ),
+                ),
               ),
-            ),
-          ),
-          OutputPanel(bounds: Size(c.maxWidth, c.maxHeight), onFullScreen: onFullScreen),
-        ]);
-      }),
+              OutputPanel(bounds: Size(c.maxWidth, c.maxHeight), onFullScreen: onFullScreen),
+            ],
+          );
+        },
+      ),
     );
   }
 }

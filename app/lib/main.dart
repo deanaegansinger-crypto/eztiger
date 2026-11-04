@@ -42,10 +42,12 @@ Future<void> main(List<String> args) async {
   final state = AppState(db, engine);
   await state.init();
 
-  runApp(EztigerApp(
-    state: state,
-    videoBuilder: (_) => Video(controller: backend.video, controls: NoVideoControls, fill: Colors.black),
-    setFullScreen: windowManager.setFullScreen,
-    secondScreen: SecondScreen(engine),
-  ));
+  runApp(
+    EztigerApp(
+      state: state,
+      videoBuilder: (_) => Video(controller: backend.video, controls: NoVideoControls, fill: Colors.black),
+      setFullScreen: windowManager.setFullScreen,
+      secondScreen: SecondScreen(engine),
+    ),
+  );
 }

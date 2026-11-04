@@ -37,7 +37,12 @@ class FakeBackend implements MediaBackend {
   }
 
   @override
-  Future<void> seek(Duration to) async => calls.add('seek $to');
+  Future<void> seek(Duration to) async {
+    calls.add('seek $to');
+    seeks.add(to);
+  }
+
+  final seeks = <Duration>[];
   @override
   Future<void> setVolume(double v) async => volume = v;
   void finish() => _done.add(true);

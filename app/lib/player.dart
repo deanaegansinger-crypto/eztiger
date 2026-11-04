@@ -166,8 +166,7 @@ class KaraokeEngine extends ChangeNotifier {
     _rendering = true;
     final pixels = Uint8List.fromList(cdg.rgba());
     final completer = Completer<ui.Image>();
-    ui.decodeImageFromPixels(
-        pixels, CdgDecoder.width, CdgDecoder.height, ui.PixelFormat.rgba8888, completer.complete);
+    ui.decodeImageFromPixels(pixels, CdgDecoder.width, CdgDecoder.height, ui.PixelFormat.rgba8888, completer.complete);
     final image = await completer.future;
     if (identical(cdg, _cdg)) {
       cdgPixels = pixels;
