@@ -365,4 +365,19 @@ void main() {
     expect(state.engine.playing, isFalse);
     expect(state.queue, isEmpty);
   });
+
+  testWidgets('a queue left from last time is cued after start-up', (tester) async {
+    await pumpApp(tester);
+    final t = state.results.first.primary;
+    state.toggleAutocue(); // off, so adding doesn't cue
+    await tester.runAsync(() => state.enqueue(t));
+    state.autocue = true;
+    // A fresh start: init must not load a song (the window isn't up yet).
+    final fresh = AppState(db, KaraokeEngine(FakeBackend()));
+    await tester.runAsync(fresh.init);
+    expect(fresh.engine.current, isNull);
+    await tester.runAsync(fresh.startUp);
+    expect(fresh.engine.current?.id, t.id);
+    expect(fresh.engine.playing, isFalse);
+  });
 }

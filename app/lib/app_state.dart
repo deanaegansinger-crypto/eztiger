@@ -78,7 +78,6 @@ class AppState extends ChangeNotifier {
     await _reloadQueue();
     await _reloadPlaylists();
     await refreshResults();
-    await _autocue();
     if (roots.isNotEmpty) unawaited(rescan());
   }
 
@@ -242,6 +241,11 @@ class AppState extends ChangeNotifier {
     await _reloadQueue();
     await _autocue();
   }
+
+  /// Called once the window is on screen: cues the queue left from last
+  /// time. Not part of [init], because loading a song waits for the video
+  /// player, which only starts once the window has drawn.
+  Future<void> startUp() => _autocue();
 
   /// Autocue: whenever the player is empty, the top of the queue is loaded
   /// paused, ready to go.

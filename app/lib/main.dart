@@ -50,4 +50,5 @@ Future<void> main(List<String> args) async {
       secondScreen: SecondScreen(engine),
     ),
   );
+  WidgetsBinding.instance.addPostFrameCallback((_) => state.startUp());
 }
