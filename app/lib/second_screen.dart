@@ -14,6 +14,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'player.dart';
 import 'theme.dart';
+import 'ui/logo.dart';
 
 /// The arguments the output window is opened with.
 const outputWindowArgs = '{"window":"output"}';
@@ -253,6 +254,8 @@ class _OutputView extends StatelessWidget {
                   }
                   return Center(
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      const EzLogo(size: 160),
+                      const SizedBox(height: 12),
                       const Text('EZTIGER',
                           style: TextStyle(fontSize: 64, fontWeight: FontWeight.w900, color: EzColors.brass, letterSpacing: 10)),
                       const SizedBox(height: 16),
