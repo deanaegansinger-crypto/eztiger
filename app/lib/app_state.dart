@@ -60,13 +60,25 @@ class AppState extends ChangeNotifier {
   bool scanning = false;
   String status = '';
   Timer? _debounce;
+
+  /// Set while the current song fades out into the next one.
   bool _fading = false;
+  int _fadeToken = 0;
+
+  /// A song whose crossfade was stopped by hand, so it is not tried again.
+  Track? _noFadeFor;
+
+  /// How long a crossfade takes: the end of one song fades out, then the
+  /// next fades in.
+  static const fadeOutTime = Duration(seconds: 6);
+  static const fadeInTime = Duration(seconds: 2);
 
   Future<void> init() async {
     await _reloadFolders();
     await _reloadQueue();
     await _reloadPlaylists();
     await refreshResults();
+    await _autocue();
     if (roots.isNotEmpty) unawaited(rescan());
   }
 
@@ -90,6 +102,7 @@ class AppState extends ChangeNotifier {
   void toggleAutocue() {
     autocue = !autocue;
     notifyListeners();
+    unawaited(_autocue());
   }
 
   // ------------------------------------------------------------- library
@@ -227,10 +240,19 @@ class AppState extends ChangeNotifier {
   Future<void> enqueue(Track t, {String? singer}) async {
     await db.queue.add(t.id, singer: singer);
     await _reloadQueue();
-    if (engine.current == null && autocue && queue.length == 1) {
+    await _autocue();
+  }
+
+  /// Autocue: whenever the player is empty, the top of the queue is loaded
+  /// paused, ready to go.
+  Future<void> _autocue() async {
+    if (autocue && engine.current == null && !_fading && queue.isNotEmpty) {
       await _cue(queue.first, autostart: false);
     }
   }
+
+  /// The song that plays after the current one.
+  QueueEntry? get upNext => queue.where((e) => e.id != nowPlayingQueueId).firstOrNull;
 
   Future<void> removeFromQueue(QueueEntry e) async {
     await db.queue.remove(e.id);
@@ -239,6 +261,7 @@ class AppState extends ChangeNotifier {
       await engine.stop();
     }
     await _reloadQueue();
+    await _autocue();
   }
 
   Future<void> moveInQueue(QueueEntry e, int newIndex) async {
@@ -272,6 +295,7 @@ class AppState extends ChangeNotifier {
   /// Plays a track straight away, without queueing it.
   Future<void> playNow(Track t, {bool autostart = true}) async {
     nowPlayingQueueId = null;
+    _endFade();
     await engine.load(t, autostart: autostart);
     notifyListeners();
   }
@@ -285,10 +309,10 @@ class AppState extends ChangeNotifier {
   }
 
   /// ⏭: the current song counts as sung, and the next one starts.
-  Future<void> next() async {
+  Future<void> next({Duration? fadeIn}) async {
     await _finishCurrent();
     if (queue.isNotEmpty) {
-      await _cue(queue.first, autostart: true);
+      await _cue(queue.first, autostart: true, fadeIn: fadeIn);
     } else {
       await engine.stop();
     }
@@ -297,10 +321,10 @@ class AppState extends ChangeNotifier {
   /// ⏮: back to the start of the song.
   Future<void> previous() => engine.restart();
 
-  Future<void> _cue(QueueEntry e, {required bool autostart}) async {
+  Future<void> _cue(QueueEntry e, {required bool autostart, Duration? fadeIn}) async {
     nowPlayingQueueId = e.id;
-    _fading = false;
-    await engine.load(e.track, singer: e.singer, autostart: autostart);
+    _endFade();
+    await engine.load(e.track, singer: e.singer, autostart: autostart, fadeIn: fadeIn);
     notifyListeners();
   }
 
@@ -317,13 +341,14 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _onTrackFinished() async {
+    if (_fading) return; // the crossfade moves on to the next song itself
     await _finishCurrent();
     if (queue.isEmpty) {
       await engine.stop();
       return;
     }
-    if (mode == PlayMode.autoplay) {
-      await _cue(queue.first, autostart: true);
+    if (mode == PlayMode.autoplay || crossfade) {
+      await _cue(queue.first, autostart: true, fadeIn: crossfade ? fadeInTime : null);
     } else if (autocue) {
       await _cue(queue.first, autostart: false); // ready to go, paused
     } else {
@@ -331,13 +356,32 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Crossfade: near the end of a song, when another song is queued, fade
+  /// it out and bring the next one in. Works in either play mode.
   void _watchForCrossfade() {
-    if (!crossfade || mode != PlayMode.autoplay || _fading || queue.length < 2) return;
+    if (!crossfade || _fading || !engine.playing || engine.current == null || upNext == null) return;
+    if (engine.duration < fadeOutTime * 2) return;
     final left = engine.duration - engine.position;
-    if (engine.playing && engine.duration > const Duration(seconds: 10) && left < const Duration(seconds: 3)) {
-      _fading = true;
-      engine.fadeOut(over: left).then((_) => next());
-    }
+    if (left > fadeOutTime || left <= Duration.zero) return;
+    if (identical(engine.current, _noFadeFor)) return;
+    _fading = true;
+    final token = ++_fadeToken;
+    final song = engine.current;
+    engine.fadeOut(over: left).then((done) async {
+      if (token != _fadeToken) return; // something else already moved on
+      _fading = false;
+      if (!identical(engine.current, song)) return;
+      if (done) {
+        await next(fadeIn: fadeInTime);
+      } else {
+        _noFadeFor = song; // paused or volume moved: let it play out
+      }
+    });
+  }
+
+  void _endFade() {
+    _fadeToken++;
+    _fading = false;
   }
 
   // ----------------------------------------------------------- selection
@@ -450,10 +494,9 @@ class AppState extends ChangeNotifier {
       await _reloadQueue();
       return;
     }
-    final wasEmpty = queue.isEmpty;
     await db.queue.insertAll(d.tracks.map((t) => t.id), at: at);
     await _reloadQueue();
-    if (wasEmpty && engine.current == null && autocue && queue.isNotEmpty) await _cue(queue.first, autostart: false);
+    await _autocue();
   }
 
   /// Songs dropped on the player: the first is loaded paused, ready to

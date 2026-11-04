@@ -948,7 +948,7 @@ class _ResultRowState extends State<ResultRow> {
     final t = group.primary;
     final selected = s.selection.contains(index);
     final row = InkWell(
-      onDoubleTap: () => s.enqueue(t),
+      onDoubleTap: () => s.playNow(t, autostart: false), // loads it, paused, like dropping it on the player
       child: Container(
         color: selected
             ? EzColors.brass.withValues(alpha: 0.28)

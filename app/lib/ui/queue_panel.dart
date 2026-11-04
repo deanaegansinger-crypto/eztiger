@@ -60,7 +60,7 @@ class QueuePanel extends StatelessWidget {
               child: s.queue.isEmpty
                   ? Center(
                       child: Text(
-                        'Double-click a song to add it at the bottom, or drag it here.',
+                        'Drag songs here, or press Enter on them in the list.',
                         style: TextStyle(fontSize: 12, color: context.ez.textDim),
                       ),
                     )

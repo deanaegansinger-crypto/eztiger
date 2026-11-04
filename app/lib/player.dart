@@ -73,7 +73,15 @@ class KaraokeEngine extends ChangeNotifier {
   bool get isVideo => current?.kind == 'video';
   bool get hasCdg => _cdg != null;
 
-  Future<void> load(Track track, {String? singer, bool autostart = true}) async {
+  /// Bumped whenever a fade should stop: a new song, stop, or a volume
+  /// change by hand.
+  int _fadeId = 0;
+  int _rampId = -1;
+  bool get _fading => _rampId == _fadeId;
+
+  /// [fadeIn] starts the song silent and brings the volume up over that time.
+  Future<void> load(Track track, {String? singer, bool autostart = true, Duration? fadeIn}) async {
+    _fadeId++;
     error = null;
     current = track;
     this.singer = singer;
@@ -96,12 +104,14 @@ class KaraokeEngine extends ChangeNotifier {
         await _render();
       }
       await backend.open(media);
-      await backend.setVolume(muted ? 0 : volume);
+      final fading = fadeIn != null && autostart && !muted;
+      await backend.setVolume(muted || fading ? 0 : volume);
       if (autostart) {
         await backend.play();
       } else {
         await backend.pause();
       }
+      if (fading) unawaited(_ramp(from: 0, to: 1, over: fadeIn));
     } catch (e) {
       error = 'Could not play ${track.fileName}: $e';
     }
@@ -110,10 +120,16 @@ class KaraokeEngine extends ChangeNotifier {
 
   Future<void> playPause() async {
     if (current == null) return;
+    if (_fading) {
+      // Pausing stops a crossfade and puts the volume back.
+      _fadeId++;
+      await backend.setVolume(muted ? 0 : volume);
+    }
     playing ? await backend.pause() : await backend.play();
   }
 
   Future<void> stop() async {
+    _fadeId++;
     await backend.stop();
     current = null;
     _cdg = null;
@@ -128,6 +144,7 @@ class KaraokeEngine extends ChangeNotifier {
   Future<void> seek(Duration to) => backend.seek(to);
 
   Future<void> setVolume(double v) async {
+    _fadeId++;
     volume = v.clamp(0, 100);
     muted = false;
     await backend.setVolume(volume);
@@ -135,19 +152,26 @@ class KaraokeEngine extends ChangeNotifier {
   }
 
   Future<void> toggleMute() async {
+    _fadeId++;
     muted = !muted;
     await backend.setVolume(muted ? 0 : volume);
     notifyListeners();
   }
 
   /// Fades the volume to silence over [over], for crossfading into the next
-  /// song.
-  Future<void> fadeOut({Duration over = const Duration(seconds: 3)}) async {
-    const steps = 15;
-    for (var i = steps - 1; i >= 0; i--) {
-      await backend.setVolume((muted ? 0 : volume) * i / steps);
+  /// song. Returns false if something else (a new song, stop, the volume
+  /// slider) interrupted the fade.
+  Future<bool> fadeOut({Duration over = const Duration(seconds: 3)}) => _ramp(from: 1, to: 0, over: over);
+
+  Future<bool> _ramp({required double from, required double to, required Duration over}) async {
+    final id = _rampId = ++_fadeId;
+    const steps = 20;
+    for (var i = 1; i <= steps; i++) {
       await Future<void>.delayed(over ~/ steps);
+      if (id != _fadeId) return false;
+      await backend.setVolume((muted ? 0 : volume) * (from + (to - from) * i / steps));
     }
+    return id == _fadeId;
   }
 
   void _onPosition(Duration pos) {

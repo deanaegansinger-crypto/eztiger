@@ -304,4 +304,63 @@ void main() {
     expect(state.results.map((g) => g.primary.title), ['Bohemian Rhapsody', 'Livin On A Prayer', 'Waterloo']);
     await tester.pump();
   });
+
+  testWidgets('autocue loads the top of the queue whenever the player is empty', (tester) async {
+    await pumpApp(tester);
+    final tracks = state.results.map((g) => g.primary).toList();
+    state.toggleAutocue(); // off
+    await tester.runAsync(() async {
+      await state.enqueue(tracks[0]);
+      await state.enqueue(tracks[1]);
+    });
+    expect(state.engine.current, isNull);
+    // Turning it on with songs already waiting cues the first one.
+    await tester.runAsync(() async {
+      state.toggleAutocue();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    expect(state.engine.current?.id, tracks[0].id);
+    expect(state.engine.playing, isFalse);
+    // Removing the loaded song cues the next one.
+    await tester.runAsync(() => state.removeFromQueue(state.queue.first));
+    expect(state.engine.current?.id, tracks[1].id);
+    expect(state.engine.playing, isFalse);
+  });
+
+  testWidgets('crossfade fades into the next song, in single mode too, without skipping', (tester) async {
+    await pumpApp(tester);
+    final tracks = state.results.map((g) => g.primary).toList();
+    expect(state.mode, PlayMode.single);
+    state.toggleCrossfade();
+    await tester.runAsync(() async {
+      for (final t in tracks) {
+        await state.enqueue(t);
+      }
+      await state.playEntry(state.queue.first);
+      backend.at(const Duration(minutes: 2, seconds: 59)); // 1 second left
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(backend.volume, lessThan(80)); // fading out
+      backend.finish(); // the song ends while it fades
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+    });
+    expect(state.engine.current?.id, tracks[1].id, reason: 'moves on exactly one song');
+    expect(state.engine.playing, isTrue);
+    expect(state.queue.length, 2);
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 2300)));
+    expect(backend.volume, 80); // faded back in
+  });
+
+  testWidgets('double-clicking a song in the list loads it paused', (tester) async {
+    await pumpApp(tester);
+    final row = find.widgetWithText(ResultRow, 'Waterloo');
+    await tester.tap(row);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(row);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump();
+    expect(state.engine.current?.title, 'Waterloo');
+    expect(state.engine.playing, isFalse);
+    expect(state.queue, isEmpty);
+  });
 }
