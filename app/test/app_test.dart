@@ -352,21 +352,16 @@ void main() {
 
   testWidgets('double-clicking a song in the list loads it paused', (tester) async {
     await pumpApp(tester);
-    final row = find.widgetWithText(ResultRow, 'Waterloo');
+    // An MP3 with no CDG, so the load touches no files on disk.
+    final row = find.widgetWithText(ResultRow, 'Livin On A Prayer');
     await tester.tap(row);
     await tester.pump(const Duration(milliseconds: 50));
     await tester.tap(row);
     await tester.pump(const Duration(milliseconds: 400));
-    // Let the load finish (it reads the CDG file) before the test cleans up.
-    await tester.runAsync(() async {
-      for (var i = 0; i < 50 && !backend.calls.contains('pause'); i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    });
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await tester.pump();
+    expect(state.engine.current?.title, 'Livin On A Prayer');
     expect(backend.calls, contains('pause'));
-    expect(state.engine.current?.title, 'Waterloo');
     expect(state.engine.playing, isFalse);
     expect(state.queue, isEmpty);
   });
