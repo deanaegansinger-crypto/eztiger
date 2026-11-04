@@ -314,7 +314,22 @@ class _TogglesRow extends StatelessWidget {
             ),
           ],
         ),
-        EzSwitch(label: 'Crossfade', value: s.crossfade, onChanged: s.toggleCrossfade),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            EzSwitch(label: 'Crossfade', value: s.crossfade, onChanged: s.toggleCrossfade),
+            const SizedBox(width: 6),
+            Segmented<Duration>(
+              key: const Key('fade-length'),
+              options: {
+                for (final d in AppState.fadeOutChoices)
+                  d: d.inMilliseconds % 1000 == 0 ? '${d.inSeconds}s' : '${d.inMilliseconds / 1000}s',
+              },
+              value: s.fadeOutTime,
+              onChanged: s.setFadeOut,
+            ),
+          ],
+        ),
         EzSwitch(label: 'Autocue', value: s.autocue, onChanged: s.toggleAutocue),
       ],
     );

@@ -70,9 +70,11 @@ class AppState extends ChangeNotifier {
   /// A song whose crossfade was stopped by hand, so it is not tried again.
   Track? _noFadeFor;
 
-  /// How long a crossfade takes: the end of one song fades out, then the
-  /// next fades in.
-  static const fadeOutTime = Duration(seconds: 6);
+  /// The crossfade fade-out lengths to choose from, and the one in use: the
+  /// end of the music fades down to [fadeLevel], then the next song comes in.
+  static const fadeOutChoices = [Duration(seconds: 4), Duration(seconds: 2), Duration(milliseconds: 200)];
+  Duration fadeOutTime = fadeOutChoices.first;
+  static const fadeLevel = 1 / 3;
   static const fadeInTime = Duration(seconds: 2);
 
   Future<void> init() async {
@@ -94,6 +96,8 @@ class AppState extends ChangeNotifier {
       mode = PlayMode.values.asNameMap()[m['mode']] ?? mode;
       crossfade = m['crossfade'] as bool? ?? crossfade;
       autocue = m['autocue'] as bool? ?? autocue;
+      final fadeMs = m['fadeMs'] as int?;
+      fadeOutTime = fadeOutChoices.where((d) => d.inMilliseconds == fadeMs).firstOrNull ?? fadeOutTime;
       typeFilter = TrackType.values.asNameMap()[m['type']];
       sort = SearchSort.values.asNameMap()[m['sort']] ?? sort;
       engine.volume = (m['volume'] as num?)?.toDouble() ?? engine.volume;
@@ -114,6 +118,7 @@ class AppState extends ChangeNotifier {
       'mode': mode.name,
       'crossfade': crossfade,
       'autocue': autocue,
+      'fadeMs': fadeOutTime.inMilliseconds,
       'type': typeFilter?.name,
       'sort': sort.name,
       'volume': engine.volume,
@@ -156,6 +161,11 @@ class AppState extends ChangeNotifier {
 
   void toggleCrossfade() {
     crossfade = !crossfade;
+    notifyListeners();
+  }
+
+  void setFadeOut(Duration d) {
+    fadeOutTime = d;
     notifyListeners();
   }
 
@@ -450,15 +460,15 @@ class AppState extends ChangeNotifier {
   void _watchForCrossfade() {
     if (!crossfade || _fading || !engine.playing || engine.current == null || upNext == null) return;
     final end = engine.audioEnd;
-    if (end < fadeOutTime * 2) return;
+    if (end < const Duration(seconds: 8)) return;
     var left = end - engine.position;
     if (left > fadeOutTime) return;
-    if (left < const Duration(milliseconds: 300)) left = const Duration(milliseconds: 300); // already in the silence
+    if (left < const Duration(milliseconds: 200)) left = const Duration(milliseconds: 200); // already in the silence
     if (identical(engine.current, _noFadeFor)) return;
     _fading = true;
     final token = ++_fadeToken;
     final song = engine.current;
-    engine.fadeOut(over: left).then((done) async {
+    engine.fadeOut(over: left, to: fadeLevel).then((done) async {
       if (token != _fadeToken) return; // something else already moved on
       _fading = false;
       if (!identical(engine.current, song)) return;

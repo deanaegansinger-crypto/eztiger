@@ -99,6 +99,10 @@ class KaraokeEngine extends ChangeNotifier {
   /// Bumped whenever a fade should stop: a new song, stop, or a volume
   /// change by hand.
   int _fadeId = 0;
+
+  /// A fade-in starts at this share of the volume (where a crossfade's
+  /// fade-out ended).
+  double fadeInFrom = 1 / 3;
   int _rampId = -1;
   bool get _fading => _rampId == _fadeId;
 
@@ -144,13 +148,13 @@ class KaraokeEngine extends ChangeNotifier {
       position = cueStart;
       await backend.open(media, start: cueStart == Duration.zero ? null : cueStart);
       final fading = fadeIn != null && autostart && !muted;
-      await backend.setVolume(muted || fading ? 0 : volume);
+      await backend.setVolume(muted ? 0 : (fading ? volume * fadeInFrom : volume));
       if (autostart) {
         await backend.play();
       } else {
         await backend.pause();
       }
-      if (fading) unawaited(_ramp(from: 0, to: 1, over: fadeIn));
+      if (fading) unawaited(_ramp(from: fadeInFrom, to: 1, over: fadeIn));
     } catch (e) {
       error = 'Could not play ${track.fileName}: $e';
     }
@@ -209,7 +213,9 @@ class KaraokeEngine extends ChangeNotifier {
   /// Fades the volume to silence over [over], for crossfading into the next
   /// song. Returns false if something else (a new song, stop, the volume
   /// slider) interrupted the fade.
-  Future<bool> fadeOut({Duration over = const Duration(seconds: 3)}) => _ramp(from: 1, to: 0, over: over);
+  /// [to] is the volume to end at, as a share of the set volume.
+  Future<bool> fadeOut({Duration over = const Duration(seconds: 3), double to = 0}) =>
+      _ramp(from: 1, to: to, over: over);
 
   Future<bool> _ramp({required double from, required double to, required Duration over}) async {
     final id = _rampId = ++_fadeId;

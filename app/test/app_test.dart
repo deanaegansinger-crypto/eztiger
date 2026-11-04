@@ -441,12 +441,34 @@ void main() {
       await state.enqueue(tracks[0]);
       await state.enqueue(tracks[1]);
       await state.playEntry(state.queue.first);
-      backend.at(const Duration(seconds: 165)); // 5 s before the music ends, 15 s before the file does
+      backend.at(const Duration(seconds: 167)); // 3 s before the music ends, 13 s before the file does
       await Future<void>.delayed(const Duration(milliseconds: 600));
       expect(backend.volume, lessThan(80)); // fading
       await Future<void>.delayed(const Duration(milliseconds: 5000));
     });
     expect(state.engine.current?.id, tracks[1].id);
     expect(backend.opensAt.last, const Duration(milliseconds: 9850));
+  });
+
+  testWidgets('the fade-out length can be 4, 2 or 0.2 seconds, down to a third', (tester) async {
+    await pumpApp(tester);
+    silentEnds();
+    final tracks = state.results.map((g) => g.primary).toList();
+    state.toggleCrossfade();
+    await tester.tap(find.descendant(of: find.byKey(const Key('fade-length')), matching: find.text('0.2s')));
+    await tester.pump();
+    expect(state.fadeOutTime, const Duration(milliseconds: 200));
+    await tester.runAsync(() async {
+      await state.enqueue(tracks[0]);
+      await state.enqueue(tracks[1]);
+      await state.playEntry(state.queue.first);
+      backend.at(const Duration(seconds: 169)); // 1 s left: too early for a 0.2 s fade
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(backend.volume, 80);
+      backend.at(const Duration(milliseconds: 169850));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    expect(state.engine.current?.id, tracks[1].id);
+    expect(backend.volume, closeTo(80 / 3, 1)); // the next song starts at a third, then fades up
   });
 }
