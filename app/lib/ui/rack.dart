@@ -6,6 +6,7 @@ import '../app_state.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'dialogs.dart';
+import 'logo.dart';
 
 /// The left column of the mockup: player, settings, library, search and
 /// results.
@@ -43,7 +44,7 @@ class _BrandRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     return Row(children: [
-      _Disc(spinning: s.engine.playing),
+      const EzLogo(size: 30),
       const SizedBox(width: 8),
       const Text('EZTIGER', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: EzColors.brass, letterSpacing: 2)),
       const SizedBox(width: 6),
@@ -57,44 +58,6 @@ class _BrandRow extends StatelessWidget {
       ),
     ]);
   }
-}
-
-class _Disc extends StatefulWidget {
-  const _Disc({required this.spinning});
-  final bool spinning;
-  @override
-  State<_Disc> createState() => _DiscState();
-}
-
-class _DiscState extends State<_Disc> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(seconds: 2));
-
-  @override
-  void didUpdateWidget(_Disc old) {
-    super.didUpdateWidget(old);
-    widget.spinning ? _c.repeat() : _c.stop();
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => RotationTransition(
-        turns: _c,
-        child: Container(
-          width: 26,
-          height: 26,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: SweepGradient(colors: [EzColors.brass, EzColors.brassDim, EzColors.brass, EzColors.brassDim, EzColors.brass]),
-          ),
-          alignment: Alignment.center,
-          child: Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: context.ez.panel)),
-        ),
-      );
 }
 
 /// The green-screen "VFD" display plus the transport buttons.
