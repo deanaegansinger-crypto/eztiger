@@ -13,17 +13,7 @@ import 'filename_parser.dart';
 import 'folder_walker.dart';
 
 const Set<String> audioExtensions = {'.mp3', '.wav', '.wma', '.m4a', '.flac', '.ogg', '.aac'};
-const Set<String> videoExtensions = {
-  '.mp4',
-  '.avi',
-  '.mpg',
-  '.mpeg',
-  '.mkv',
-  '.mov',
-  '.wmv',
-  '.m4v',
-  '.webm'
-};
+const Set<String> videoExtensions = {'.mp4', '.avi', '.mpg', '.mpeg', '.mkv', '.mov', '.wmv', '.m4v', '.webm'};
 
 /// What one scan did. Shown to Dean after a rescan, and useful when tuning.
 class ScanReport {
@@ -154,8 +144,7 @@ class LibraryScanner {
 WITH RECURSIVE sub(id) AS (
   SELECT ? UNION ALL SELECT f.id FROM folders f JOIN sub ON f.parent_id = sub.id
 )
-SELECT id, path, parent_id, included, track_count, is_root FROM folders WHERE id IN (SELECT id FROM sub)''',
-        [rootId]);
+SELECT id, path, parent_id, included, track_count, is_root FROM folders WHERE id IN (SELECT id FROM sub)''', [rootId]);
     final folderIds = {for (final r in folderRows) r['path'] as String: r['id'] as int};
     final folderCounts = {for (final r in folderRows) r['id'] as int: r['track_count'] as int};
     final protectedDirs = <String>[
@@ -249,8 +238,8 @@ WHERE folder_id IN (${folderIds.isEmpty ? 'NULL' : folderIds.values.join(',')})'
           'artist': c.parsed.artist,
           'version': c.parsed.version,
           'catalogue_code': c.parsed.catalogueCode,
-          'group_key': groupKey((old?['user_title'] as String?) ?? c.parsed.title,
-              (old?['user_artist'] as String?) ?? c.parsed.artist),
+          'group_key': groupKey(
+              (old?['user_title'] as String?) ?? c.parsed.title, (old?['user_artist'] as String?) ?? c.parsed.artist),
         };
         if (old == null) {
           values['path'] = path;
@@ -438,10 +427,7 @@ WHERE folder_id IN (${folderIds.isEmpty ? 'NULL' : folderIds.values.join(',')})'
         // The lyric sheet is named after the song, so it settles which part
         // of an `A - B` name is the title.
         final a = c.parsed.artist;
-        if (!c.parsed.orderKnown &&
-            a != null &&
-            bestKey == normalize(a) &&
-            bestKey != normalize(c.parsed.title)) {
+        if (!c.parsed.orderKnown && a != null && bestKey == normalize(a) && bestKey != normalize(c.parsed.title)) {
           c.parsed.swap();
           c.parsed.orderKnown = true;
         }
@@ -468,8 +454,7 @@ WHERE folder_id IN (${folderIds.isEmpty ? 'NULL' : folderIds.values.join(',')})'
       final titleIsArtist = known.contains(nt) && !known.contains(na);
       // Needs a clear margin: a title covered by two artists (`The
       // Wanderer` by Dion and by Status Quo) must not look like an artist.
-      final moreLikely =
-          !known.contains(na) && (partners[nt]?.length ?? 0) >= (partners[na]?.length ?? 0) + 2;
+      final moreLikely = !known.contains(na) && (partners[nt]?.length ?? 0) >= (partners[na]?.length ?? 0) + 2;
       if (titleIsArtist || moreLikely) c.parsed.swap();
     }
   }

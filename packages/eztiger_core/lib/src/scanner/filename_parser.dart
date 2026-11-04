@@ -51,8 +51,7 @@ class ParsedName {
 
 // ---------------------------------------------------------------- patterns
 
-final _emoji =
-    RegExp(r'[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]', unicode: true);
+final _emoji = RegExp(r'[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]', unicode: true);
 final _dashes = RegExp(r'[‐‑‒–—―−]');
 final _curlySingle = RegExp(r'[‘’`´]');
 final _curlyDouble = RegExp(r'[“”]');
@@ -60,8 +59,8 @@ final _curlyDouble = RegExp(r'[“”]');
 /// Leading track numbers: `02 Thats Amore`, `9.01 My Kind Of Town`,
 /// `1.The Lady Is A Tramp`, `09  DEAN MARTIN - SWAY`. Deliberately does not
 /// match `9 to 5` or `10cc`.
-final _trackNumber = RegExp(
-    r'^(?:\d{1,2}\.\d{1,2}\s+|\d{1,2}\.\s*(?=\D)|0\d\s+|\d{1,2}\s{2,}|\d{1,2}\s*-\s+|\d{1,2}-(?=[A-Za-z(]))');
+final _trackNumber =
+    RegExp(r'^(?:\d{1,2}\.\d{1,2}\s+|\d{1,2}\.\s*(?=\D)|0\d\s+|\d{1,2}\s{2,}|\d{1,2}\s*-\s+|\d{1,2}-(?=[A-Za-z(]))');
 
 /// Catalogue codes: ZM6S01-02, SC8125-04, SF126-06, PX-006-07, KV-27296,
 /// ZMG77 15, STTW1263-4-03, ZOOMPA063-08, MMVE3-01-06, EZA08-07.
@@ -121,8 +120,7 @@ final _plainNoise = RegExp(
     r'^(?:(?:karaoke|best|official|lyric|lyrics|hd|hq|audio|music)(?: version| video)?|\d{1,2}[.:]\d{2})$',
     caseSensitive: false);
 
-final _stylePart = RegExp(
-    r'\b(cover|version|reimagined|fusion|makeover|lyric video|era blend|remix)\b|^blues|jazz$',
+final _stylePart = RegExp(r'\b(cover|version|reimagined|fusion|makeover|lyric video|era blend|remix)\b|^blues|jazz$',
     caseSensitive: false);
 final _channelNoise = RegExp(r'\b(the era blend|neosoul machine|hollow blues)\b', caseSensitive: false);
 

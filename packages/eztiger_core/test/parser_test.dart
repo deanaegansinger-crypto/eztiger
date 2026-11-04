@@ -1,8 +1,7 @@
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:test/test.dart';
 
-void expectParse(String name,
-    {required String title, String? artist, String? version, String? code, String? folder}) {
+void expectParse(String name, {required String title, String? artist, String? version, String? code, String? folder}) {
   final r = parseFileName(name, folderName: folder);
   expect(r.title, title, reason: 'title of "$name" ($r)');
   expect(r.artist, artist, reason: 'artist of "$name" ($r)');
@@ -19,14 +18,12 @@ void main() {
       expect(r.orderKnown, isFalse);
     });
     test('Surname, The marks the artist', () {
-      expectParse('SC8125-04 - Eagles, The - Desperado',
-          title: 'Desperado', artist: 'The Eagles', code: 'SC8125-04');
+      expectParse('SC8125-04 - Eagles, The - Desperado', title: 'Desperado', artist: 'The Eagles', code: 'SC8125-04');
     });
     test('no spaces around hyphens', () {
       expectParse('SF126-06-BEAUTIFUL SOUTH-PERFECT 10',
           title: 'Perfect 10', artist: 'Beautiful South', code: 'SF126-06');
-      expectParse('PX-006-07-Billie Jo Spears-57 Chevrolet',
-          title: '57 Chevrolet', artist: 'Billie Jo Spears');
+      expectParse('PX-006-07-Billie Jo Spears-57 Chevrolet', title: '57 Chevrolet', artist: 'Billie Jo Spears');
     });
     test('other code shapes', () {
       for (final code in [
@@ -82,8 +79,7 @@ void main() {
           contains('9 to 5'));
     });
     test('underscores', () {
-      expectParse('dean_martin_-_on_an_evening_in_roma',
-          title: 'On an Evening in Roma', artist: 'Dean Martin');
+      expectParse('dean_martin_-_on_an_evening_in_roma', title: 'On an Evening in Roma', artist: 'Dean Martin');
       expectParse('Electric_Light_Orchestra_Telephone_Line(Custom_Backing_Track-2)',
           title: 'Electric Light Orchestra Telephone Line');
     });
@@ -107,8 +103,7 @@ void main() {
       expectParse('Mustang Sally_no_vocals_split_by_lalalai',
           title: 'Mustang Sally', version: 'no vocals split by lalalai');
       expectParse('sway extended', title: 'Sway', version: 'extended');
-      expectParse('Delilah - Tom Jones clean ending',
-          title: 'Tom Jones', artist: 'Delilah', version: 'clean ending');
+      expectParse('Delilah - Tom Jones clean ending', title: 'Tom Jones', artist: 'Delilah', version: 'clean ending');
     });
     test('bracketed', () {
       expectParse('Acoustative - (Let Me Be Your) Teddy Bear (Original Male Key)',

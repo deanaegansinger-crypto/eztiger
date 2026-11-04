@@ -113,8 +113,7 @@ void main() {
     await lib.scan();
     var t = await lib.track('a/ZM6S01-02 - Bad Moon Rising - Creedence Clearwater Revival.mp3');
     await lib.db.tracks.editTags(t.id, title: 'Bad Moon Rising', artist: 'CCR', type: TrackType.mp4);
-    lib.touch('a/ZM6S01-02 - Bad Moon Rising - Creedence Clearwater Revival.mp3',
-        bytes: 99, mtime: DateTime(2025));
+    lib.touch('a/ZM6S01-02 - Bad Moon Rising - Creedence Clearwater Revival.mp3', bytes: 99, mtime: DateTime(2025));
     await lib.scan();
     t = await lib.track('a/ZM6S01-02 - Bad Moon Rising - Creedence Clearwater Revival.mp3');
     expect(t.title, 'Bad Moon Rising');
@@ -130,8 +129,7 @@ void main() {
   test('zipped MP3+G is indexed, and skipped when an extracted copy sits beside it', () async {
     lib.zip('trinity night/legends/Return To Sender - Elvis Presley.zip',
         ['Return To Sender - Elvis Presley.mp3', 'Return To Sender - Elvis Presley.cdg']);
-    lib.zip(
-        'trinity night/legends/Sway - Dean Martin.zip', ['Sway - Dean Martin.mp3', 'Sway - Dean Martin.cdg']);
+    lib.zip('trinity night/legends/Sway - Dean Martin.zip', ['Sway - Dean Martin.mp3', 'Sway - Dean Martin.cdg']);
     lib.touch('trinity night/legends/Sway - Dean Martin.mp3');
     lib.touch('trinity night/legends/Sway - Dean Martin.cdg');
     lib.zip('trinity night/legends/photos.zip', ['a.jpg']);

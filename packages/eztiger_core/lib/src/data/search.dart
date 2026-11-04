@@ -90,11 +90,15 @@ class SearchDao {
   /// [SearchGroup]. [folderId] limits the search to that folder and its
   /// subfolders; [type] to CDG, MP4 or MP3. An empty [query] lists everything
   /// in scope, by title.
-  Future<List<SearchGroup>> search(String query, {int? folderId, TrackType? type, int limit = 200}) async {
+  ///
+  /// [sort] puts the results in A to Z order by title or by artist (songs
+  /// without an artist go last); the default keeps the best matches first.
+  Future<List<SearchGroup>> search(String query,
+      {int? folderId, TrackType? type, int limit = 200, SearchSort sort = SearchSort.relevance}) async {
     final words = tokens(query);
     List<Map<String, Object?>> rows;
     if (words.isEmpty) {
-      rows = await _browse(folderId, type, limit * 3);
+      rows = await _browse(folderId, type, limit * 3, sort);
     } else if (hasFts) {
       final fixed = await _correct(words);
       // Words match as prefixes while typing, except numbers: `down 2`
@@ -111,7 +115,9 @@ class SearchDao {
     } else {
       rows = await _like(words, folderId, type, limit * 3);
     }
-    return _group(rows.map(Track.fromRow), limit);
+    final groups = _group(rows.map(Track.fromRow), limit);
+    if (sort != SearchSort.relevance) groups.sort((a, b) => compareForSort(a.primary, b.primary, sort));
+    return groups;
   }
 
   List<SearchGroup> _group(Iterable<Track> tracks, int limit) {
@@ -132,15 +138,19 @@ class SearchDao {
     return b.toString();
   }
 
-  Future<List<Map<String, Object?>>> _browse(int? folderId, TrackType? type, int limit) {
+  Future<List<Map<String, Object?>>> _browse(int? folderId, TrackType? type, int limit, SearchSort sort) {
     final args = <Object?>[if (folderId != null) folderId];
     final where = _scope(folderId, type, args);
     args.add(limit);
     return db.rawQuery('''
 ${folderId != null ? _subtreeCte : ''}
 $trackSelect WHERE 1 = 1 $where
-ORDER BY COALESCE(t.user_title, t.title) COLLATE NOCASE LIMIT ?''', args);
+ORDER BY ${sort == SearchSort.artist ? "$_artistExpr IS NULL, $_artistExpr COLLATE NOCASE, " : ''}$_titleExpr COLLATE NOCASE LIMIT ?''',
+        args);
   }
+
+  static const _titleExpr = "COALESCE(NULLIF(t.user_title, ''), t.title)";
+  static const _artistExpr = "COALESCE(NULLIF(t.user_artist, ''), t.artist)";
 
   Future<List<Map<String, Object?>>> _fts(String match, int? folderId, TrackType? type, int limit) {
     final args = <Object?>[if (folderId != null) folderId, match];
@@ -182,12 +192,10 @@ ORDER BY COALESCE(t.user_title, t.title) COLLATE NOCASE LIMIT ?''', args);
   // ---------------------------------------------------- spelling correction
 
   Future<void> _loadVocab() async {
-    final gen = (await db.query('meta', where: 'key = ?', whereArgs: ['fts_gen']))
-        .map((r) => r['value'] as String)
-        .firstOrNull;
+    final gen =
+        (await db.query('meta', where: 'key = ?', whereArgs: ['fts_gen'])).map((r) => r['value'] as String).firstOrNull;
     if (gen == _vocabGen) return;
-    await db
-        .execute("CREATE VIRTUAL TABLE IF NOT EXISTS tracks_fts_vocab USING fts5vocab(tracks_fts, 'row')");
+    await db.execute("CREATE VIRTUAL TABLE IF NOT EXISTS tracks_fts_vocab USING fts5vocab(tracks_fts, 'row')");
     final rows = await db.rawQuery('SELECT term, doc FROM tracks_fts_vocab');
     _vocab = {for (final r in rows) r['term'] as String: r['doc'] as int};
     _sortedVocab = _vocab.keys.toList()..sort();
@@ -242,4 +250,23 @@ String cleanListLine(String raw) {
   s = s.replaceFirst(RegExp(r'\.(mp3|cdg|zip|mp4|wav|avi|mkv|m4a|wma)$', caseSensitive: false), '');
   s = s.replaceAll(RegExp(r'(\s*-\s*)+$'), '');
   return s.trim();
+}
+
+/// The order search results come back in.
+enum SearchSort { relevance, title, artist }
+
+/// Compares two songs for [sort]: A to Z, ignoring case and accents, with
+/// songs that have no artist after the rest when sorting by artist.
+int compareForSort(Track a, Track b, SearchSort sort) {
+  int byTitle() => normalize(a.title).compareTo(normalize(b.title));
+  if (sort == SearchSort.artist) {
+    final x = a.artist, y = b.artist;
+    if (x == null || y == null) {
+      if (x != y) return x == null ? 1 : -1;
+    } else {
+      final c = normalize(x).compareTo(normalize(y));
+      if (c != 0) return c;
+    }
+  }
+  return byTitle();
 }

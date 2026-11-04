@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_state.dart';
 import '../second_screen.dart';
@@ -24,8 +25,23 @@ class EztigerApp extends StatelessWidget {
         title: 'EZtiger',
         debugShowCheckedModeBanner: false,
         theme: buildTheme(state.dark),
+        // Space plays/pauses anywhere, except while typing in a text box
+        // (the search box keeps its spaces).
+        shortcuts: {
+          ...WidgetsApp.defaultShortcuts,
+          const SingleActivator(LogicalKeyboardKey.space): const PlayPauseIntent(),
+          const SingleActivator(LogicalKeyboardKey.space, control: true): const PlayPauseIntent(),
+        },
+        actions: {
+          ...WidgetsApp.defaultActions,
+          PlayPauseIntent: CallbackAction<PlayPauseIntent>(onInvoke: (_) => state.playPause()),
+        },
         home: HomeScreen(setFullScreen: setFullScreen),
       ),
     ),
   );
+}
+
+class PlayPauseIntent extends Intent {
+  const PlayPauseIntent();
 }

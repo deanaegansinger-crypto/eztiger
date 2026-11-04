@@ -28,6 +28,27 @@ void main() {
       });
       tearDown(() async => lib.dispose());
 
+      test('sorts A to Z by title or by artist', () async {
+        final byTitle = await lib.db.search.search('', sort: SearchSort.title);
+        expect(byTitle.map((g) => g.primary.title).take(3),
+            ['Café Del Mar', "Can't Help Falling In Love", "Don't Stop Believin'"]);
+        final byArtist = await lib.db.search.search('', sort: SearchSort.artist);
+        expect(byArtist.map((g) => g.primary.artist).toList(), [
+          'Dean Martin',
+          'Elvis Presley',
+          'Elvis Presley',
+          'Energy 52',
+          'Journey',
+          'Neil Diamond',
+          'Simon & Garfunkel'
+        ]);
+        expect(byArtist[1].primary.title, "Can't Help Falling In Love"); // then by title
+        final found = await lib.db.search.search('elvis', sort: SearchSort.title);
+        expect(found.map((g) => g.primary.title), ["Can't Help Falling In Love", 'Return To Sender']);
+        final cdg = await lib.db.search.search('', type: TrackType.cdg, sort: SearchSort.artist);
+        expect(cdg.single.primary.title, 'Sweet Caroline');
+      });
+
       test('finds by title and by artist', () async {
         expect(await lib.titles('sweet caroline'), ['Sweet Caroline']);
         expect(await lib.titles('neil diamond'), ['Sweet Caroline']);
@@ -45,8 +66,7 @@ void main() {
         final groups = await lib.db.search.search('sweet caroline');
         expect(groups, hasLength(1));
         expect(groups.single.versions, hasLength(3));
-        expect(
-            groups.single.versions.map((t) => t.type).toSet(), {TrackType.cdg, TrackType.mp3, TrackType.mp4});
+        expect(groups.single.versions.map((t) => t.type).toSet(), {TrackType.cdg, TrackType.mp3, TrackType.mp4});
       });
 
       test('searches folder names (set lists and shows)', () async {

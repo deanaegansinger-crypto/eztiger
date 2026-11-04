@@ -187,7 +187,7 @@ void main() {
     expect(at.inSeconds, inInclusiveRange(80, 100)); // about half way through 3:00
   });
 
-  testWidgets('dropping songs on the player plays the first and queues the rest next', (tester) async {
+  testWidgets('dropping songs on the player loads the first paused and queues the rest next', (tester) async {
     await pumpApp(tester);
     final tracks = state.results.map((g) => g.primary).toList();
     await tester.runAsync(() async {
@@ -195,7 +195,7 @@ void main() {
       await state.dropOnPlayer(SongDrag([tracks[1], tracks[2]]));
     });
     expect(state.engine.current?.id, tracks[1].id);
-    expect(backend.calls.last, 'play');
+    expect(backend.calls.last, 'pause'); // loaded paused, ready to go
     expect(state.queue.map((e) => e.track.id), [tracks[2].id, tracks[0].id]);
 
     // A drag from the results onto the player.
@@ -258,5 +258,50 @@ void main() {
     final slider = tester.widget<Slider>(find.byKey(const Key('seek')));
     expect(slider.value, 65000);
     expect(slider.max, 180000);
+  });
+
+  testWidgets('Space plays and pauses, but types a space in the search box', (tester) async {
+    await pumpApp(tester);
+    await tester.runAsync(() => state.playNow(state.results.first.primary, autostart: false));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump();
+    expect(state.engine.playing, isFalse);
+    await tester.runAsync(() async {
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+    expect(state.engine.playing, isTrue);
+    expect(find.byIcon(Icons.pause), findsOneWidget);
+
+    // Typing in the search box keeps the space and doesn't pause.
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    final calls = backend.calls.length;
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(backend.calls.length, calls);
+    expect(state.engine.playing, isTrue);
+  });
+
+  testWidgets('filter by file type, and sort A to Z by title or artist', (tester) async {
+    await pumpApp(tester);
+    await tester.runAsync(() async {
+      await tester.tap(find.descendant(of: find.byKey(const Key('type-filter')), matching: find.text('MP4')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(state.results.map((g) => g.primary.title), ['Bohemian Rhapsody']);
+
+    await tester.runAsync(() => state.setTypeFilter(null));
+    await tester.runAsync(() async {
+      await tester.tap(find.descendant(of: find.byKey(const Key('sort')), matching: find.text('Artist A–Z')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(state.results.map((g) => g.primary.artist), ['Abba', 'Bon Jovi', 'Queen']);
+    await tester.runAsync(() => state.setSort(SearchSort.title));
+    expect(state.results.map((g) => g.primary.title), ['Bohemian Rhapsody', 'Livin On A Prayer', 'Waterloo']);
+    await tester.pump();
   });
 }

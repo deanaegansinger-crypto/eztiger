@@ -37,6 +37,10 @@ class AppState extends ChangeNotifier {
   // Results.
   ResultsView view = ResultsView.search;
   String query = '';
+
+  /// Browser filter (null shows every type) and sort order.
+  TrackType? typeFilter;
+  SearchSort sort = SearchSort.relevance;
   List<SearchGroup> results = [];
   int? selectedPlaylistId;
   List<HistoryEntry> history = [];
@@ -177,10 +181,22 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setTypeFilter(TrackType? t) async {
+    typeFilter = t;
+    view = ResultsView.search;
+    await refreshResults();
+  }
+
+  Future<void> setSort(SearchSort s) async {
+    sort = s;
+    view = ResultsView.search;
+    await refreshResults();
+  }
+
   Future<void> refreshResults() async {
     switch (view) {
       case ResultsView.search:
-        results = await db.search.search(query, folderId: selectedFolderId, limit: 500);
+        results = await db.search.search(query, folderId: selectedFolderId, type: typeFilter, sort: sort, limit: 500);
       case ResultsView.playlist:
         final id = selectedPlaylistId;
         results = id == null ? [] : (await db.playlists.tracks(id)).map((t) => SearchGroup([t])).toList();
@@ -254,9 +270,9 @@ class AppState extends ChangeNotifier {
   Future<void> playEntry(QueueEntry e) => _cue(e, autostart: true);
 
   /// Plays a track straight away, without queueing it.
-  Future<void> playNow(Track t) async {
+  Future<void> playNow(Track t, {bool autostart = true}) async {
     nowPlayingQueueId = null;
-    await engine.load(t);
+    await engine.load(t, autostart: autostart);
     notifyListeners();
   }
 
@@ -440,8 +456,8 @@ class AppState extends ChangeNotifier {
     if (wasEmpty && engine.current == null && autocue && queue.isNotEmpty) await _cue(queue.first, autostart: false);
   }
 
-  /// Songs dropped on the player: the first plays now, the rest go to the
-  /// top of the queue so they come next.
+  /// Songs dropped on the player: the first is loaded paused, ready to
+  /// play, and the rest go to the top of the queue so they come next.
   Future<void> dropOnPlayer(SongDrag d) async {
     if (d.tracks.isEmpty) return;
     if (d.queueIds.isNotEmpty) {
@@ -453,7 +469,7 @@ class AppState extends ChangeNotifier {
       await db.queue.insertAll(d.tracks.skip(1).map((t) => t.id), at: 0);
       await _reloadQueue();
     }
-    await playNow(d.tracks.first);
+    await playNow(d.tracks.first, autostart: false); // loaded paused, ready to go
   }
 
   Future<void> enqueueAll(List<Track> tracks) async {

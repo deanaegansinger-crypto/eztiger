@@ -694,6 +694,8 @@ class _SearchBoxState extends State<SearchBox> {
     return TextField(
       controller: _c,
       onChanged: s.setQuery,
+      // Clicking elsewhere leaves the box, so Space goes back to play/pause.
+      onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
       style: const TextStyle(fontSize: 13),
       decoration: InputDecoration(
         isDense: true,
@@ -812,6 +814,7 @@ class _ResultsTableState extends State<ResultsTable> {
             style: TextStyle(fontSize: 11, color: context.ez.textDim),
           ),
           const SizedBox(height: 4),
+          const _FilterBar(),
           const _ResultsHeader(),
           Expanded(
             child: groups.isEmpty
@@ -846,23 +849,84 @@ class _ResultsTableState extends State<ResultsTable> {
   }
 }
 
+/// "Type: All CDG MP4 MP3" and "Sort: Best match / Title A–Z / Artist A–Z".
+class _FilterBar extends StatelessWidget {
+  const _FilterBar();
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final label = TextStyle(fontSize: 11, color: context.ez.textDim);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Type ', style: label),
+              Segmented<TrackType?>(
+                key: const Key('type-filter'),
+                options: {null: 'All', for (final t in TrackType.values) t: t.label},
+                value: s.typeFilter,
+                onChanged: s.setTypeFilter,
+              ),
+            ],
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Sort ', style: label),
+              Segmented<SearchSort>(
+                key: const Key('sort'),
+                options: const {
+                  SearchSort.relevance: 'Best match',
+                  SearchSort.title: 'Title A–Z',
+                  SearchSort.artist: 'Artist A–Z',
+                },
+                value: s.sort,
+                onChanged: s.setSort,
+                accent: EzColors.brass,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ResultsHeader extends StatelessWidget {
   const _ResultsHeader();
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-    decoration: BoxDecoration(
-      border: Border(bottom: BorderSide(color: context.ez.border)),
-    ),
-    child: const Row(
-      children: [
-        Expanded(flex: 5, child: HeadText('Title')),
-        Expanded(flex: 4, child: HeadText('Artist')),
-        SizedBox(width: 44, child: HeadText('Type')),
-        Expanded(flex: 3, child: HeadText('Location')),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    Widget sortable(String text, SearchSort by) => InkWell(
+      onTap: () => s.setSort(s.sort == by ? SearchSort.relevance : by),
+      child: Row(
+        children: [
+          Flexible(child: HeadText(text, color: s.sort == by ? EzColors.brass : null)),
+          if (s.sort == by) const Icon(Icons.arrow_downward, size: 11, color: EzColors.brass),
+        ],
+      ),
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: context.ez.border)),
+      ),
+      child: Row(
+        children: [
+          Expanded(flex: 5, child: sortable('Title', SearchSort.title)),
+          Expanded(flex: 4, child: sortable('Artist', SearchSort.artist)),
+          const SizedBox(width: 44, child: HeadText('Type')),
+          const Expanded(flex: 3, child: HeadText('Location')),
+        ],
+      ),
+    );
+  }
 }
 
 class ResultRow extends StatefulWidget {
