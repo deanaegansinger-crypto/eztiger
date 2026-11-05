@@ -25,7 +25,7 @@ Future<void> main(List<String> args) async {
   MediaKit.ensureInitialized();
   await windowManager.ensureInitialized();
   await windowManager.waitUntilReadyToShow(
-    const WindowOptions(title: 'EZtiger', size: Size(1400, 860), minimumSize: Size(1000, 640), center: true),
+    const WindowOptions(title: 'EZTiger Basic', size: Size(1400, 860), minimumSize: Size(1000, 640), center: true),
     () async {
       await windowManager.show();
       await windowManager.focus();
@@ -50,4 +50,5 @@ Future<void> main(List<String> args) async {
       secondScreen: SecondScreen(engine),
     ),
   );
+  WidgetsBinding.instance.addPostFrameCallback((_) => state.startUp());
 }

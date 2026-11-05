@@ -33,7 +33,6 @@ class _HomeScreenState extends State<HomeScreen> {
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): () => _setFull(false),
         const SingleActivator(LogicalKeyboardKey.f11): () => _setFull(!fullScreen),
-        const SingleActivator(LogicalKeyboardKey.space, control: true): s.playPause,
         const SingleActivator(LogicalKeyboardKey.arrowRight, control: true): s.next,
       },
       child: Focus(

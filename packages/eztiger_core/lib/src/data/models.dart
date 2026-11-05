@@ -165,11 +165,26 @@ class Playlist {
 }
 
 class QueueEntry {
-  QueueEntry({required this.id, required this.position, required this.singer, required this.track});
+  QueueEntry({
+    required this.id,
+    required this.position,
+    required this.singer,
+    required this.track,
+    this.playedAt,
+    this.lastSung,
+  });
   final int id;
   final int position;
   final String? singer;
   final Track track;
+
+  /// When this queue entry was played (it stays in the queue), or null.
+  final DateTime? playedAt;
+
+  /// The last time this song was sung at all, from the history.
+  final DateTime? lastSung;
+
+  bool get played => playedAt != null;
 }
 
 class HistoryEntry {

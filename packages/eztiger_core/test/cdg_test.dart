@@ -15,8 +15,7 @@ void main() {
   final tile = packet(6, [2, 1, 1, 2, 0x3F, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
   final xorTile = packet(38, [0, 3, 1, 2, 0x3F, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 
-  CdgDecoder build(List<List<int>> packets) =>
-      CdgDecoder(Uint8List.fromList(packets.expand((p) => p).toList()));
+  CdgDecoder build(List<List<int>> packets) => CdgDecoder(Uint8List.fromList(packets.expand((p) => p).toList()));
   Duration at(int packets) => Duration(microseconds: packets * 1000000 ~/ 300 + 1);
 
   test('loads the palette and draws a tile', () {

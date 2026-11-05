@@ -16,6 +16,7 @@ class EzColors extends ThemeExtension<EzColors> {
   static const cyan = Color(0xFF3DDBD6);
   static const red = Color(0xFFFF4757);
   static const mp3 = Color(0xFF8FD694);
+  static const green = Color(0xFF8FD694);
   static const onBrass = Color(0xFF1A1508);
   static const vfdBg = Color(0xFF05070A);
   static const vfdSub = Color(0xFF6EE8E4);

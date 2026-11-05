@@ -40,6 +40,9 @@ class EztigerDatabase {
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
         },
+        onUpgrade: (db, from, to) async {
+          if (from < 2) await db.execute('ALTER TABLE queue ADD COLUMN played_at INTEGER');
+        },
         onCreate: (db, version) async {
           final batch = db.batch();
           for (final sql in schemaStatements) {

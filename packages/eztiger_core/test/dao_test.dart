@@ -1,3 +1,6 @@
+import 'package:eztiger_core/eztiger_core.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:test/test.dart';
 
 import 'helpers.dart';
@@ -24,9 +27,15 @@ void main() {
     final q3 = await lib.db.queue.add(ids[2], singer: 'Rich T.');
     await lib.db.queue.move(q3, 0);
     expect((await lib.db.queue.all()).map((e) => e.singer), ['Rich T.', 'Dave M.', 'Steph K.']);
-    await lib.db.queue.markSung(q3);
+    await lib.db.queue.markSung(q3, at: DateTime(2026, 11, 4, 20, 51));
     await lib.db.queue.remove(q1);
-    final q = await lib.db.queue.all();
+    var q = await lib.db.queue.all();
+    // A sung song stays in the queue, marked played.
+    expect(q.map((e) => '${e.position}:${e.singer}:${e.played}'), ['0:Rich T.:true', '1:Steph K.:false']);
+    expect(q.first.playedAt, DateTime(2026, 11, 4, 20, 51));
+    expect(q.first.lastSung, DateTime(2026, 11, 4, 20, 51));
+    await lib.db.queue.clearPlayed();
+    q = await lib.db.queue.all();
     expect(q.map((e) => '${e.position}:${e.singer}'), ['0:Steph K.']);
     final h = await lib.db.history.recent();
     expect(h.single.singer, 'Rich T.');
@@ -106,5 +115,18 @@ Nothing Like This At All
     await lib.db.queue.moveBlock([q[0].id, q[1].id], 3);
     q = await lib.db.queue.all();
     expect(q.map((e) => e.track.title), ['Piano Man', 'Shallow', 'Africa']);
+  });
+
+  test('an older database gets the played column when opened', () async {
+    final path = p.join(lib.dir.path, 'old.db');
+    await (await EztigerDatabase.open(databaseFactoryFfiNoIsolate, path)).close();
+    final raw = await databaseFactoryFfiNoIsolate.openDatabase(path);
+    await raw.execute('ALTER TABLE queue DROP COLUMN played_at');
+    await raw.setVersion(1);
+    await raw.close();
+    final db = await EztigerDatabase.open(databaseFactoryFfiNoIsolate, path);
+    final cols = (await db.db.rawQuery('PRAGMA table_info(queue)')).map((r) => r['name']);
+    expect(cols, contains('played_at'));
+    await db.close();
   });
 }

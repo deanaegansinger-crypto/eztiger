@@ -19,8 +19,8 @@ class TestLibrary {
     final dir = Directory.systemTemp.createTempSync('eztiger_test_');
     final root = p.join(dir.path, 'backing 2024 april');
     Directory(root).createSync();
-    final db = await EztigerDatabase.open(databaseFactoryFfiNoIsolate, p.join(dir.path, 'test.db'),
-        disableFts: disableFts);
+    final db =
+        await EztigerDatabase.open(databaseFactoryFfiNoIsolate, p.join(dir.path, 'test.db'), disableFts: disableFts);
     await db.folders.addRoot(root);
     return TestLibrary._(dir, root, db);
   }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/foundation.dart';
@@ -15,6 +16,7 @@ class AppState extends ChangeNotifier {
   AppState(this.db, this.engine) {
     engine.onFinished = _onTrackFinished;
     engine.addListener(_watchForCrossfade);
+    engine.addListener(_rememberLoaded);
   }
 
   final EztigerDatabase db;
@@ -37,6 +39,10 @@ class AppState extends ChangeNotifier {
   // Results.
   ResultsView view = ResultsView.search;
   String query = '';
+
+  /// Browser filter (null shows every type) and sort order.
+  TrackType? typeFilter;
+  SearchSort sort = SearchSort.relevance;
   List<SearchGroup> results = [];
   int? selectedPlaylistId;
   List<HistoryEntry> history = [];
@@ -56,9 +62,23 @@ class AppState extends ChangeNotifier {
   bool scanning = false;
   String status = '';
   Timer? _debounce;
+
+  /// Set while the current song fades out into the next one.
   bool _fading = false;
+  int _fadeToken = 0;
+
+  /// A song whose crossfade was stopped by hand, so it is not tried again.
+  Track? _noFadeFor;
+
+  /// The crossfade fade-out lengths to choose from, and the one in use: the
+  /// end of the music fades down to [fadeLevel], then the next song comes in.
+  static const fadeOutChoices = [Duration(seconds: 4), Duration(seconds: 2), Duration(milliseconds: 200)];
+  Duration fadeOutTime = fadeOutChoices.first;
+  static const fadeLevel = 1 / 3;
+  static const fadeInTime = Duration(seconds: 2);
 
   Future<void> init() async {
+    await _loadSettings();
     await _reloadFolders();
     await _reloadQueue();
     await _reloadPlaylists();
@@ -67,6 +87,67 @@ class AppState extends ChangeNotifier {
   }
 
   // ------------------------------------------------------------ settings
+
+  /// Settings, the volume and the browser filter come back as they were.
+  Future<void> _loadSettings() async {
+    try {
+      final m = jsonDecode(await db.getMeta('settings') ?? '{}') as Map<String, dynamic>;
+      dark = m['dark'] as bool? ?? dark;
+      mode = PlayMode.values.asNameMap()[m['mode']] ?? mode;
+      crossfade = m['crossfade'] as bool? ?? crossfade;
+      autocue = m['autocue'] as bool? ?? autocue;
+      final fadeMs = m['fadeMs'] as int?;
+      fadeOutTime = fadeOutChoices.where((d) => d.inMilliseconds == fadeMs).firstOrNull ?? fadeOutTime;
+      typeFilter = TrackType.values.asNameMap()[m['type']];
+      sort = SearchSort.values.asNameMap()[m['sort']] ?? sort;
+      engine.volume = (m['volume'] as num?)?.toDouble() ?? engine.volume;
+      engine.muted = m['muted'] as bool? ?? engine.muted;
+    } catch (_) {
+      // Unreadable settings: keep the defaults.
+    }
+    _settingsLoaded = true;
+  }
+
+  String _savedSettings = '';
+  String _savedLoaded = '';
+
+  void _saveSettings() {
+    if (!_settingsLoaded) return;
+    final json = jsonEncode({
+      'dark': dark,
+      'mode': mode.name,
+      'crossfade': crossfade,
+      'autocue': autocue,
+      'fadeMs': fadeOutTime.inMilliseconds,
+      'type': typeFilter?.name,
+      'sort': sort.name,
+      'volume': engine.volume,
+      'muted': engine.muted,
+    });
+    if (json == _savedSettings) return;
+    _savedSettings = json;
+    unawaited(db.setMeta('settings', json).catchError((_) {}));
+  }
+
+  /// Keeps a note of the loaded song and the volume, for next time.
+  void _rememberLoaded() {
+    if (!_settingsLoaded) return;
+    final json = jsonEncode({'track': engine.current?.id, 'queue': nowPlayingQueueId});
+    if (json != _savedLoaded) {
+      _savedLoaded = json;
+      unawaited(db.setMeta('last_loaded', json).catchError((_) {}));
+    }
+    _saveSettings();
+  }
+
+  /// Saving starts only once the saved settings have been read.
+  bool _settingsLoaded = false;
+
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    _saveSettings();
+  }
 
   void toggleDark() {
     dark = !dark;
@@ -83,9 +164,15 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setFadeOut(Duration d) {
+    fadeOutTime = d;
+    notifyListeners();
+  }
+
   void toggleAutocue() {
     autocue = !autocue;
     notifyListeners();
+    unawaited(_autocue());
   }
 
   // ------------------------------------------------------------- library
@@ -177,10 +264,22 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setTypeFilter(TrackType? t) async {
+    typeFilter = t;
+    view = ResultsView.search;
+    await refreshResults();
+  }
+
+  Future<void> setSort(SearchSort s) async {
+    sort = s;
+    view = ResultsView.search;
+    await refreshResults();
+  }
+
   Future<void> refreshResults() async {
     switch (view) {
       case ResultsView.search:
-        results = await db.search.search(query, folderId: selectedFolderId, limit: 500);
+        results = await db.search.search(query, folderId: selectedFolderId, type: typeFilter, sort: sort, limit: 500);
       case ResultsView.playlist:
         final id = selectedPlaylistId;
         results = id == null ? [] : (await db.playlists.tracks(id)).map((t) => SearchGroup([t])).toList();
@@ -211,9 +310,49 @@ class AppState extends ChangeNotifier {
   Future<void> enqueue(Track t, {String? singer}) async {
     await db.queue.add(t.id, singer: singer);
     await _reloadQueue();
-    if (engine.current == null && autocue && queue.length == 1) {
-      await _cue(queue.first, autostart: false);
+    await _autocue();
+  }
+
+  /// Called once the window is on screen: cues the queue left from last
+  /// time. Not part of [init], because loading a song waits for the video
+  /// player, which only starts once the window has drawn.
+  /// Brings back the song that was loaded last time (paused), or else
+  /// cues the top of the queue.
+  Future<void> startUp() async {
+    try {
+      final last = jsonDecode(await db.getMeta('last_loaded') ?? '{}') as Map<String, dynamic>;
+      final entry = queue.where((e) => e.id == last['queue']).firstOrNull;
+      final track = last['track'] is int ? await db.tracks.byId(last['track'] as int) : null;
+      if (entry != null) {
+        await _cue(entry, autostart: false);
+      } else if (track != null) {
+        await playNow(track, autostart: false);
+      }
+    } catch (_) {
+      // Nothing usable saved: start empty.
     }
+    await _autocue();
+  }
+
+  /// Autocue: whenever the player is empty, the top of the queue is loaded
+  /// paused, ready to go.
+  Future<void> _autocue() async {
+    final next = upNext;
+    if (autocue && engine.current == null && !_fading && next != null) {
+      await _cue(next, autostart: false);
+    }
+  }
+
+  /// The song that plays after the current one: the first in the queue not
+  /// yet played. Played songs stay in the queue, marked played.
+  QueueEntry? get upNext => queue.where((e) => !e.played && e.id != nowPlayingQueueId).firstOrNull;
+
+  int get playedCount => queue.where((e) => e.played).length;
+
+  /// Takes the played songs off the queue.
+  Future<void> clearPlayed() async {
+    await db.queue.clearPlayed();
+    await _reloadQueue();
   }
 
   Future<void> removeFromQueue(QueueEntry e) async {
@@ -223,6 +362,7 @@ class AppState extends ChangeNotifier {
       await engine.stop();
     }
     await _reloadQueue();
+    await _autocue();
   }
 
   Future<void> moveInQueue(QueueEntry e, int newIndex) async {
@@ -254,25 +394,28 @@ class AppState extends ChangeNotifier {
   Future<void> playEntry(QueueEntry e) => _cue(e, autostart: true);
 
   /// Plays a track straight away, without queueing it.
-  Future<void> playNow(Track t) async {
+  Future<void> playNow(Track t, {bool autostart = true}) async {
     nowPlayingQueueId = null;
-    await engine.load(t);
+    _endFade();
+    await engine.load(t, autostart: autostart, skipSilence: autocue);
     notifyListeners();
   }
 
   Future<void> playPause() async {
     if (engine.current == null) {
-      if (queue.isNotEmpty) await playEntry(queue.first);
+      final next = upNext;
+      if (next != null) await playEntry(next);
       return;
     }
     await engine.playPause();
   }
 
   /// ⏭: the current song counts as sung, and the next one starts.
-  Future<void> next() async {
+  Future<void> next({Duration? fadeIn}) async {
     await _finishCurrent();
-    if (queue.isNotEmpty) {
-      await _cue(queue.first, autostart: true);
+    final up = upNext;
+    if (up != null) {
+      await _cue(up, autostart: true, fadeIn: fadeIn);
     } else {
       await engine.stop();
     }
@@ -281,10 +424,17 @@ class AppState extends ChangeNotifier {
   /// ⏮: back to the start of the song.
   Future<void> previous() => engine.restart();
 
-  Future<void> _cue(QueueEntry e, {required bool autostart}) async {
+  Future<void> _cue(QueueEntry e, {required bool autostart, Duration? fadeIn}) async {
     nowPlayingQueueId = e.id;
-    _fading = false;
-    await engine.load(e.track, singer: e.singer, autostart: autostart);
+    _endFade();
+    // Autocue (and a crossfade) start the song at its first note.
+    await engine.load(
+      e.track,
+      singer: e.singer,
+      autostart: autostart,
+      fadeIn: fadeIn,
+      skipSilence: autocue || fadeIn != null,
+    );
     notifyListeners();
   }
 
@@ -301,27 +451,51 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _onTrackFinished() async {
+    if (_fading) return; // the crossfade moves on to the next song itself
     await _finishCurrent();
-    if (queue.isEmpty) {
+    final next = upNext;
+    if (next == null) {
       await engine.stop();
       return;
     }
-    if (mode == PlayMode.autoplay) {
-      await _cue(queue.first, autostart: true);
+    if (mode == PlayMode.autoplay || crossfade) {
+      await _cue(next, autostart: true, fadeIn: crossfade ? fadeInTime : null);
     } else if (autocue) {
-      await _cue(queue.first, autostart: false); // ready to go, paused
+      await _cue(next, autostart: false); // ready to go, paused
     } else {
       await engine.stop();
     }
   }
 
+  /// Crossfade: near the end of the music (before any silence at the end of
+  /// the file), when another song is queued, fade it out and bring the next
+  /// one in at its first note. Works in either play mode.
   void _watchForCrossfade() {
-    if (!crossfade || mode != PlayMode.autoplay || _fading || queue.length < 2) return;
-    final left = engine.duration - engine.position;
-    if (engine.playing && engine.duration > const Duration(seconds: 10) && left < const Duration(seconds: 3)) {
-      _fading = true;
-      engine.fadeOut(over: left).then((_) => next());
-    }
+    if (!crossfade || _fading || !engine.playing || engine.current == null || upNext == null) return;
+    final end = engine.audioEnd;
+    if (end < const Duration(seconds: 8)) return;
+    var left = end - engine.position;
+    if (left > fadeOutTime) return;
+    if (left < const Duration(milliseconds: 200)) left = const Duration(milliseconds: 200); // already in the silence
+    if (identical(engine.current, _noFadeFor)) return;
+    _fading = true;
+    final token = ++_fadeToken;
+    final song = engine.current;
+    engine.fadeOut(over: left, to: fadeLevel).then((done) async {
+      if (token != _fadeToken) return; // something else already moved on
+      _fading = false;
+      if (!identical(engine.current, song)) return;
+      if (done) {
+        await next(fadeIn: fadeInTime);
+      } else {
+        _noFadeFor = song; // paused or volume moved: let it play out
+      }
+    });
+  }
+
+  void _endFade() {
+    _fadeToken++;
+    _fading = false;
   }
 
   // ----------------------------------------------------------- selection
@@ -434,14 +608,13 @@ class AppState extends ChangeNotifier {
       await _reloadQueue();
       return;
     }
-    final wasEmpty = queue.isEmpty;
     await db.queue.insertAll(d.tracks.map((t) => t.id), at: at);
     await _reloadQueue();
-    if (wasEmpty && engine.current == null && autocue && queue.isNotEmpty) await _cue(queue.first, autostart: false);
+    await _autocue();
   }
 
-  /// Songs dropped on the player: the first plays now, the rest go to the
-  /// top of the queue so they come next.
+  /// Songs dropped on the player: the first is loaded paused, ready to
+  /// play, and the rest go to the top of the queue so they come next.
   Future<void> dropOnPlayer(SongDrag d) async {
     if (d.tracks.isEmpty) return;
     if (d.queueIds.isNotEmpty) {
@@ -453,7 +626,7 @@ class AppState extends ChangeNotifier {
       await db.queue.insertAll(d.tracks.skip(1).map((t) => t.id), at: 0);
       await _reloadQueue();
     }
-    await playNow(d.tracks.first);
+    await playNow(d.tracks.first, autostart: false); // loaded paused, ready to go
   }
 
   Future<void> enqueueAll(List<Track> tracks) async {
@@ -541,6 +714,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _debounce?.cancel();
     engine.removeListener(_watchForCrossfade);
+    engine.removeListener(_rememberLoaded);
     super.dispose();
   }
 }

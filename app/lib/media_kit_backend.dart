@@ -14,7 +14,7 @@ class MediaKitBackend implements MediaBackend {
   late final VideoController video;
 
   @override
-  Future<void> open(String path) => player.open(Media(path), play: false);
+  Future<void> open(String path, {Duration? start}) => player.open(Media(path, start: start), play: false);
   @override
   Future<void> play() => player.play();
   @override

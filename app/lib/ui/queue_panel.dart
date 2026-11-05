@@ -30,8 +30,19 @@ class QueuePanel extends StatelessWidget {
           children: [
             Row(
               children: [
-                HeadText('Queue · ${s.queue.length} ${s.queue.length == 1 ? 'song' : 'songs'}', color: EzColors.brass),
+                HeadText(
+                  'Queue · ${s.queue.length - s.playedCount} to sing'
+                  '${s.playedCount > 0 ? ' · ${s.playedCount} played' : ''}',
+                  color: EzColors.brass,
+                ),
                 const Spacer(),
+                if (s.playedCount > 0)
+                  TextButton(
+                    key: const Key('clear-played'),
+                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                    onPressed: s.clearPlayed,
+                    child: const Text('Clear played', style: TextStyle(fontSize: 11)),
+                  ),
                 if (s.queue.isNotEmpty)
                   TextButton(
                     style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
@@ -51,7 +62,8 @@ class QueuePanel extends StatelessWidget {
                   Expanded(flex: 5, child: HeadText('Title')),
                   Expanded(flex: 5, child: HeadText('Artist — Singer')),
                   SizedBox(width: 44, child: HeadText('Type')),
-                  Expanded(flex: 3, child: HeadText('Location')),
+                  SizedBox(width: 96, child: HeadText('Played')),
+                  Expanded(flex: 2, child: HeadText('Location')),
                   SizedBox(width: 24),
                 ],
               ),
@@ -60,7 +72,7 @@ class QueuePanel extends StatelessWidget {
               child: s.queue.isEmpty
                   ? Center(
                       child: Text(
-                        'Double-click a song to add it at the bottom, or drag it here.',
+                        'Drag songs here, or press Enter on them in the list.',
                         style: TextStyle(fontSize: 12, color: context.ez.textDim),
                       ),
                     )
@@ -87,6 +99,8 @@ class _QueueRow extends StatelessWidget {
     final s = AppScope.of(context);
     final t = entry.track;
     final playing = s.nowPlayingQueueId == entry.id;
+    final played = entry.played && !playing;
+    final dim = context.ez.textDim;
     final drag = SongDrag([t], queueIds: [entry.id]);
     return InsertTarget(
       index: index,
@@ -126,66 +140,84 @@ class _QueueRow extends StatelessWidget {
             child: Container(
               height: 24,
               color: playing ? EzColors.brass.withValues(alpha: 0.2) : null,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 28,
-                    child: playing
-                        ? const Icon(Icons.play_arrow, size: 14, color: EzColors.brass)
-                        : Text('${index + 1}', style: TextStyle(fontSize: 11, color: context.ez.textDim)),
-                  ),
-                  Expanded(
-                    flex: 5,
-                    child: Text(
-                      t.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12),
+              child: Opacity(
+                opacity: played ? 0.55 : 1,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 28,
+                      child: playing
+                          ? const Icon(Icons.play_arrow, size: 14, color: EzColors.brass)
+                          : played
+                          ? const Icon(Icons.check, size: 14, color: EzColors.green)
+                          : Text('${index + 1}', style: TextStyle(fontSize: 11, color: dim)),
                     ),
-                  ),
-                  Expanded(
-                    flex: 5,
-                    child: Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text: t.artist ?? '—',
-                            style: TextStyle(color: context.ez.textDim),
-                          ),
-                          if (entry.singer != null) const TextSpan(text: ' — '),
-                          if (entry.singer != null)
-                            TextSpan(
-                              text: entry.singer,
-                              style: const TextStyle(color: EzColors.cyan),
-                            ),
-                        ],
+                    Expanded(
+                      flex: 5,
+                      child: Text(
+                        t.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12),
                     ),
-                  ),
-                  SizedBox(
-                    width: 44,
-                    child: Align(alignment: Alignment.centerLeft, child: TypeChip(t.type)),
-                  ),
-                  Expanded(
-                    flex: 3,
-                    child: Text(
-                      locationOf(t),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 10, fontFamily: vfdFont, color: context.ez.textDim),
+                    Expanded(
+                      flex: 5,
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: t.artist ?? '—',
+                              style: TextStyle(color: context.ez.textDim),
+                            ),
+                            if (entry.singer != null) const TextSpan(text: ' — '),
+                            if (entry.singer != null)
+                              TextSpan(
+                                text: entry.singer,
+                                style: const TextStyle(color: EzColors.cyan),
+                              ),
+                          ],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: 24,
-                    child: InkWell(
-                      onTap: () => s.removeFromQueue(entry),
-                      child: const Icon(Icons.close, size: 14, color: EzColors.red),
+                    SizedBox(
+                      width: 44,
+                      child: Align(alignment: Alignment.centerLeft, child: TypeChip(t.type)),
                     ),
-                  ),
-                ],
+                    SizedBox(
+                      width: 96,
+                      child: Text(
+                        entry.playedAt != null
+                            ? whenText(entry.playedAt!)
+                            : entry.lastSung != null
+                            ? 'last ${whenText(entry.lastSung!)}'
+                            : '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11, color: entry.playedAt != null ? EzColors.green : dim),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        locationOf(t),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 10, fontFamily: vfdFont, color: context.ez.textDim),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 24,
+                      child: InkWell(
+                        onTap: () => s.removeFromQueue(entry),
+                        child: const Icon(Icons.close, size: 14, color: EzColors.red),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -193,4 +225,14 @@ class _QueueRow extends StatelessWidget {
       ),
     );
   }
+}
+
+const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/// "20:51" today, otherwise "4 Nov 20:51".
+String whenText(DateTime t, {DateTime? now}) {
+  final n = now ?? DateTime.now();
+  final hm = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  if (t.year == n.year && t.month == n.month && t.day == n.day) return hm;
+  return '${t.day} ${_months[t.month - 1]}${t.year == n.year ? '' : ' ${t.year}'} $hm';
 }

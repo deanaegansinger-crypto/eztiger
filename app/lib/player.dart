@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:ui' as ui;
 
 import 'package:archive/archive_io.dart';
@@ -10,7 +11,8 @@ import 'package:path/path.dart' as p;
 /// What the karaoke engine needs from an audio/video player. The real one
 /// is media_kit (libmpv); tests use a fake.
 abstract class MediaBackend {
-  Future<void> open(String path);
+  /// Opens [path] paused, at [start] if given.
+  Future<void> open(String path, {Duration? start});
   Future<void> play();
   Future<void> pause();
   Future<void> stop();
@@ -29,7 +31,8 @@ abstract class MediaBackend {
 /// and for CDG karaoke the lyrics screen, kept in step with the audio
 /// position.
 class KaraokeEngine extends ChangeNotifier {
-  KaraokeEngine(this.backend) {
+  KaraokeEngine(this.backend, {Future<AudioEdges?> Function(String path)? scanEdges})
+    : scanEdges = scanEdges ?? _scanInIsolate {
     _subs = [
       backend.position.listen(_onPosition),
       backend.duration.listen((d) {
@@ -47,6 +50,26 @@ class KaraokeEngine extends ChangeNotifier {
   }
 
   final MediaBackend backend;
+
+  /// Finds where the music starts and ends in a file (see [findAudioEdges]).
+  final Future<AudioEdges?> Function(String path) scanEdges;
+  static Future<AudioEdges?> _scanInIsolate(String path) => Isolate.run(() => findAudioEdges(path));
+  final Map<String, AudioEdges?> _edgeCache = {};
+
+  /// Where the music starts and ends in the loaded song, when known.
+  AudioEdges? edges;
+
+  /// Where the song was cued: its first sound when the silence at the start
+  /// was skipped, otherwise the very start. ⏮ goes back here.
+  Duration cueStart = Duration.zero;
+
+  /// The end of the music, before any silence at the end of the file.
+  Duration get audioEnd {
+    final end = edges?.end;
+    if (end == null || duration == Duration.zero) return duration;
+    return end < duration ? end : duration;
+  }
+
   late final List<StreamSubscription<Object?>> _subs;
 
   Track? current;
@@ -73,8 +96,30 @@ class KaraokeEngine extends ChangeNotifier {
   bool get isVideo => current?.kind == 'video';
   bool get hasCdg => _cdg != null;
 
-  Future<void> load(Track track, {String? singer, bool autostart = true}) async {
+  /// Bumped whenever a fade should stop: a new song, stop, or a volume
+  /// change by hand.
+  int _fadeId = 0;
+
+  /// A fade-in starts at this share of the volume (where a crossfade's
+  /// fade-out ended).
+  double fadeInFrom = 1 / 3;
+  int _rampId = -1;
+  bool get _fading => _rampId == _fadeId;
+
+  /// [fadeIn] starts the song silent and brings the volume up over that time.
+  /// [skipSilence] starts the song at its first sound, past any silence at
+  /// the start of the file.
+  Future<void> load(
+    Track track, {
+    String? singer,
+    bool autostart = true,
+    Duration? fadeIn,
+    bool skipSilence = false,
+  }) async {
+    _fadeId++;
     error = null;
+    edges = null;
+    cueStart = Duration.zero;
     current = track;
     this.singer = singer;
     position = Duration.zero;
@@ -95,13 +140,21 @@ class KaraokeEngine extends ChangeNotifier {
         _cdg = CdgDecoder(await File(cdgPath).readAsBytes());
         await _render();
       }
-      await backend.open(media);
-      await backend.setVolume(muted ? 0 : volume);
+      edges = await _edgesOf(media);
+      final first = edges?.start ?? Duration.zero;
+      if (skipSilence && first > const Duration(milliseconds: 400)) {
+        cueStart = first - const Duration(milliseconds: 150); // a breath before the first note
+      }
+      position = cueStart;
+      await backend.open(media, start: cueStart == Duration.zero ? null : cueStart);
+      final fading = fadeIn != null && autostart && !muted;
+      await backend.setVolume(muted ? 0 : (fading ? volume * fadeInFrom : volume));
       if (autostart) {
         await backend.play();
       } else {
         await backend.pause();
       }
+      if (fading) unawaited(_ramp(from: fadeInFrom, to: 1, over: fadeIn));
     } catch (e) {
       error = 'Could not play ${track.fileName}: $e';
     }
@@ -110,10 +163,16 @@ class KaraokeEngine extends ChangeNotifier {
 
   Future<void> playPause() async {
     if (current == null) return;
+    if (_fading) {
+      // Pausing stops a crossfade and puts the volume back.
+      _fadeId++;
+      await backend.setVolume(muted ? 0 : volume);
+    }
     playing ? await backend.pause() : await backend.play();
   }
 
   Future<void> stop() async {
+    _fadeId++;
     await backend.stop();
     current = null;
     _cdg = null;
@@ -123,11 +182,21 @@ class KaraokeEngine extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> restart() => backend.seek(Duration.zero);
+  Future<void> restart() => backend.seek(cueStart);
+
+  Future<AudioEdges?> _edgesOf(String path) async {
+    if (_edgeCache.containsKey(path)) return _edgeCache[path];
+    AudioEdges? e;
+    try {
+      e = await scanEdges(path).timeout(const Duration(seconds: 3));
+    } catch (_) {}
+    return _edgeCache[path] = e;
+  }
 
   Future<void> seek(Duration to) => backend.seek(to);
 
   Future<void> setVolume(double v) async {
+    _fadeId++;
     volume = v.clamp(0, 100);
     muted = false;
     await backend.setVolume(volume);
@@ -135,19 +204,28 @@ class KaraokeEngine extends ChangeNotifier {
   }
 
   Future<void> toggleMute() async {
+    _fadeId++;
     muted = !muted;
     await backend.setVolume(muted ? 0 : volume);
     notifyListeners();
   }
 
   /// Fades the volume to silence over [over], for crossfading into the next
-  /// song.
-  Future<void> fadeOut({Duration over = const Duration(seconds: 3)}) async {
-    const steps = 15;
-    for (var i = steps - 1; i >= 0; i--) {
-      await backend.setVolume((muted ? 0 : volume) * i / steps);
+  /// song. Returns false if something else (a new song, stop, the volume
+  /// slider) interrupted the fade.
+  /// [to] is the volume to end at, as a share of the set volume.
+  Future<bool> fadeOut({Duration over = const Duration(seconds: 3), double to = 0}) =>
+      _ramp(from: 1, to: to, over: over);
+
+  Future<bool> _ramp({required double from, required double to, required Duration over}) async {
+    final id = _rampId = ++_fadeId;
+    const steps = 20;
+    for (var i = 1; i <= steps; i++) {
       await Future<void>.delayed(over ~/ steps);
+      if (id != _fadeId) return false;
+      await backend.setVolume((muted ? 0 : volume) * (from + (to - from) * i / steps));
     }
+    return id == _fadeId;
   }
 
   void _onPosition(Duration pos) {

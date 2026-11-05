@@ -4,8 +4,7 @@ import '../text.dart';
 import 'models.dart';
 import 'search.dart';
 
-const String trackSelect =
-    'SELECT t.*, f.path AS folder_path FROM tracks t JOIN folders f ON f.id = t.folder_id';
+const String trackSelect = 'SELECT t.*, f.path AS folder_path FROM tracks t JOIN folders f ON f.id = t.folder_id';
 
 int _now() => DateTime.now().millisecondsSinceEpoch;
 
@@ -51,9 +50,7 @@ WITH RECURSIVE sub(id) AS (
 UPDATE folders SET included = ? WHERE id IN (SELECT id FROM sub)''', [id, included ? 1 : 0]);
 
   Future<List<Folder>> roots() async =>
-      (await db.rawQuery('$_select WHERE f.is_root = 1 ORDER BY f.name COLLATE NOCASE'))
-          .map(Folder.fromRow)
-          .toList();
+      (await db.rawQuery('$_select WHERE f.is_root = 1 ORDER BY f.name COLLATE NOCASE')).map(Folder.fromRow).toList();
 
   Future<List<Folder>> children(int parentId) async =>
       (await db.rawQuery('$_select WHERE f.parent_id = ? ORDER BY f.name COLLATE NOCASE', [parentId]))
@@ -109,8 +106,7 @@ class TrackDao {
   /// "Edit tags" from the app. Pass null to leave a field as it is, and an
   /// empty string to go back to what the file name says. Rescans never
   /// overwrite these edits.
-  Future<void> editTags(int id,
-      {String? title, String? artist, TrackType? type, bool clearType = false}) async {
+  Future<void> editTags(int id, {String? title, String? artist, TrackType? type, bool clearType = false}) async {
     final current = await byId(id);
     if (current == null) return;
     final values = <String, Object?>{};
@@ -119,8 +115,7 @@ class TrackDao {
     if (type != null) values['user_kind'] = type.label;
     if (clearType) values['user_kind'] = null;
     final newTitle = values.containsKey('user_title') ? values['user_title'] as String? : current.userTitle;
-    final newArtist =
-        values.containsKey('user_artist') ? values['user_artist'] as String? : current.userArtist;
+    final newArtist = values.containsKey('user_artist') ? values['user_artist'] as String? : current.userArtist;
     values['group_key'] = groupKey(newTitle ?? current.parsedTitle, newArtist ?? current.parsedArtist);
     await db.update('tracks', values, where: 'id = ?', whereArgs: [id]);
     if (hasFts) await indexTracks(db, [id]);
@@ -145,9 +140,7 @@ class PlaylistDao {
 SELECT p.id, p.name, COUNT(pt.track_id) AS n
 FROM playlists p LEFT JOIN playlist_tracks pt ON pt.playlist_id = p.id
 GROUP BY p.id ORDER BY p.name COLLATE NOCASE''');
-    return rows
-        .map((r) => Playlist(id: r['id'] as int, name: r['name'] as String, trackCount: r['n'] as int))
-        .toList();
+    return rows.map((r) => Playlist(id: r['id'] as int, name: r['name'] as String, trackCount: r['n'] as int)).toList();
   }
 
   Future<List<Track>> tracks(int playlistId) async => (await db.rawQuery('''
@@ -171,8 +164,7 @@ VALUES(?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_tracks WHERE 
 
   /// Inserts songs before position [at] (0-based; past the end adds them at
   /// the bottom).
-  Future<void> insertAll(int playlistId, Iterable<int> trackIds, {required int at}) =>
-      db.transaction((txn) async {
+  Future<void> insertAll(int playlistId, Iterable<int> trackIds, {required int at}) => db.transaction((txn) async {
         final ids = await _ids(txn, playlistId);
         ids.insertAll(at.clamp(0, ids.length), trackIds);
         await _write(txn, playlistId, ids);
@@ -185,10 +177,10 @@ VALUES(?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_tracks WHERE 
         await _write(txn, playlistId, moveBlockIn(ids, positions, to));
       });
 
-  Future<List<int>> _ids(Transaction txn, int playlistId) async => (await txn.query('playlist_tracks',
-          where: 'playlist_id = ?', whereArgs: [playlistId], orderBy: 'position'))
-      .map((r) => r['track_id'] as int)
-      .toList();
+  Future<List<int>> _ids(Transaction txn, int playlistId) async =>
+      (await txn.query('playlist_tracks', where: 'playlist_id = ?', whereArgs: [playlistId], orderBy: 'position'))
+          .map((r) => r['track_id'] as int)
+          .toList();
 
   Future<void> _write(Transaction txn, int playlistId, List<int> ids) async {
     await txn.delete('playlist_tracks', where: 'playlist_id = ?', whereArgs: [playlistId]);
@@ -200,8 +192,7 @@ VALUES(?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_tracks WHERE 
   /// Removes the songs at [positions] (0-based) in one go.
   Future<void> removePositions(int playlistId, Iterable<int> positions) => db.transaction((txn) async {
         for (final p in positions) {
-          await txn.delete('playlist_tracks',
-              where: 'playlist_id = ? AND position = ?', whereArgs: [playlistId, p]);
+          await txn.delete('playlist_tracks', where: 'playlist_id = ? AND position = ?', whereArgs: [playlistId, p]);
         }
         await _renumber(txn, playlistId);
       });
@@ -216,16 +207,16 @@ VALUES(?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_tracks WHERE 
   }
 
   Future<void> removeAt(int playlistId, int position) => db.transaction((txn) async {
-        await txn.delete('playlist_tracks',
-            where: 'playlist_id = ? AND position = ?', whereArgs: [playlistId, position]);
+        await txn
+            .delete('playlist_tracks', where: 'playlist_id = ? AND position = ?', whereArgs: [playlistId, position]);
         await _renumber(txn, playlistId);
       });
 
   Future<void> move(int playlistId, int from, int to) => db.transaction((txn) async {
-        final ids = (await txn.query('playlist_tracks',
-                where: 'playlist_id = ?', whereArgs: [playlistId], orderBy: 'position'))
-            .map((r) => r['track_id'] as int)
-            .toList();
+        final ids =
+            (await txn.query('playlist_tracks', where: 'playlist_id = ?', whereArgs: [playlistId], orderBy: 'position'))
+                .map((r) => r['track_id'] as int)
+                .toList();
         if (from < 0 || from >= ids.length) return;
         final id = ids.removeAt(from);
         ids.insert(to.clamp(0, ids.length), id);
@@ -236,10 +227,10 @@ VALUES(?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_tracks WHERE 
       });
 
   Future<void> _renumber(Transaction txn, int playlistId) async {
-    final ids = (await txn.query('playlist_tracks',
-            where: 'playlist_id = ?', whereArgs: [playlistId], orderBy: 'position'))
-        .map((r) => r['track_id'] as int)
-        .toList();
+    final ids =
+        (await txn.query('playlist_tracks', where: 'playlist_id = ?', whereArgs: [playlistId], orderBy: 'position'))
+            .map((r) => r['track_id'] as int)
+            .toList();
     await txn.delete('playlist_tracks', where: 'playlist_id = ?', whereArgs: [playlistId]);
     for (var i = 0; i < ids.length; i++) {
       await txn.insert('playlist_tracks', {'playlist_id': playlistId, 'track_id': ids[i], 'position': i});
@@ -259,7 +250,8 @@ VALUES(?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM queue))''', [trackId, 
 
   Future<List<QueueEntry>> all() async {
     final rows = await db.rawQuery('''
-SELECT t.*, f.path AS folder_path, q.id AS q_id, q.singer AS q_singer, q.position AS q_position
+SELECT t.*, f.path AS folder_path, q.id AS q_id, q.singer AS q_singer, q.position AS q_position,
+  q.played_at AS q_played, (SELECT MAX(h.sung_at) FROM singer_history h WHERE h.track_id = q.track_id) AS q_last
 FROM queue q JOIN tracks t ON t.id = q.track_id JOIN folders f ON f.id = t.folder_id
 ORDER BY q.position''');
     return rows
@@ -267,7 +259,9 @@ ORDER BY q.position''');
             id: r['q_id'] as int,
             position: r['q_position'] as int,
             singer: r['q_singer'] as String?,
-            track: Track.fromRow(r)))
+            track: Track.fromRow(r),
+            playedAt: _time(r['q_played']),
+            lastSung: _time(r['q_last'])))
         .toList();
   }
 
@@ -314,17 +308,25 @@ ORDER BY q.position''');
         }
       });
 
-  /// Call when a queued song has been sung: logs it to history and takes it
-  /// off the queue, in one step.
+  static DateTime? _time(Object? ms) => ms is int ? DateTime.fromMillisecondsSinceEpoch(ms) : null;
+
+  /// Call when a queued song has been sung: logs it to history and marks it
+  /// played. It stays in the queue (see [clearPlayed]).
   Future<void> markSung(int queueId, {DateTime? at}) => db.transaction((txn) async {
         final rows = await txn.query('queue', where: 'id = ?', whereArgs: [queueId]);
         if (rows.isEmpty) return;
+        final when = (at ?? DateTime.now()).millisecondsSinceEpoch;
         await txn.insert('singer_history', {
           'track_id': rows.first['track_id'],
           'singer': rows.first['singer'],
-          'sung_at': (at ?? DateTime.now()).millisecondsSinceEpoch,
+          'sung_at': when,
         });
-        await txn.delete('queue', where: 'id = ?', whereArgs: [queueId]);
+        await txn.update('queue', {'played_at': when}, where: 'id = ?', whereArgs: [queueId]);
+      });
+
+  /// Takes the played songs off the queue.
+  Future<void> clearPlayed() => db.transaction((txn) async {
+        await txn.delete('queue', where: 'played_at IS NOT NULL');
         await _renumber(txn);
       });
 
@@ -376,7 +378,10 @@ ORDER BY h.sung_at DESC, h.id DESC LIMIT ?''', [if (singer != null) singer, limi
 List<T> moveBlockIn<T>(List<T> list, Iterable<int> positions, int to) {
   final pos = positions.toSet().where((p) => p >= 0 && p < list.length).toList()..sort();
   final block = [for (final p in pos) list[p]];
-  final rest = [for (var i = 0; i < list.length; i++) if (!pos.contains(i)) list[i]];
+  final rest = [
+    for (var i = 0; i < list.length; i++)
+      if (!pos.contains(i)) list[i]
+  ];
   final before = pos.where((p) => p < to).length;
   rest.insertAll((to - before).clamp(0, rest.length), block);
   return rest;

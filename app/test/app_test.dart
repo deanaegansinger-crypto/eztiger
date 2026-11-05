@@ -21,11 +21,16 @@ void main() {
   late FakeBackend backend;
   late AppState state;
 
+  /// Where the music starts and ends, by file name (none: unknown).
+  final edges = <String, AudioEdges>{};
+  Future<AudioEdges?> scan(String path) async => edges[path.split(RegExp(r'[\\/]')).last];
+
   setUp(() async {
+    edges.clear();
     lib = makeLibrary();
     db = await EztigerDatabase.open(databaseFactoryFfiNoIsolate, inMemoryDatabasePath);
     backend = FakeBackend();
-    state = AppState(db, KaraokeEngine(backend));
+    state = AppState(db, KaraokeEngine(backend, scanEdges: scan));
   });
 
   tearDown(() async {
@@ -61,7 +66,7 @@ void main() {
 
     await tester.runAsync(() => state.enqueue(state.results.first.primary));
     await tester.pump();
-    expect(find.textContaining('QUEUE · 1 SONG'), findsOneWidget);
+    expect(find.textContaining('QUEUE · 1 TO SING'), findsOneWidget);
     // Autocue loads the first song paused.
     expect(state.engine.current?.title, 'Livin On A Prayer');
     expect(backend.calls, contains('pause'));
@@ -77,8 +82,17 @@ void main() {
       await state.next();
     });
     await tester.pump();
-    expect(state.queue.length, 1);
+    // The sung song stays in the queue, ticked, with its time and singer.
+    expect(state.queue.length, 2);
+    expect(state.queue.first.played, isTrue);
+    expect(state.playedCount, 1);
+    expect(find.textContaining('1 TO SING · 1 PLAYED'), findsOneWidget);
+    expect(find.byIcon(Icons.check), findsOneWidget);
     expect(state.engine.current?.id, tracks[1].id);
+    await tester.tap(find.byKey(const Key('clear-played')));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump();
+    expect(state.queue.length, 1);
     final sung = await tester.runAsync(() => db.history.recent());
     expect(sung!.single.singer, 'Dean');
   });
@@ -187,7 +201,7 @@ void main() {
     expect(at.inSeconds, inInclusiveRange(80, 100)); // about half way through 3:00
   });
 
-  testWidgets('dropping songs on the player plays the first and queues the rest next', (tester) async {
+  testWidgets('dropping songs on the player loads the first paused and queues the rest next', (tester) async {
     await pumpApp(tester);
     final tracks = state.results.map((g) => g.primary).toList();
     await tester.runAsync(() async {
@@ -195,7 +209,7 @@ void main() {
       await state.dropOnPlayer(SongDrag([tracks[1], tracks[2]]));
     });
     expect(state.engine.current?.id, tracks[1].id);
-    expect(backend.calls.last, 'play');
+    expect(backend.calls.last, 'pause'); // loaded paused, ready to go
     expect(state.queue.map((e) => e.track.id), [tracks[2].id, tracks[0].id]);
 
     // A drag from the results onto the player.
@@ -258,5 +272,231 @@ void main() {
     final slider = tester.widget<Slider>(find.byKey(const Key('seek')));
     expect(slider.value, 65000);
     expect(slider.max, 180000);
+  });
+
+  testWidgets('Space plays and pauses, but types a space in the search box', (tester) async {
+    await pumpApp(tester);
+    await tester.runAsync(() => state.playNow(state.results.first.primary, autostart: false));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump();
+    expect(state.engine.playing, isFalse);
+    await tester.runAsync(() async {
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+    expect(state.engine.playing, isTrue);
+    expect(find.byIcon(Icons.pause), findsOneWidget);
+
+    // Typing in the search box keeps the space and doesn't pause.
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    final calls = backend.calls.length;
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(backend.calls.length, calls);
+    expect(state.engine.playing, isTrue);
+  });
+
+  testWidgets('filter by file type, and sort A to Z by title or artist', (tester) async {
+    await pumpApp(tester);
+    await tester.runAsync(() async {
+      await tester.tap(find.descendant(of: find.byKey(const Key('type-filter')), matching: find.text('MP4')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(state.results.map((g) => g.primary.title), ['Bohemian Rhapsody']);
+
+    await tester.runAsync(() => state.setTypeFilter(null));
+    await tester.runAsync(() async {
+      await tester.tap(find.descendant(of: find.byKey(const Key('sort')), matching: find.text('Artist A–Z')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(state.results.map((g) => g.primary.artist), ['Abba', 'Bon Jovi', 'Queen']);
+    await tester.runAsync(() => state.setSort(SearchSort.title));
+    expect(state.results.map((g) => g.primary.title), ['Bohemian Rhapsody', 'Livin On A Prayer', 'Waterloo']);
+    await tester.pump();
+  });
+
+  testWidgets('autocue loads the top of the queue whenever the player is empty', (tester) async {
+    await pumpApp(tester);
+    final tracks = state.results.map((g) => g.primary).toList();
+    state.toggleAutocue(); // off
+    await tester.runAsync(() async {
+      await state.enqueue(tracks[0]);
+      await state.enqueue(tracks[1]);
+    });
+    expect(state.engine.current, isNull);
+    // Turning it on with songs already waiting cues the first one.
+    await tester.runAsync(() async {
+      state.toggleAutocue();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    expect(state.engine.current?.id, tracks[0].id);
+    expect(state.engine.playing, isFalse);
+    // Removing the loaded song cues the next one.
+    await tester.runAsync(() => state.removeFromQueue(state.queue.first));
+    expect(state.engine.current?.id, tracks[1].id);
+    expect(state.engine.playing, isFalse);
+  });
+
+  testWidgets('crossfade fades into the next song, in single mode too, without skipping', (tester) async {
+    await pumpApp(tester);
+    final tracks = state.results.map((g) => g.primary).toList();
+    expect(state.mode, PlayMode.single);
+    state.toggleCrossfade();
+    await tester.runAsync(() async {
+      for (final t in tracks) {
+        await state.enqueue(t);
+      }
+      await state.playEntry(state.queue.first);
+      backend.at(const Duration(minutes: 2, seconds: 59)); // 1 second left
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(backend.volume, lessThan(80)); // fading out
+      backend.finish(); // the song ends while it fades
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+    });
+    expect(state.engine.current?.id, tracks[1].id, reason: 'moves on exactly one song');
+    expect(state.engine.playing, isTrue);
+    expect(state.queue.where((e) => !e.played).length, 2);
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 2300)));
+    expect(backend.volume, 80); // faded back in
+  });
+
+  testWidgets('double-clicking a song in the list loads it paused', (tester) async {
+    await pumpApp(tester);
+    // An MP3 with no CDG, so the load touches no files on disk.
+    final row = find.widgetWithText(ResultRow, 'Livin On A Prayer');
+    await tester.tap(row);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(row);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump();
+    expect(state.engine.current?.title, 'Livin On A Prayer');
+    expect(backend.calls, contains('pause'));
+    expect(state.engine.playing, isFalse);
+    expect(state.queue, isEmpty);
+  });
+
+  testWidgets('a queue left from last time is cued after start-up', (tester) async {
+    await pumpApp(tester);
+    final t = state.results.first.primary;
+    state.toggleAutocue(); // off, so adding doesn't cue
+    await tester.runAsync(() => state.enqueue(t));
+    // A fresh start: init must not load a song (the window isn't up yet).
+    final fresh = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan));
+    await tester.runAsync(fresh.init);
+    expect(fresh.engine.current, isNull);
+    fresh.autocue = true;
+    await tester.runAsync(fresh.startUp);
+    expect(fresh.engine.current?.id, t.id);
+    expect(fresh.engine.playing, isFalse);
+  });
+
+  testWidgets('settings and the loaded song come back next time', (tester) async {
+    await pumpApp(tester);
+    final t = state.results.firstWhere((g) => g.primary.title == 'Livin On A Prayer').primary;
+    await tester.runAsync(() async {
+      state.setMode(PlayMode.autoplay);
+      state.toggleCrossfade();
+      await state.engine.setVolume(55);
+      await state.playNow(t, autostart: false);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    final fresh = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan));
+    await tester.runAsync(() async {
+      await fresh.init();
+      await fresh.startUp();
+    });
+    expect(fresh.mode, PlayMode.autoplay);
+    expect(fresh.crossfade, isTrue);
+    expect(fresh.engine.volume, 55);
+    expect(fresh.engine.current?.id, t.id);
+    expect(fresh.engine.playing, isFalse);
+  });
+
+  void silentEnds() {
+    for (final f in ['Abba - Waterloo.mp3', 'Queen - Bohemian Rhapsody.mp4', 'Bon Jovi - Livin On A Prayer.mp3']) {
+      edges[f] = const AudioEdges(Duration(seconds: 10), Duration(seconds: 170), Duration(minutes: 3));
+    }
+  }
+
+  testWidgets('autocue starts a song at its first note, past the silence', (tester) async {
+    await pumpApp(tester);
+    silentEnds();
+    final t = state.results.first.primary;
+    await tester.runAsync(() => state.enqueue(t));
+    expect(state.engine.current?.id, t.id);
+    expect(backend.opensAt.last, const Duration(milliseconds: 9850));
+    expect(state.engine.cueStart, const Duration(milliseconds: 9850));
+    await tester.runAsync(state.previous); // ⏮ goes back to the first note
+    expect(backend.seeks.last, const Duration(milliseconds: 9850));
+
+    // With Autocue off, songs play from the very start.
+    state.toggleAutocue();
+    await tester.runAsync(() => state.playNow(state.results.last.primary, autostart: false));
+    expect(backend.opensAt.last, Duration.zero);
+  });
+
+  testWidgets('crossfade fades before the silence at the end, into the next first note', (tester) async {
+    await pumpApp(tester);
+    silentEnds();
+    final tracks = state.results.map((g) => g.primary).toList();
+    state.toggleAutocue(); // off: the crossfade still skips the next song's silence
+    state.toggleCrossfade();
+    await tester.runAsync(() async {
+      await state.enqueue(tracks[0]);
+      await state.enqueue(tracks[1]);
+      await state.playEntry(state.queue.first);
+      backend.at(const Duration(seconds: 167)); // 3 s before the music ends, 13 s before the file does
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(backend.volume, lessThan(80)); // fading
+      await Future<void>.delayed(const Duration(milliseconds: 5000));
+    });
+    expect(state.engine.current?.id, tracks[1].id);
+    expect(backend.opensAt.last, const Duration(milliseconds: 9850));
+  });
+
+  testWidgets('the fade-out length can be 4, 2 or 0.2 seconds, down to a third', (tester) async {
+    await pumpApp(tester);
+    silentEnds();
+    final tracks = state.results.map((g) => g.primary).toList();
+    state.toggleCrossfade();
+    await tester.tap(find.descendant(of: find.byKey(const Key('fade-length')), matching: find.text('0.2s')));
+    await tester.pump();
+    expect(state.fadeOutTime, const Duration(milliseconds: 200));
+    await tester.runAsync(() async {
+      await state.enqueue(tracks[0]);
+      await state.enqueue(tracks[1]);
+      await state.playEntry(state.queue.first);
+      backend.at(const Duration(seconds: 169)); // 1 s left: too early for a 0.2 s fade
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(backend.volume, 80);
+      backend.at(const Duration(milliseconds: 169850));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    expect(state.engine.current?.id, tracks[1].id);
+    expect(backend.volume, closeTo(80 / 3, 1)); // the next song starts at a third, then fades up
+  });
+
+  testWidgets('the Read me sheet opens from the top', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('read-me')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('EZTiger Basic · Read me'), findsOneWidget);
+    expect(find.textContaining('Autocue loads the next song'), findsOneWidget);
+    expect(find.textContaining('THANKS for using my first ever Claude created App'), findsOneWidget);
+    // The last line is reachable by scrolling.
+    await tester.dragUntilVisible(
+      find.textContaining('remembers your settings'),
+      find.byType(SingleChildScrollView).last,
+      const Offset(0, -200),
+    );
+    expect(find.textContaining('remembers your settings'), findsOneWidget);
+    await tester.tap(find.text('Close'));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('EZTiger Basic · Read me'), findsNothing);
   });
 }

@@ -13,8 +13,9 @@ class FakeBackend implements MediaBackend {
   double volume = 100;
 
   @override
-  Future<void> open(String path) async {
+  Future<void> open(String path, {Duration? start}) async {
     calls.add('open ${p.basename(path)}');
+    opensAt.add(start ?? Duration.zero);
     _dur.add(const Duration(minutes: 3));
   }
 
@@ -43,6 +44,7 @@ class FakeBackend implements MediaBackend {
   }
 
   final seeks = <Duration>[];
+  final opensAt = <Duration>[];
   @override
   Future<void> setVolume(double v) async => volume = v;
   void finish() => _done.add(true);
