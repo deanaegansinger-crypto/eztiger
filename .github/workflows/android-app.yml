@@ -1,0 +1,83 @@
+name: Android app
+
+on:
+  push:
+    branches: [main, android-app, 'claude/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+
+      - name: Get packages
+        run: flutter pub get
+
+      - name: Test
+        run: flutter test
+
+      - name: Signing key
+        # The same key every time, so a new version installs over the old one.
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/eztiger.p12"
+            echo "EZTIGER_KEYSTORE=$RUNNER_TEMP/eztiger.p12" >> "$GITHUB_ENV"
+            echo "EZTIGER_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: signed with a throwaway debug key, so this APK won't install over an earlier one."
+          fi
+
+      - name: Build
+        # One APK per processor type keeps each small. Galaxy tablets from the
+        # last several years are arm64; arm is for older ones.
+        run: flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64 --build-number ${{ github.run_number }}
+
+      - name: Name the downloads
+        run: |
+          version=$(sed -n 's/^version:[[:space:]]*\([0-9.]*\).*/\1/p' pubspec.yaml)
+          echo "APP_VERSION=$version" >> "$GITHUB_ENV"
+          mkdir -p ../out
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../out/EZtiger-Android.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk ../out/EZtiger-Android-older-tablets.apk
+          ls -la ../out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EZtiger-Android
+          path: out/*.apk
+
+      - name: Publish a test download
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v${{ env.APP_VERSION }}-build.${{ github.run_number }}
+          name: EZtiger for Android ${{ env.APP_VERSION }} (test build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          files: out/*.apk
+          body: |
+            Test build from `${{ github.ref_name }}`, for Android tablets.
+            On the tablet, download **EZtiger-Android.apk** and open it. Android will ask to allow installing apps from your browser or Files app: allow it, then press Install.
+            **EZtiger-Android-older-tablets.apk** is only for tablets too old for the first one.

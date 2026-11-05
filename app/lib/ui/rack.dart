@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_state.dart';
+import '../platform.dart';
+import 'android_folders.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'dialogs.dart';
@@ -446,7 +448,9 @@ class _AddFolderButton extends StatelessWidget {
       onPressed: s.scanning
           ? null
           : () async {
-              final path = await FilePicker.getDirectoryPath(dialogTitle: 'Choose a karaoke folder');
+              final path = touchUi
+                  ? await pickAndroidFolder(context)
+                  : await FilePicker.getDirectoryPath(dialogTitle: 'Choose a karaoke folder');
               if (path != null) await s.addRootFolder(path);
             },
     );
@@ -505,9 +509,9 @@ class _FolderTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     final f = folder;
-    return GestureDetector(
-      onSecondaryTapDown: (d) async {
-        final choice = await showMenuAt<String>(context, d.globalPosition, [
+    return MenuArea(
+      onMenu: (at) async {
+        final choice = await showMenuAt<String>(context, at, [
           if (f.included)
             const PopupMenuItem(value: 'exclude', child: Text('✓ In searchable library — remove'))
           else
@@ -656,9 +660,9 @@ class PlaylistsPanel extends StatelessWidget {
         for (final p in s.playlists)
           DragTarget<SongDrag>(
             onAcceptWithDetails: (d) => s.addToPlaylist(p.id, d.data.tracks),
-            builder: (context, cand, _) => GestureDetector(
-              onSecondaryTapDown: (d) async {
-                final c = await showMenuAt<String>(context, d.globalPosition, [
+            builder: (context, cand, _) => MenuArea(
+              onMenu: (at) async {
+                final c = await showMenuAt<String>(context, at, [
                   const PopupMenuItem(value: 'open', child: Text('Open')),
                   PopupMenuItem(
                     value: 'paste',
@@ -1079,17 +1083,13 @@ class _ResultRowState extends State<ResultRow> {
           s.selectRow(index);
         }
       },
-      child: GestureDetector(
-        onSecondaryTapDown: (d) => trackMenu(context, d.globalPosition, group, tracks: s.selectedTracks(orRow: index)),
-        child: Draggable<SongDrag>(
-          data: dragging,
-          dragAnchorStrategy: pointerDragAnchorStrategy,
-          onDragStarted: () => _dragged = true,
-          feedback: dragChip(dragging),
-          child: inPlaylist == null
-              ? row
-              : InsertTarget(index: index, onDrop: (d, at) => s.dropIntoPlaylist(inPlaylist, d, at), child: row),
-        ),
+      child: SongDraggable(
+        data: dragging,
+        onMenu: (at) => trackMenu(context, at, group, tracks: s.selectedTracks(orRow: index)),
+        onDragStarted: () => _dragged = true,
+        child: inPlaylist == null
+            ? row
+            : InsertTarget(index: index, onDrop: (d, at) => s.dropIntoPlaylist(inPlaylist, d, at), child: row),
       ),
     );
   }

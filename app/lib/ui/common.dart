@@ -2,6 +2,7 @@ import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import '../platform.dart';
 import '../second_screen.dart';
 import '../theme.dart';
 
@@ -216,6 +217,7 @@ class _InsertTargetState extends State<InsertTarget> {
     onMove: (d) => _track(d.offset),
     onLeave: (_) => setState(() => _after = null),
     onAcceptWithDetails: (d) {
+      if (heldStill[d.data] == true) return setState(() => _after = null);
       final at = widget.index + ((_after ?? false) ? 1 : 0);
       setState(() => _after = null);
       widget.onDrop(d.data, at);
@@ -229,5 +231,90 @@ class _InsertTargetState extends State<InsertTarget> {
       ),
       child: widget.child,
     ),
+  );
+}
+
+/// Drags that were picked up with press-and-hold and let go without moving:
+/// those open the menu instead of dropping anywhere.
+final heldStill = Expando<bool>();
+
+/// A song row that can be dragged, with a menu.
+///
+/// With a mouse it drags straight away and the menu is on right-click. On
+/// the tablet it's press-and-hold: move your finger to drag the song, or let
+/// go without moving for the menu (a plain swipe still scrolls the list).
+class SongDraggable extends StatefulWidget {
+  const SongDraggable({super.key, required this.data, required this.onMenu, required this.child, this.onDragStarted});
+  final SongDrag data;
+  final void Function(Offset at) onMenu;
+  final VoidCallback? onDragStarted;
+  final Widget child;
+
+  @override
+  State<SongDraggable> createState() => _SongDraggableState();
+}
+
+class _SongDraggableState extends State<SongDraggable> {
+  Offset? _down, _last;
+  SongDrag? _active;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!touchUi) {
+      return GestureDetector(
+        onSecondaryTapDown: (d) => widget.onMenu(d.globalPosition),
+        child: Draggable<SongDrag>(
+          data: widget.data,
+          dragAnchorStrategy: pointerDragAnchorStrategy,
+          onDragStarted: widget.onDragStarted,
+          feedback: dragChip(widget.data),
+          child: widget.child,
+        ),
+      );
+    }
+    return Listener(
+      onPointerDown: (e) => _down = _last = e.position,
+      onPointerMove: (e) {
+        _last = e.position;
+        final a = _active, d = _down;
+        if (a != null && d != null && (e.position - d).distance > 16) heldStill[a] = false;
+      },
+      child: LongPressDraggable<SongDrag>(
+        data: widget.data,
+        dragAnchorStrategy: pointerDragAnchorStrategy,
+        feedbackOffset: const Offset(0, -40),
+        onDragStarted: () {
+          _active = widget.data;
+          heldStill[widget.data] = true;
+          widget.onDragStarted?.call();
+        },
+        onDragEnd: (_) {
+          final a = _active, at = _last;
+          _active = null;
+          // Open the menu after the drag has finished tidying up, or it closes
+          // again straight away.
+          if (a != null && heldStill[a] == true && at != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) widget.onMenu(at);
+            });
+          }
+        },
+        feedback: dragChip(widget.data),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// Right-click with a mouse, or press-and-hold on the tablet.
+class MenuArea extends StatelessWidget {
+  const MenuArea({super.key, required this.onMenu, required this.child});
+  final void Function(Offset at) onMenu;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onSecondaryTapDown: (d) => onMenu(d.globalPosition),
+    onLongPressStart: touchUi ? (d) => onMenu(d.globalPosition) : null,
+    child: child,
   );
 }
