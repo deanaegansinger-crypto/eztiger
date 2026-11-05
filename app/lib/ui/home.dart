@@ -35,28 +35,37 @@ class _HomeScreenState extends State<HomeScreen> {
         const SingleActivator(LogicalKeyboardKey.f11): () => _setFull(!fullScreen),
         const SingleActivator(LogicalKeyboardKey.arrowRight, control: true): s.next,
       },
-      child: Focus(
-        autofocus: true,
-        child: Scaffold(
-          body: fullScreen
-              ? GestureDetector(onDoubleTap: () => _setFull(false), child: const KaraokeScreen())
-              : LayoutBuilder(
-                  builder: (context, c) {
-                    final rackWidth = (c.maxWidth * 0.42).clamp(400.0, 620.0);
-                    return Row(
-                      children: [
-                        SizedBox(width: rackWidth, child: const Rack()),
-                        Expanded(
-                          child: _Stage(
-                            queueHeight: queueHeight,
-                            onResize: (h) => setState(() => queueHeight = h),
-                            onFullScreen: () => _setFull(true),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
+      child: PopScope(
+        // The tablet's Back button leaves full screen first.
+        canPop: !fullScreen,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _setFull(false);
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            body: fullScreen
+                ? GestureDetector(onDoubleTap: () => _setFull(false), child: const KaraokeScreen())
+                : SafeArea(
+                    child: LayoutBuilder(
+                      builder: (context, c) {
+                        final rackWidth = (c.maxWidth * 0.42).clamp(400.0, 620.0);
+                        return Row(
+                          children: [
+                            SizedBox(width: rackWidth, child: const Rack()),
+                            Expanded(
+                              child: _Stage(
+                                queueHeight: queueHeight,
+                                onResize: (h) => setState(() => queueHeight = h),
+                                onFullScreen: () => _setFull(true),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+          ),
         ),
       ),
     );

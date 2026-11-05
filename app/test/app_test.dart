@@ -1,12 +1,14 @@
 import 'dart:io';
 
 import 'package:eztiger/app_state.dart';
+import 'package:eztiger/platform.dart';
 import 'package:eztiger/player.dart';
 import 'package:eztiger/ui/app.dart';
 import 'package:eztiger/ui/common.dart';
 import 'package:eztiger/ui/queue_panel.dart';
 import 'package:eztiger/ui/rack.dart';
 import 'package:eztiger_core/eztiger_core.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -498,5 +500,68 @@ void main() {
     await tester.tap(find.text('Close'));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('EZTiger Basic · Read me'), findsNothing);
+  });
+
+  testWidgets('tablet: press and hold drags a song to the queue, or opens the menu', (tester) async {
+    touchUi = true;
+    addTearDown(() => touchUi = false);
+    await pumpApp(tester);
+    final rows = find.byType(ResultRow);
+
+    // Hold and let go without moving: the menu.
+    var g = await tester.startGesture(tester.getCenter(rows.at(0)), kind: PointerDeviceKind.touch);
+    await tester.pump(const Duration(milliseconds: 700));
+    await g.up();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('➕ Add to queue'), findsOneWidget);
+    await tester.tap(find.text('➕ Add to queue'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(state.queue.length, 1);
+
+    // A quick swipe doesn't pick a song up.
+    await tester.drag(rows.at(1), const Offset(0, -40), kind: PointerDeviceKind.touch);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(state.queue.length, 1);
+
+    // Hold, then drag onto the queue.
+    g = await tester.startGesture(tester.getCenter(rows.at(1)), kind: PointerDeviceKind.touch);
+    await tester.pump(const Duration(milliseconds: 700));
+    await g.moveBy(const Offset(200, -100));
+    await tester.pump();
+    await g.moveTo(tester.getCenter(find.byType(QueuePanel)));
+    await tester.pump();
+    await tester.runAsync(() async {
+      await g.up();
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(state.queue.length, 2);
+    expect(find.text('➕ Add to queue'), findsNothing); // no menu after a real drag
+  });
+
+  testWidgets('tablet: holding a queued song still opens its menu', (tester) async {
+    touchUi = true;
+    addTearDown(() => touchUi = false);
+    await pumpApp(tester);
+    final tracks = state.results.map((g) => g.primary).toList();
+    await tester.runAsync(() async {
+      await state.enqueue(tracks[0]);
+      await state.enqueue(tracks[1]);
+    });
+    await tester.pump();
+    final row = find.descendant(of: find.byType(QueuePanel), matching: find.text(tracks[1].title));
+    final g = await tester.startGesture(tester.getCenter(row), kind: PointerDeviceKind.touch);
+    await tester.pump(const Duration(milliseconds: 700));
+    await g.up();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('🎤 Set singer…'), findsOneWidget);
+    // Letting go on itself didn't move it.
+    expect(state.queue.map((e) => e.track.id), [tracks[0].id, tracks[1].id]);
   });
 }

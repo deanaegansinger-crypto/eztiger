@@ -31,8 +31,9 @@ abstract class MediaBackend {
 /// and for CDG karaoke the lyrics screen, kept in step with the audio
 /// position.
 class KaraokeEngine extends ChangeNotifier {
-  KaraokeEngine(this.backend, {Future<AudioEdges?> Function(String path)? scanEdges})
-    : scanEdges = scanEdges ?? _scanInIsolate {
+  KaraokeEngine(this.backend, {Future<AudioEdges?> Function(String path)? scanEdges, String? tempDir})
+    : scanEdges = scanEdges ?? _scanInIsolate,
+      tempDir = tempDir ?? Directory.systemTemp.path {
     _subs = [
       backend.position.listen(_onPosition),
       backend.duration.listen((d) {
@@ -50,6 +51,10 @@ class KaraokeEngine extends ChangeNotifier {
   }
 
   final MediaBackend backend;
+
+  /// Where zipped MP3+G songs are unpacked (the app's cache folder on
+  /// Android, which has no usable system temp folder).
+  final String tempDir;
 
   /// Finds where the music starts and ends in a file (see [findAudioEdges]).
   final Future<AudioEdges?> Function(String path) scanEdges;
@@ -259,7 +264,7 @@ class KaraokeEngine extends ChangeNotifier {
   /// Unzips an MP3+G zip into a temp folder once, and returns the audio and
   /// CDG paths inside it.
   Future<(String, String?)> _extractZip(Track track) async {
-    final dir = Directory(p.join(Directory.systemTemp.path, 'eztiger', 'zip_${track.id}_${track.mtime}'));
+    final dir = Directory(p.join(tempDir, 'eztiger', 'zip_${track.id}_${track.mtime}'));
     if (!dir.existsSync()) {
       dir.createSync(recursive: true);
       await extractFileToDisk(track.path, dir.path);

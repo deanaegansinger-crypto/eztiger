@@ -77,13 +77,15 @@ class AppState extends ChangeNotifier {
   static const fadeLevel = 1 / 3;
   static const fadeInTime = Duration(seconds: 2);
 
-  Future<void> init() async {
+  /// Loads everything saved. [rescanLibrary] is false on Android until the
+  /// app is allowed to read the SD card (it rescans once it is).
+  Future<void> init({bool rescanLibrary = true}) async {
     await _loadSettings();
     await _reloadFolders();
     await _reloadQueue();
     await _reloadPlaylists();
     await refreshResults();
-    if (roots.isNotEmpty) unawaited(rescan());
+    if (rescanLibrary && roots.isNotEmpty) unawaited(rescan());
   }
 
   // ------------------------------------------------------------ settings

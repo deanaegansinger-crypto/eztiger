@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../platform.dart';
 import '../theme.dart';
 import 'common.dart';
 
@@ -9,7 +10,7 @@ final _scroll = ScrollController();
 Future<void> showReadMe(BuildContext context) => showDialog<void>(
   context: context,
   builder: (context) => AlertDialog(
-    title: const Text('EZTiger Basic · Read me'),
+    title: Text(touchUi ? 'EZTiger for Android · Read me' : 'EZTiger Basic · Read me'),
     content: SizedBox(
       width: 600,
       // Tall enough to show it all on most screens, and scrolls (with a
@@ -31,7 +32,8 @@ Future<void> showReadMe(BuildContext context) => showDialog<void>(
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: EzColors.brass),
                 ),
               ),
-              for (final (head, lines) in _sections) ...[
+              for (final (head, lines)
+                  in touchUi ? [_tablet, ..._sections.where((x) => x != _secondScreen)] : _sections) ...[
                 Padding(
                   padding: const EdgeInsets.only(top: 10, bottom: 4),
                   child: HeadText(head, color: EzColors.brass),
@@ -97,12 +99,24 @@ const _sections = <(String, List<String>)>[
       'Right-click a playlist to open it, paste into it, save the queue to it, or send it all to the queue.',
     ],
   ),
-  (
-    'Second screen',
-    [
-      'Click "2nd screen" on the output panel to open the lyrics window. With two monitors it goes full screen on the other one.',
-      'In that window, double-click or press F11 to switch full screen on or off; Esc leaves full screen.',
-    ],
-  ),
+  _secondScreen,
   ('Your settings', ['EZtiger remembers your settings, volume and the loaded song for next time.']),
 ];
+
+const _secondScreen = (
+  'Second screen',
+  [
+    'Click "2nd screen" on the output panel to open the lyrics window. With two monitors it goes full screen on the other one.',
+    'In that window, double-click or press F11 to switch full screen on or off; Esc leaves full screen.',
+  ],
+);
+
+const _tablet = (
+  'On the tablet',
+  [
+    'Add folder: allow EZtiger to "manage all files" when Android asks (it needs that to read CDG and lyric files), then pick SD card and your karaoke folder.',
+    'Double-tap a song to load it into the player. Press and hold a song, then move your finger to drag it onto the queue, the player or a playlist.',
+    'Press and hold and let go without moving for the menu (what right-click does on Windows): add to queue, set the singer, playlists and more.',
+    'Full screen shows just the lyrics; double-tap or press Back to come out of it. The screen stays on while EZtiger is open.',
+  ],
+);
