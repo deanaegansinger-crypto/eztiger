@@ -3,35 +3,53 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import 'common.dart';
 
+final _scroll = ScrollController();
+
 /// "Read me": a short how-to, opened from the button at the top.
 Future<void> showReadMe(BuildContext context) => showDialog<void>(
   context: context,
   builder: (context) => AlertDialog(
     title: const Text('EZtiger · Read me'),
     content: SizedBox(
-      width: 560,
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final (head, lines) in _sections) ...[
-              Padding(
-                padding: const EdgeInsets.only(top: 10, bottom: 4),
-                child: HeadText(head, color: EzColors.brass),
-              ),
-              for (final l in lines)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 3),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('•  ', style: TextStyle(fontSize: 13)),
-                      Expanded(child: Text(l, style: const TextStyle(fontSize: 13, height: 1.3))),
-                    ],
-                  ),
+      width: 600,
+      // Tall enough to show it all on most screens, and scrolls (with a
+      // visible bar) when it isn't.
+      height: MediaQuery.sizeOf(context).height * 0.7,
+      child: Scrollbar(
+        controller: _scroll,
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          controller: _scroll,
+          padding: const EdgeInsets.only(right: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: Text(
+                  'THANKS for using my first ever Claude created App - ENJOY!!',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: EzColors.brass),
                 ),
+              ),
+              for (final (head, lines) in _sections) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 10, bottom: 4),
+                  child: HeadText(head, color: EzColors.brass),
+                ),
+                for (final l in lines)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('•  ', style: TextStyle(fontSize: 13)),
+                        Expanded(child: Text(l, style: const TextStyle(fontSize: 13, height: 1.3))),
+                      ],
+                    ),
+                  ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     ),

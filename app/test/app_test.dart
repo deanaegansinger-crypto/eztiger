@@ -487,6 +487,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('EZtiger · Read me'), findsOneWidget);
     expect(find.textContaining('Autocue loads the next song'), findsOneWidget);
+    expect(find.textContaining('THANKS for using my first ever Claude created App'), findsOneWidget);
+    // The last line is reachable by scrolling.
+    await tester.dragUntilVisible(
+      find.textContaining('remembers your settings'),
+      find.byType(SingleChildScrollView).last,
+      const Offset(0, -200),
+    );
+    expect(find.textContaining('remembers your settings'), findsOneWidget);
     await tester.tap(find.text('Close'));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('EZtiger · Read me'), findsNothing);
