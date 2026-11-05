@@ -485,7 +485,7 @@ void main() {
     await pumpApp(tester);
     await tester.tap(find.byKey(const Key('read-me')));
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('EZtiger · Read me'), findsOneWidget);
+    expect(find.text('EZTiger Basic · Read me'), findsOneWidget);
     expect(find.textContaining('Autocue loads the next song'), findsOneWidget);
     expect(find.textContaining('THANKS for using my first ever Claude created App'), findsOneWidget);
     // The last line is reachable by scrolling.
@@ -497,6 +497,6 @@ void main() {
     expect(find.textContaining('remembers your settings'), findsOneWidget);
     await tester.tap(find.text('Close'));
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('EZtiger · Read me'), findsNothing);
+    expect(find.text('EZTiger Basic · Read me'), findsNothing);
   });
 }

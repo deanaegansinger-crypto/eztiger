@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "uk.deano" "\0"
-            VALUE "FileDescription", "EZtiger" "\0"
+            VALUE "FileDescription", "EZTiger Basic" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "eztiger" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 uk.deano. All rights reserved." "\0"
             VALUE "OriginalFilename", "eztiger.exe" "\0"
-            VALUE "ProductName", "EZtiger" "\0"
+            VALUE "ProductName", "EZTiger Basic" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

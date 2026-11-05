@@ -62,7 +62,26 @@ class _BrandRow extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: EzColors.brass, letterSpacing: 2),
         ),
         const SizedBox(width: 6),
-        Text('BY DEANO', style: TextStyle(fontSize: 10, color: context.ez.textDim, letterSpacing: 1.5)),
+        // "BASIC" over "BY DEANO", stacked to save width.
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                border: Border.all(color: EzColors.cyan),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: const Text(
+                'BASIC',
+                style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: EzColors.cyan, letterSpacing: 1.5),
+              ),
+            ),
+            const SizedBox(height: 1),
+            Text('BY DEANO', style: TextStyle(fontSize: 8, color: context.ez.textDim, letterSpacing: 1.2)),
+          ],
+        ),
         const Spacer(),
         TextButton.icon(
           key: const Key('read-me'),

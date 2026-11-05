@@ -9,7 +9,7 @@ final _scroll = ScrollController();
 Future<void> showReadMe(BuildContext context) => showDialog<void>(
   context: context,
   builder: (context) => AlertDialog(
-    title: const Text('EZtiger · Read me'),
+    title: const Text('EZTiger Basic · Read me'),
     content: SizedBox(
       width: 600,
       // Tall enough to show it all on most screens, and scrolls (with a

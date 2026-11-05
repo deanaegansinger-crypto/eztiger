@@ -10,11 +10,11 @@
 
 [Setup]
 AppId={{6B0E7A52-3F1C-4C7E-9A1D-B2C4D6E8F001}
-AppName=EZtiger
+AppName=EZTiger Basic
 AppVersion={#AppVersion}
 AppPublisher=Deano
 DefaultDirName={autopf}\EZtiger
-DefaultGroupName=EZtiger
+DefaultGroupName=EZTiger Basic
 DisableProgramGroupPage=yes
 OutputDir=Output
 OutputBaseFilename=EZtiger-Setup

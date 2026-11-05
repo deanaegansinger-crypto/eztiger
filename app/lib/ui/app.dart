@@ -22,7 +22,7 @@ class EztigerApp extends StatelessWidget {
     child: ListenableBuilder(
       listenable: Listenable.merge([state, ?secondScreen]),
       builder: (context, _) => MaterialApp(
-        title: 'EZtiger',
+        title: 'EZTiger Basic',
         debugShowCheckedModeBanner: false,
         theme: buildTheme(state.dark),
         // Space plays/pauses anywhere, except while typing in a text box
