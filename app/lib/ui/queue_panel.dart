@@ -2,6 +2,7 @@ import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import '../platform.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'dialogs.dart';
@@ -58,13 +59,13 @@ class QueuePanel extends StatelessWidget {
                           if (s.playedCount > 0)
                             TextButton(
                               key: const Key('clear-played'),
-                              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                              style: TextButton.styleFrom(visualDensity: tapDensity),
                               onPressed: s.clearPlayed,
                               child: const Text('Clear played', style: TextStyle(fontSize: 11)),
                             ),
                           if (s.queue.isNotEmpty)
                             TextButton(
-                              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                              style: TextButton.styleFrom(visualDensity: tapDensity),
                               onPressed: s.clearQueue,
                               child: const Text('Clear', style: TextStyle(fontSize: 11)),
                             ),
@@ -138,8 +139,8 @@ class _LoadPlaylistButton extends StatelessWidget {
         s.status = 'Added "${p.name}" to the queue';
         await s.enqueueAll(await s.db.playlists.tracks(id));
       },
-      child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: touchUi ? 12 : 8, vertical: touchUi ? 12 : 4),
         child: Text('📂 Load playlist', style: TextStyle(fontSize: 11, color: EzColors.brass)),
       ),
     );
@@ -171,8 +172,8 @@ class _SaveQueueButton extends StatelessWidget {
           await s.addToPlaylist(int.parse(c.substring(3)), tracks);
         }
       },
-      child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: touchUi ? 12 : 8, vertical: touchUi ? 12 : 4),
         child: Text('★ Save as playlist', style: TextStyle(fontSize: 11, color: EzColors.brass)),
       ),
     );

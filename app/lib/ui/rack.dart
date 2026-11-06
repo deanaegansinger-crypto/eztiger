@@ -85,14 +85,14 @@ class _BrandRow extends StatelessWidget {
           ],
         ),
         const Spacer(),
-        const _MainMenu(),
-        const SizedBox(width: 6),
-        Segmented<bool>(
-          options: const {true: 'Dark', false: 'Light'},
-          value: s.dark,
-          onChanged: (v) => v != s.dark ? s.toggleDark() : null,
-          accent: EzColors.brass,
+        TextButton.icon(
+          key: const Key('stage-view'),
+          style: TextButton.styleFrom(visualDensity: tapDensity, foregroundColor: EzColors.brass),
+          onPressed: () => s.setStageView(true),
+          icon: const Icon(Icons.mic_external_on, size: 18),
+          label: const Text('Stage', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
         ),
+        const _MainMenu(),
       ],
     );
   }
@@ -113,6 +113,18 @@ class _MainMenu extends StatelessWidget {
           value: 'readme',
           child: Row(children: [Icon(Icons.help_outline, size: 18), SizedBox(width: 10), Text('Read me')]),
         ),
+        const PopupMenuItem(
+          value: 'stage',
+          child: Row(children: [Icon(Icons.mic_external_on, size: 18), SizedBox(width: 10), Text('Stage view')]),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          enabled: false,
+          height: 28,
+          child: Text('SCREEN', style: TextStyle(fontSize: 11, letterSpacing: 1)),
+        ),
+        CheckedPopupMenuItem(value: 'dark', checked: s.dark, child: const Text('Dark')),
+        CheckedPopupMenuItem(value: 'light', checked: !s.dark, child: const Text('Light')),
         const PopupMenuDivider(),
         const PopupMenuItem(
           enabled: false,
@@ -130,12 +142,16 @@ class _MainMenu extends StatelessWidget {
       onSelected: (c) {
         if (c == 'readme') {
           showReadMe(context);
+        } else if (c == 'dark' || c == 'light') {
+          if ((c == 'dark') != s.dark) s.toggleDark();
+        } else if (c == 'stage') {
+          s.setStageView(true);
         } else if (c.startsWith('scale:')) {
           s.setTextScale(double.parse(c.substring(6)));
         }
       },
-      child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: touchUi ? 12 : 8, vertical: touchUi ? 12 : 4),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -258,9 +274,13 @@ class _Transport extends StatelessWidget {
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(
-            width: big ? 44 : 34,
-            height: big ? 44 : 34,
-            child: Icon(icon, size: big ? 26 : 18, color: big ? EzColors.onBrass : context.ez.text),
+            width: (big ? 44 : 34) * (touchUi ? 1.4 : 1),
+            height: (big ? 44 : 34) * (touchUi ? 1.4 : 1),
+            child: Icon(
+              icon,
+              size: (big ? 26 : 18) * (touchUi ? 1.4 : 1),
+              color: big ? EzColors.onBrass : context.ez.text,
+            ),
           ),
         ),
       ),
@@ -299,8 +319,8 @@ class _SeekBarState extends State<SeekBar> {
           child: SliderTheme(
             data: SliderTheme.of(context).copyWith(
               trackHeight: 4,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+              thumbShape: RoundSliderThumbShape(enabledThumbRadius: touchUi ? 10 : 6),
+              overlayShape: RoundSliderOverlayShape(overlayRadius: touchUi ? 22 : 12),
               activeTrackColor: EzColors.cyan,
               thumbColor: EzColors.cyan,
               inactiveTrackColor: context.ez.border,
@@ -345,12 +365,15 @@ class _VolumeRow extends StatelessWidget {
       children: [
         InkWell(
           onTap: e.toggleMute,
-          child: Icon(e.muted ? Icons.volume_off : Icons.volume_up, size: 18, color: context.ez.textDim),
+          child: Padding(
+            padding: EdgeInsets.all(touchUi ? 8 : 0),
+            child: Icon(e.muted ? Icons.volume_off : Icons.volume_up, size: 18, color: context.ez.textDim),
+          ),
         ),
         Expanded(
           child: SliderTheme(
             data: SliderTheme.of(context)
-                .copyWith(trackHeight: 3, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6)),
+                .copyWith(trackHeight: 3, thumbShape: RoundSliderThumbShape(enabledThumbRadius: touchUi ? 10 : 6)),
             child: Slider(value: e.muted ? 0 : e.volume, max: 100, activeColor: EzColors.brass, onChanged: e.setVolume),
           ),
         ),
@@ -467,7 +490,7 @@ class _TabButton extends StatelessWidget {
     onTap: onTap,
     borderRadius: BorderRadius.circular(6),
     child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: EdgeInsets.symmetric(horizontal: touchUi ? 14 : 10, vertical: touchUi ? 10 : 4),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: selected ? EzColors.brass : Colors.transparent, width: 2)),
       ),
@@ -489,7 +512,7 @@ class _AddFolderButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     return TextButton.icon(
-      style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: EzColors.brass),
+      style: TextButton.styleFrom(visualDensity: tapDensity, foregroundColor: EzColors.brass),
       icon: const Icon(Icons.create_new_folder_outlined, size: 16),
       label: const Text('Add folder', style: TextStyle(fontSize: 11)),
       onPressed: s.scanning
@@ -676,7 +699,7 @@ class PlaylistsPanel extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: TextButton(
-                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: EzColors.brass),
+                  style: TextButton.styleFrom(visualDensity: tapDensity, foregroundColor: EzColors.brass),
                   onPressed: () async {
                     final name = await askText(context, title: 'New playlist', label: 'Name');
                     if (name != null) await s.createPlaylist(name);
@@ -690,7 +713,7 @@ class PlaylistsPanel extends StatelessWidget {
             ),
             const Spacer(),
             TextButton(
-              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+              style: TextButton.styleFrom(visualDensity: tapDensity),
               onPressed: s.openHistory,
               child: const Text('🕘 History', style: TextStyle(fontSize: 11)),
             ),

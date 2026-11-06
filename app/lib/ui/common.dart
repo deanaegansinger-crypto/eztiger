@@ -54,32 +54,35 @@ class EzSwitch extends StatelessWidget {
   Widget build(BuildContext context) => InkWell(
     onTap: onChanged,
     borderRadius: BorderRadius.circular(10),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 11)),
-        const SizedBox(width: 6),
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: 30,
-          height: 16,
-          padding: const EdgeInsets.all(1),
-          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-          decoration: BoxDecoration(
-            color: value ? EzColors.cyan : const Color(0xFF3A3D4D),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: context.ez.border),
-          ),
-          child: Container(
-            width: 12,
-            height: 12,
+    child: Padding(
+      padding: EdgeInsets.symmetric(vertical: touchUi ? 10 : 0, horizontal: touchUi ? 4 : 0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 11)),
+          const SizedBox(width: 6),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 30,
+            height: 16,
+            padding: const EdgeInsets.all(1),
+            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: value ? const Color(0xFF06231F) : const Color(0xFFCFD0D8),
+              color: value ? EzColors.cyan : const Color(0xFF3A3D4D),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: context.ez.border),
+            ),
+            child: Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: value ? const Color(0xFF06231F) : const Color(0xFFCFD0D8),
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }
@@ -113,7 +116,7 @@ class Segmented<T> extends StatelessWidget {
             onTap: () => onChanged(e.key),
             borderRadius: BorderRadius.circular(10),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+              padding: EdgeInsets.symmetric(horizontal: touchUi ? 14 : 9, vertical: touchUi ? 9 : 3),
               decoration: BoxDecoration(
                 color: e.key == value ? accent : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
@@ -362,5 +365,9 @@ class _OuterTextScale extends InheritedWidget {
   bool updateShouldNotify(_OuterTextScale old) => old.scaler != scaler;
 }
 
-/// A row height or column width in the song lists, grown with the text size.
-double listSize(BuildContext context, double v) => v * AppScope.of(context).textScale;
+/// A row height or column width in the song lists, grown with the text size,
+/// and taller on the tablet so a finger can hit one row.
+double listSize(BuildContext context, double v) => v * AppScope.of(context).textScale * (touchUi ? 1.4 : 1);
+
+/// Button padding: compact for a mouse, roomier for a finger on the tablet.
+VisualDensity get tapDensity => touchUi ? VisualDensity.standard : VisualDensity.compact;

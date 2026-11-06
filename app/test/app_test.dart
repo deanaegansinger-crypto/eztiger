@@ -8,6 +8,7 @@ import 'package:eztiger/ui/output_panel.dart';
 import 'package:eztiger/ui/common.dart';
 import 'package:eztiger/ui/queue_panel.dart';
 import 'package:eztiger/ui/rack.dart';
+import 'package:eztiger/ui/stage_view.dart';
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -127,8 +128,14 @@ void main() {
 
   testWidgets('light mode switches the theme', (tester) async {
     await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     await tester.tap(find.text('Light'));
-    await tester.pump();
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     expect(state.dark, isFalse);
   });
 
@@ -575,6 +582,65 @@ void main() {
     await scan;
     await tester.pump();
     expect(find.byKey(const Key('loading-banner')), findsNothing);
+  });
+
+  testWidgets('stage view: big buttons, what is next, and back to the library', (tester) async {
+    await pumpApp(tester);
+    final tracks = state.results.map((g) => g.primary).toList();
+    await tester.runAsync(() async {
+      await state.enqueue(tracks[0], singer: 'Dean');
+      await state.enqueue(tracks[1], singer: 'Mike');
+    });
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('stage-view')));
+    await tester.pump();
+    expect(find.byType(StageView), findsOneWidget);
+    expect(find.byType(QueuePanel), findsNothing);
+    // The cued song is big at the top, and the next singer is up next.
+    expect(find.text(tracks[0].title), findsWidgets);
+    expect(find.text('UP NEXT · 1'), findsOneWidget);
+    expect(find.text(tracks[1].title), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('stage-play'))).width, greaterThanOrEqualTo(100));
+
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('stage-play')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(state.engine.playing, isTrue);
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('stage-next')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(state.engine.current?.id, tracks[1].id);
+    expect(find.text('UP NEXT · NOTHING QUEUED'), findsOneWidget);
+
+    // Double-tap the lyrics for full screen, and again to come back.
+    await tester.tap(find.byKey(const Key('stage-lyrics')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byKey(const Key('stage-lyrics')));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(StageView), findsNothing);
+    await tester.tap(find.byType(KaraokeScreen));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byType(KaraokeScreen));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(StageView), findsOneWidget);
+
+    // It's remembered, so the app opens in stage view at the next gig.
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final again = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan));
+      await again.init(rescanLibrary: false);
+      expect(again.stageView, isTrue);
+    });
+
+    await tester.tap(find.byKey(const Key('stage-exit')));
+    await tester.pump();
+    expect(find.byType(StageView), findsNothing);
+    expect(find.byType(QueuePanel), findsOneWidget);
   });
 
   testWidgets('the menu makes the song lists larger, but not the player', (tester) async {

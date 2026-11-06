@@ -31,6 +31,10 @@ class AppState extends ChangeNotifier {
   /// Text size for the song lists (queue, search results, library and
   /// playlists): 1 is normal. The player and karaoke screen don't change.
   double textScale = 1.0;
+
+  /// The stage view, for performing: big lyrics, big buttons, what's next.
+  /// It comes back on at start-up if it was on, ready for the gig.
+  bool stageView = false;
   static final textScaleChoices = {1.0: 'Normal', 1.25: 'Large', 1.5: 'Extra large'};
   bool autocue = true;
 
@@ -102,6 +106,7 @@ class AppState extends ChangeNotifier {
       dark = m['dark'] as bool? ?? dark;
       mode = PlayMode.values.asNameMap()[m['mode']] ?? mode;
       crossfade = m['crossfade'] as bool? ?? crossfade;
+      stageView = m['stage'] as bool? ?? stageView;
       final scale = (m['textScale'] as num?)?.toDouble();
       if (textScaleChoices.containsKey(scale)) textScale = scale!;
       autocue = m['autocue'] as bool? ?? autocue;
@@ -127,6 +132,7 @@ class AppState extends ChangeNotifier {
       'mode': mode.name,
       'crossfade': crossfade,
       'textScale': textScale,
+      'stage': stageView,
       'autocue': autocue,
       'fadeMs': fadeOutTime.inMilliseconds,
       'type': typeFilter?.name,
@@ -166,6 +172,11 @@ class AppState extends ChangeNotifier {
 
   void setMode(PlayMode m) {
     mode = m;
+    notifyListeners();
+  }
+
+  void setStageView(bool v) {
+    stageView = v;
     notifyListeners();
   }
 
