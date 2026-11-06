@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 import 'common.dart';
+import '../app_state.dart';
 import 'output_panel.dart';
 
 /// The view for performing, with the tablet on the mic stand: the lyrics or
@@ -159,6 +160,8 @@ class _Controls extends StatelessWidget {
         const SizedBox(height: 8),
         Row(
           children: [
+            _StageMode(mode: s.mode, onChanged: s.setMode),
+            const SizedBox(width: 6),
             IconButton(
               iconSize: 34,
               onPressed: e.toggleMute,
@@ -234,27 +237,56 @@ class _UpNext extends StatelessWidget {
               child: ListView(
                 children: [
                   for (final (i, q) in waiting.indexed)
-                    InkWell(
-                      key: ValueKey('stage-next-${q.id}'),
-                      onDoubleTap: () => s.playEntry(q),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(
-                              width: 34 * scale,
-                              child: Text(
-                                '${i + 1}',
-                                style: TextStyle(fontSize: 20 * scale, color: i == 0 ? EzColors.cyan : Colors.white38),
+                    Row(
+                      children: [
+                        // The buttons sit outside the double-tap area, so they
+                        // answer straight away.
+                        Expanded(
+                          child: InkWell(
+                            key: ValueKey('stage-next-${q.id}'),
+                            onDoubleTap: () => s.playEntry(q),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: 34 * scale,
+                                    child: Text(
+                                      '${i + 1}',
+                                      style: TextStyle(
+                                        fontSize: 20 * scale,
+                                        color: i == 0 ? EzColors.cyan : Colors.white38,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _QueuedSong(entry: q, first: i == 0, scale: scale),
+                                  ),
+                                ],
                               ),
                             ),
-                            Expanded(
-                              child: _QueuedSong(entry: q, first: i == 0, scale: scale),
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
+                        _QueueButton(
+                          key: ValueKey('stage-up-${q.id}'),
+                          icon: Icons.arrow_upward,
+                          tip: 'Move up',
+                          onTap: i == 0 ? null : () => s.nudgeInQueue(q, up: true),
+                        ),
+                        _QueueButton(
+                          key: ValueKey('stage-down-${q.id}'),
+                          icon: Icons.arrow_downward,
+                          tip: 'Move down',
+                          onTap: i == waiting.length - 1 ? null : () => s.nudgeInQueue(q, up: false),
+                        ),
+                        _QueueButton(
+                          key: ValueKey('stage-remove-${q.id}'),
+                          icon: Icons.close,
+                          tip: 'Take out of the queue',
+                          onTap: () => s.removeFromQueue(q),
+                        ),
+                      ],
                     ),
                 ],
               ),
@@ -378,5 +410,68 @@ class _BigButton extends StatelessWidget {
     onPressed: onTap,
     icon: Icon(icon, size: 24),
     label: Text(label, style: const TextStyle(fontSize: 18)),
+  );
+}
+
+/// Up, down and remove buttons on a song waiting in the stage view's queue.
+class _QueueButton extends StatelessWidget {
+  const _QueueButton({super.key, required this.icon, required this.tip, required this.onTap});
+  final IconData icon;
+  final String tip;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tip,
+    iconSize: 28,
+    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+    color: Colors.white70,
+    disabledColor: Colors.white12,
+    onPressed: onTap,
+    icon: Icon(icon),
+  );
+}
+
+/// Single / Autoplay, big enough to hit on a stand.
+class _StageMode extends StatelessWidget {
+  const _StageMode({required this.mode, required this.onChanged});
+  final PlayMode mode;
+  final ValueChanged<PlayMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('stage-mode'),
+    padding: const EdgeInsets.all(3),
+    decoration: BoxDecoration(
+      color: const Color(0xFF15181C),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFF2A2F36)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final (m, label) in [(PlayMode.single, 'Single'), (PlayMode.autoplay, 'Autoplay')])
+          InkWell(
+            key: Key('stage-mode-${m.name}'),
+            borderRadius: BorderRadius.circular(9),
+            onTap: () => onChanged(m),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: m == mode ? EzColors.cyan.withValues(alpha: 0.22) : null,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: m == mode ? EzColors.cyan : Colors.white60,
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
   );
 }

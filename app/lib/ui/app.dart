@@ -12,7 +12,7 @@ class EztigerApp extends StatelessWidget {
   const EztigerApp({super.key, required this.state, this.videoBuilder, this.setFullScreen, this.secondScreen});
   final SecondScreen? secondScreen;
   final AppState state;
-  final WidgetBuilder? videoBuilder;
+  final VideoBuilder? videoBuilder;
   final Future<void> Function(bool)? setFullScreen;
 
   @override

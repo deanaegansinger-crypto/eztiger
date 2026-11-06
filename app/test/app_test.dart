@@ -825,4 +825,140 @@ void main() {
     expect(find.byType(PlaylistsPanel), findsOneWidget);
     expect(state.libraryCollapsed, isFalse);
   });
+
+  testWidgets('stage view: move and remove queued songs, and Single/Autoplay', (tester) async {
+    await pumpApp(tester);
+    final tracks = state.results.map((g) => g.primary).toList();
+    await tester.runAsync(() async {
+      for (final t in tracks) {
+        await state.enqueue(t);
+      }
+      state.setStageView(true);
+    });
+    await tester.pump();
+    // The first song is cued, so two wait in Up Next.
+    List<int> waiting() => [
+      for (final q in state.queue)
+        if (!q.played && q.id != state.nowPlayingQueueId) q.track.id,
+    ];
+    expect(waiting(), [tracks[1].id, tracks[2].id]);
+    final second = state.queue[1], third = state.queue[2];
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(ValueKey('stage-down-${second.id}')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(waiting(), [tracks[2].id, tracks[1].id]);
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(ValueKey('stage-up-${second.id}')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(waiting(), [tracks[1].id, tracks[2].id]);
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(ValueKey('stage-remove-${third.id}')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(waiting(), [tracks[1].id]);
+    expect(find.byKey(ValueKey('stage-next-${third.id}')), findsNothing);
+
+    expect(state.mode, PlayMode.single);
+    await tester.tap(find.byKey(const Key('stage-mode-autoplay')));
+    await tester.pump();
+    expect(state.mode, PlayMode.autoplay);
+    await tester.tap(find.byKey(const Key('stage-mode-single')));
+    await tester.pump();
+    expect(state.mode, PlayMode.single);
+  });
+
+  group('2 decks', () {
+    late FakeBackend backendB;
+    late AppState two;
+    setUp(() {
+      backendB = FakeBackend();
+      two = AppState(
+        db,
+        KaraokeEngine(backend, scanEdges: scan),
+        deckB: KaraokeEngine(backendB, scanEdges: scan),
+      );
+    });
+
+    Future<List<Track>> queueAll() async {
+      await two.init();
+      await two.addRootFolder(lib.path);
+      final tracks = two.results.map((g) => g.primary).toList();
+      for (final t in tracks) {
+        await two.enqueue(t);
+      }
+      await two.setTwoDecks(true);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      return tracks;
+    }
+
+    test('the next song waits on the other deck, and the decks take turns', () async {
+      final tracks = await queueAll();
+      expect(two.liveDeck, 0);
+      expect(two.engine.current?.id, tracks[0].id);
+      expect(two.standby!.current?.id, tracks[1].id, reason: 'the next song is cued on deck B');
+      expect(two.standby!.playing, isFalse);
+
+      await two.playPause();
+      await two.next();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(two.liveDeck, 1);
+      expect(two.engine.current?.id, tracks[1].id);
+      expect(two.engine.playing, isTrue);
+      expect(backend.calls.last, isNot('play'));
+      expect(two.standby!.current?.id, tracks[2].id, reason: 'deck A takes the song after');
+
+      // Moving songs in the queue re-cues the waiting deck.
+      await two.clearQueue();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(two.standby!.current, isNull);
+    });
+
+    test('autoplay: the end of a song starts the other deck', () async {
+      final tracks = await queueAll();
+      two.setMode(PlayMode.autoplay);
+      await two.playPause();
+      backend.finish();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(two.liveDeck, 1);
+      expect(two.engine.current?.id, tracks[1].id);
+      expect(two.engine.playing, isTrue);
+      expect(two.queue.first.played, isTrue);
+    });
+
+    test('crossfade overlaps the two decks', () async {
+      final tracks = await queueAll();
+      two.toggleCrossfade();
+      await two.playPause();
+      backend.at(const Duration(minutes: 2, seconds: 58)); // 2 seconds left
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(two.liveDeck, 1, reason: 'the next song has started');
+      expect(two.engine.current?.id, tracks[1].id);
+      expect(two.engine.playing, isTrue);
+      expect(backend.volume, lessThan(100), reason: 'deck A fading out');
+      expect(two.decks[0].current?.id, tracks[0].id, reason: 'still playing out on deck A');
+      await Future<void>.delayed(const Duration(milliseconds: 2200));
+      expect(two.standby!.current?.id, tracks[2].id, reason: 'then deck A takes the song after');
+      expect(two.queue.where((e) => !e.played).length, 2);
+    });
+
+    test('turning 2 decks off stops the waiting deck; it is remembered', () async {
+      await queueAll();
+      expect(two.decks[1].current, isNotNull);
+      await two.setTwoDecks(false);
+      expect(two.decks[1].current, isNull);
+      expect(two.standby, isNull);
+      await two.setTwoDecks(true);
+      final again = AppState(db, KaraokeEngine(FakeBackend()), deckB: KaraokeEngine(FakeBackend()));
+      await again.init(rescanLibrary: false);
+      expect(again.twoDecks, isTrue);
+      final single = AppState(db, KaraokeEngine(FakeBackend()));
+      await single.init(rescanLibrary: false);
+      expect(single.twoDecks, isFalse, reason: 'no second deck on the tablet');
+    });
+  });
 }

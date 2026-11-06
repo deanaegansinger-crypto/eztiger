@@ -166,6 +166,25 @@ class KaraokeEngine extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Starts a loaded (cued) song, bringing the volume up from
+  /// [fadeInFrom] over [fadeIn] if given. The 2-deck mode starts the waiting
+  /// deck this way.
+  Future<void> play({Duration? fadeIn}) async {
+    if (current == null) return;
+    _fadeId++;
+    final fading = fadeIn != null && !muted;
+    await backend.setVolume(muted ? 0 : (fading ? volume * fadeInFrom : volume));
+    await backend.play();
+    if (fading) unawaited(_ramp(from: fadeInFrom, to: 1, over: fadeIn));
+  }
+
+  /// Takes the volume and mute setting from the other deck, without a fade.
+  Future<void> matchLevel(KaraokeEngine other) async {
+    volume = other.volume;
+    muted = other.muted;
+    if (!_fading) await backend.setVolume(muted ? 0 : volume);
+  }
+
   Future<void> playPause() async {
     if (current == null) return;
     if (_fading) {

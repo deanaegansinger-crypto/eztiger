@@ -18,7 +18,7 @@ class KaraokeScreen extends StatelessWidget {
     final video = AppScope.videoOf(context);
     Widget content;
     if (e.isVideo && video != null) {
-      content = video(context);
+      content = video(context, e);
     } else if (e.hasCdg) {
       content = ValueListenableBuilder(
         valueListenable: e.cdgFrame,

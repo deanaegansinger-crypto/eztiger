@@ -32,8 +32,11 @@ const _channel = WindowMethodChannel('eztiger/output', mode: ChannelMode.unidire
 /// Main-window side: opens the output window on the second screen and keeps
 /// it showing what the player is playing.
 class SecondScreen extends ChangeNotifier {
-  SecondScreen(this.engine);
-  final KaraokeEngine engine;
+  SecondScreen(this._engine);
+
+  /// The player to show: in 2-deck mode, whichever deck is live.
+  final KaraokeEngine Function() _engine;
+  KaraokeEngine get engine => _engine();
 
   bool get isOpen => _window != null;
   WindowController? _window;
