@@ -25,6 +25,9 @@ class AppState extends ChangeNotifier {
 
   // Settings (top of the rack).
   bool dark = true;
+
+  /// The look of the app (an EzSkin id), picked in ☰ Menu → Skin.
+  String skin = 'classic';
   PlayMode mode = PlayMode.single;
   bool crossfade = false;
 
@@ -111,6 +114,7 @@ class AppState extends ChangeNotifier {
     try {
       final m = jsonDecode(await db.getMeta('settings') ?? '{}') as Map<String, dynamic>;
       dark = m['dark'] as bool? ?? dark;
+      skin = m['skin'] as String? ?? skin;
       mode = PlayMode.values.asNameMap()[m['mode']] ?? mode;
       crossfade = m['crossfade'] as bool? ?? crossfade;
       stageView = m['stage'] as bool? ?? stageView;
@@ -138,6 +142,7 @@ class AppState extends ChangeNotifier {
     if (!_settingsLoaded) return;
     final json = jsonEncode({
       'dark': dark,
+      'skin': skin,
       'mode': mode.name,
       'crossfade': crossfade,
       'textScale': textScale,
@@ -178,6 +183,11 @@ class AppState extends ChangeNotifier {
 
   void toggleDark() {
     dark = !dark;
+    notifyListeners();
+  }
+
+  void setSkin(String id) {
+    skin = id;
     notifyListeners();
   }
 

@@ -22,25 +22,58 @@ class EztigerApp extends StatelessWidget {
     secondScreen: secondScreen,
     child: ListenableBuilder(
       listenable: Listenable.merge([state, ?secondScreen]),
-      builder: (context, _) => MaterialApp(
-        title: 'EZTiger Basic',
-        debugShowCheckedModeBanner: false,
-        theme: buildTheme(state.dark),
-        // Space plays/pauses anywhere, except while typing in a text box
-        // (the search box keeps its spaces).
-        shortcuts: {
-          ...WidgetsApp.defaultShortcuts,
-          const SingleActivator(LogicalKeyboardKey.space): const PlayPauseIntent(),
-          const SingleActivator(LogicalKeyboardKey.space, control: true): const PlayPauseIntent(),
-        },
-        actions: {
-          ...WidgetsApp.defaultActions,
-          PlayPauseIntent: CallbackAction<PlayPauseIntent>(onInvoke: (_) => state.playPause()),
-        },
-        home: HomeScreen(setFullScreen: setFullScreen),
+      builder: (context, _) => _SkinRepaint(
+        skin: state.skin,
+        child: MaterialApp(
+          title: 'EZTiger Basic',
+          debugShowCheckedModeBanner: false,
+          theme: buildTheme(state.dark, EzSkin.byId(state.skin)),
+          // Space plays/pauses anywhere, except while typing in a text box
+          // (the search box keeps its spaces).
+          shortcuts: {
+            ...WidgetsApp.defaultShortcuts,
+            const SingleActivator(LogicalKeyboardKey.space): const PlayPauseIntent(),
+            const SingleActivator(LogicalKeyboardKey.space, control: true): const PlayPauseIntent(),
+          },
+          actions: {
+            ...WidgetsApp.defaultActions,
+            PlayPauseIntent: CallbackAction<PlayPauseIntent>(onInvoke: (_) => state.playPause()),
+          },
+          home: HomeScreen(setFullScreen: setFullScreen),
+        ),
       ),
     ),
   );
+}
+
+/// After a skin change, rebuilds every widget on screen (keeping what's
+/// typed, scrolled or open), because many take the skin's colours directly.
+class _SkinRepaint extends StatefulWidget {
+  const _SkinRepaint({required this.skin, required this.child});
+  final String skin;
+  final Widget child;
+  @override
+  State<_SkinRepaint> createState() => _SkinRepaintState();
+}
+
+class _SkinRepaintState extends State<_SkinRepaint> {
+  @override
+  void didUpdateWidget(_SkinRepaint old) {
+    super.didUpdateWidget(old);
+    if (old.skin == widget.skin) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      void mark(Element e) {
+        e.markNeedsBuild();
+        e.visitChildren(mark);
+      }
+
+      (context as Element).visitChildren(mark);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class PlayPauseIntent extends Intent {
@@ -55,7 +88,7 @@ class LoadingApp extends StatelessWidget {
     title: 'EZTiger Basic',
     debugShowCheckedModeBanner: false,
     theme: buildTheme(true),
-    home: const Scaffold(
+    home: Scaffold(
       backgroundColor: Colors.black,
       body: Center(
         child: Column(

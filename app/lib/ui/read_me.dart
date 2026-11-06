@@ -25,7 +25,7 @@ Future<void> showReadMe(BuildContext context) => showDialog<void>(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(bottom: 6),
                 child: Text(
                   'THANKS for using my first ever Claude created App - ENJOY!!',

@@ -157,7 +157,7 @@ class _FolderBrowserState extends State<_FolderBrowser> {
             else
               for (final f in subfolders)
                 ListTile(
-                  leading: const Icon(Icons.folder, color: EzColors.brass),
+                  leading: Icon(Icons.folder, color: EzColors.brass),
                   title: Text(p.basename(f.path)),
                   onTap: () => _open(f.path),
                 ),

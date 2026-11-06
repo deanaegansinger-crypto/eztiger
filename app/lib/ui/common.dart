@@ -88,17 +88,13 @@ class EzSwitch extends StatelessWidget {
 }
 
 class Segmented<T> extends StatelessWidget {
-  const Segmented({
-    super.key,
-    required this.options,
-    required this.value,
-    required this.onChanged,
-    this.accent = EzColors.cyan,
-  });
+  const Segmented({super.key, required this.options, required this.value, required this.onChanged, this.accent});
+
+  /// The colour of the picked button (the skin's second accent if none).
+  final Color? accent;
   final Map<T, String> options;
   final T value;
   final ValueChanged<T> onChanged;
-  final Color accent;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -118,7 +114,7 @@ class Segmented<T> extends StatelessWidget {
             child: Container(
               padding: EdgeInsets.symmetric(horizontal: touchUi ? 14 : 9, vertical: touchUi ? 9 : 3),
               decoration: BoxDecoration(
-                color: e.key == value ? accent : Colors.transparent,
+                color: e.key == value ? (accent ?? EzColors.cyan) : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
@@ -189,7 +185,7 @@ Widget dragChip(SongDrag d) => Material(
     decoration: BoxDecoration(color: EzColors.brass, borderRadius: BorderRadius.circular(6)),
     child: Text(
       d.tracks.length == 1 ? d.tracks.first.title : '${d.tracks.length} songs',
-      style: const TextStyle(color: EzColors.onBrass, fontWeight: FontWeight.w700, fontSize: 12),
+      style: TextStyle(color: EzColors.onBrass, fontWeight: FontWeight.w700, fontSize: 12),
     ),
   ),
 );

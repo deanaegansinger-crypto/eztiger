@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:eztiger/app_state.dart';
 import 'package:eztiger/platform.dart';
 import 'package:eztiger/player.dart';
+import 'package:eztiger/theme.dart';
 import 'package:eztiger/ui/app.dart';
 import 'package:eztiger/ui/output_panel.dart';
 import 'package:eztiger/ui/common.dart';
@@ -38,6 +39,7 @@ void main() {
   });
 
   tearDown(() async {
+    EzSkin.current = EzSkin.classic;
     await db.close();
     lib.deleteSync(recursive: true);
   });
@@ -137,6 +139,41 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
     expect(state.dark, isFalse);
+  });
+
+  testWidgets('a skin picked in the menu changes the colours and is remembered', (tester) async {
+    await pumpApp(tester);
+    Color wordmark() => tester.widget<Text>(find.text('EZTIGER').first).style!.color!;
+    expect(wordmark(), EzSkin.classic.brass);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    // The classic skin has a light screen too; the others don't.
+    expect(find.text('Light'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('menu-skin')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    for (final skin in EzSkin.all) {
+      expect(find.byKey(Key('skin-${skin.id}')), findsOneWidget);
+    }
+    await tester.tap(find.byKey(const Key('skin-reactor')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(state.skin, 'reactor');
+    expect(EzSkin.current, EzSkin.reactor);
+    expect(wordmark(), EzSkin.reactor.brass);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('Light'), findsNothing);
+    expect(find.text('Reactor'), findsOneWidget); // the skin's name by "Skin"
+    // Saved with the other settings, for the next start.
+    final saved = await tester.runAsync(() => db.getMeta('settings'));
+    expect(saved, contains('"skin":"reactor"'));
   });
 
   testWidgets('shift-click selects a block, and dragging it queues them all', (tester) async {

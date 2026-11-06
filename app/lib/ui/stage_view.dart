@@ -82,7 +82,7 @@ class _Controls extends StatelessWidget {
           children: [
             Text(
               t == null ? 'READY' : (e.playing ? 'NOW PLAYING' : 'CUED · PRESS PLAY'),
-              style: const TextStyle(fontFamily: vfdFont, fontSize: 14, color: EzColors.vfdSub, letterSpacing: 2),
+              style: TextStyle(fontFamily: vfdFont, fontSize: 14, color: EzColors.vfdSub, letterSpacing: 2),
             ),
             const Spacer(),
             // Swap the lyrics and the buttons left and right.
@@ -92,7 +92,7 @@ class _Controls extends StatelessWidget {
               iconSize: 30,
               style: IconButton.styleFrom(
                 minimumSize: const Size(52, 52),
-                side: const BorderSide(color: EzColors.cyan),
+                side: BorderSide(color: EzColors.cyan),
                 foregroundColor: EzColors.cyan,
               ),
               onPressed: () => s.setStageLyricsRight(!s.stageLyricsRight),
@@ -124,7 +124,7 @@ class _Controls extends StatelessWidget {
             sub,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 20, color: EzColors.cyan),
+            style: TextStyle(fontSize: 20, color: EzColors.cyan),
           ),
         const SizedBox(height: 8),
         if (t != null && total > Duration.zero) ...[
@@ -222,12 +222,7 @@ class _UpNext extends StatelessWidget {
           children: [
             Text(
               waiting.isEmpty ? 'UP NEXT · NOTHING QUEUED' : 'UP NEXT · ${waiting.length}',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: EzColors.brass,
-                letterSpacing: 2,
-              ),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: EzColors.brass, letterSpacing: 2),
             ),
             const SizedBox(height: 4),
             Expanded(
@@ -373,7 +368,7 @@ class _BigButton extends StatelessWidget {
       minimumSize: const Size(0, 52),
       padding: const EdgeInsets.symmetric(horizontal: 18),
       foregroundColor: EzColors.cyan,
-      side: const BorderSide(color: EzColors.cyan),
+      side: BorderSide(color: EzColors.cyan),
     ),
     onPressed: onTap,
     icon: Icon(icon, size: 24),
