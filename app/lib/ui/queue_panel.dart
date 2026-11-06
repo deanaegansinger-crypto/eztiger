@@ -253,9 +253,9 @@ class _QueueRow extends StatelessWidget {
                   SizedBox(
                     width: listSize(context, 28),
                     child: playing
-                        ? const Icon(Icons.play_arrow, size: 14, color: EzColors.brass)
+                        ? Icon(Icons.play_arrow, size: 14, color: EzColors.brass)
                         : played
-                        ? const Icon(Icons.check, size: 14, color: EzColors.green)
+                        ? Icon(Icons.check, size: 14, color: EzColors.green)
                         : Text('${index + 1}', style: TextStyle(fontSize: 11, color: dim)),
                   ),
                   Expanded(
@@ -280,7 +280,7 @@ class _QueueRow extends StatelessWidget {
                           if (entry.singer != null)
                             TextSpan(
                               text: entry.singer,
-                              style: const TextStyle(color: EzColors.cyan),
+                              style: TextStyle(color: EzColors.cyan),
                             ),
                         ],
                       ),
@@ -319,7 +319,7 @@ class _QueueRow extends StatelessWidget {
                     width: listSize(context, 24),
                     child: InkWell(
                       onTap: () => s.removeFromQueue(entry),
-                      child: const Icon(Icons.close, size: 14, color: EzColors.red),
+                      child: Icon(Icons.close, size: 14, color: EzColors.red),
                     ),
                   ),
                 ],

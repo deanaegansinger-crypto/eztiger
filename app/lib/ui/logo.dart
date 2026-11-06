@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../edition.dart';
+
 /// The EZtiger badge: a tiger head in a gold ring that turns slowly, once
 /// every 24 seconds. It holds still when Windows asks apps to reduce motion.
 class EzLogo extends StatefulWidget {
@@ -8,7 +10,8 @@ class EzLogo extends StatefulWidget {
   final double size;
   final bool spin;
 
-  static const asset = 'assets/eztiger-logo.png';
+  /// EZTiger Pro's badge is on gold.
+  static String get asset => isPro ? 'assets/eztiger-pro-logo.png' : 'assets/eztiger-logo.png';
   static const turn = Duration(seconds: 24);
 
   @override
