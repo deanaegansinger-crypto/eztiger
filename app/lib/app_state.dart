@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/foundation.dart';
 
+import 'edition.dart';
 import 'player.dart';
 import 'ui/common.dart' show SongDrag;
 
@@ -26,6 +27,8 @@ class AppState extends ChangeNotifier {
       }
 
       _deckListeners.add(onChange);
+      d.keyShiftFor = (t) => isPro ? keyShifts[t.path] ?? 0 : 0;
+      d.onKeyShift = _rememberKey;
       d.addListener(onChange);
     }
   }
@@ -136,6 +139,7 @@ class AppState extends ChangeNotifier {
   /// app is allowed to read the SD card (it rescans once it is).
   Future<void> init({bool rescanLibrary = true}) async {
     await _loadSettings();
+    await _loadKeys();
     await _reloadFolders();
     await _reloadQueue();
     await _reloadPlaylists();
@@ -150,7 +154,7 @@ class AppState extends ChangeNotifier {
     try {
       final m = jsonDecode(await db.getMeta('settings') ?? '{}') as Map<String, dynamic>;
       dark = m['dark'] as bool? ?? dark;
-      skin = m['skin'] as String? ?? skin;
+      if (isPro) skin = m['skin'] as String? ?? skin;
       mode = PlayMode.values.asNameMap()[m['mode']] ?? mode;
       crossfade = m['crossfade'] as bool? ?? crossfade;
       stageView = m['stage'] as bool? ?? stageView;
@@ -166,6 +170,13 @@ class AppState extends ChangeNotifier {
       sort = SearchSort.values.asNameMap()[m['sort']] ?? sort;
       engine.volume = (m['volume'] as num?)?.toDouble() ?? engine.volume;
       engine.muted = m['muted'] as bool? ?? engine.muted;
+      if (isPro) {
+        final level = m['levelLoudness'] as bool? ?? false, cut = m['vocalCut'] as bool? ?? false;
+        for (final d in decks) {
+          d.levelLoudness = level;
+          d.vocalCut = cut;
+        }
+      }
     } catch (_) {
       // Unreadable settings: keep the defaults.
     }
@@ -193,6 +204,8 @@ class AppState extends ChangeNotifier {
       'sort': sort.name,
       'volume': engine.volume,
       'muted': engine.muted,
+      'levelLoudness': engine.levelLoudness,
+      'vocalCut': engine.vocalCut,
     });
     if (json == _savedSettings) return;
     _savedSettings = json;
@@ -236,6 +249,48 @@ class AppState extends ChangeNotifier {
 
   void setStageView(bool v) {
     stageView = v;
+    notifyListeners();
+  }
+
+  // ------------------------------------------------- Pro sound options
+
+  /// The key each song was last sung in, by file path (EZTiger Pro).
+  Map<String, int> keyShifts = {};
+
+  Future<void> _loadKeys() async {
+    try {
+      final m = jsonDecode(await db.getMeta('key_shifts') ?? '{}') as Map<String, dynamic>;
+      keyShifts = {for (final e in m.entries) e.key: (e.value as num).toInt()};
+    } catch (_) {
+      keyShifts = {};
+    }
+  }
+
+  void _rememberKey(Track t, int semitones) {
+    if (semitones == 0) {
+      keyShifts.remove(t.path);
+    } else {
+      keyShifts[t.path] = semitones;
+    }
+    unawaited(db.setMeta('key_shifts', jsonEncode(keyShifts)).catchError((_) {}));
+  }
+
+  /// Key up or down a semitone for the song on the player (−3 to +3).
+  Future<void> keyUp() => engine.setKeyShift(engine.keyShift + 1);
+  Future<void> keyDown() => engine.setKeyShift(engine.keyShift - 1);
+  Future<void> keyReset() => engine.setKeyShift(0);
+
+  Future<void> setLevelLoudness(bool on) async {
+    for (final d in decks) {
+      await d.setLevelLoudness(on);
+    }
+    notifyListeners();
+  }
+
+  Future<void> setVocalCut(bool on) async {
+    for (final d in decks) {
+      await d.setVocalCut(on);
+    }
     notifyListeners();
   }
 

@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:eztiger/app_state.dart';
+import 'package:eztiger/edition.dart';
+import 'package:eztiger/ui/pro_sound.dart';
 import 'package:eztiger/platform.dart';
 import 'package:eztiger/player.dart';
 import 'package:eztiger/theme.dart';
@@ -31,6 +33,9 @@ void main() {
   Future<AudioEdges?> scan(String path) async => edges[path.split(RegExp(r'[\\/]')).last];
 
   setUp(() async {
+    // The tests try EZTiger Pro, which has everything Basic has and more;
+    // the Basic tests switch it off.
+    isPro = true;
     edges.clear();
     lib = makeLibrary();
     db = await EztigerDatabase.open(databaseFactoryFfiNoIsolate, inMemoryDatabasePath);
@@ -55,6 +60,121 @@ void main() {
     await tester.pumpWidget(EztigerApp(state: state));
     await tester.pump();
   }
+
+  group('EZTiger Pro sound', () {
+    testWidgets('key change: up to 3 semitones, remembered for the song, and a warning on load', (tester) async {
+      await pumpApp(tester);
+      final tracks = state.results.map((g) => g.primary).toList();
+      await tester.runAsync(() => state.playNow(tracks[0], autostart: false));
+      await tester.pump();
+      expect(find.byType(ProSoundRow), findsOneWidget);
+      expect(find.byKey(const Key('key-warning')), findsNothing);
+      expect(backend.audioFilter, '');
+
+      for (var i = 0; i < 5; i++) {
+        await tester.tap(find.byKey(const Key('key-up')), warnIfMissed: false);
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await tester.pump();
+      }
+      expect(state.engine.keyShift, 3); // no further than 3 up
+      expect(find.text('+3'), findsOneWidget);
+      expect(backend.audioFilter, audioFilterChain(keyShift: 3));
+      expect(backend.audioFilter, contains('asetrate=57082'));
+      for (var i = 0; i < 8; i++) {
+        await tester.tap(find.byKey(const Key('key-down')), warnIfMissed: false);
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await tester.pump();
+      }
+      expect(state.engine.keyShift, -3); // no further than 3 down
+      await tester.tap(find.byKey(const Key('key-up')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+      expect(state.engine.keyShift, -2);
+
+      // Another song plays in its own key...
+      await tester.runAsync(() => state.playNow(tracks[1], autostart: false));
+      await tester.pump();
+      expect(state.engine.keyShift, 0);
+      expect(backend.audioFilter, '');
+      expect(find.byKey(const Key('key-warning')), findsNothing);
+
+      // ...and the first comes back in its changed key, with the warning.
+      await tester.runAsync(() => state.playNow(tracks[0], autostart: false));
+      await tester.pump();
+      expect(state.engine.keyShift, -2);
+      expect(backend.audioFilter, audioFilterChain(keyShift: -2));
+      expect(find.byKey(const Key('key-warning')), findsOneWidget);
+      expect(find.text('KEY −2'), findsOneWidget);
+
+      // Remembered after a restart too.
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        final again = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan));
+        await again.init(rescanLibrary: false);
+        expect(again.keyShifts[tracks[0].path], -2);
+      });
+
+      // The 0 in the middle puts it back in its own key, and forgets it.
+      await tester.tap(find.byKey(const Key('key-reset')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump(const Duration(seconds: 1));
+      expect(state.engine.keyShift, 0);
+      expect(state.keyShifts, isEmpty);
+      expect(find.byKey(const Key('key-warning')), findsNothing);
+    });
+
+    testWidgets('Level and Vocal cut switch the filters on and are remembered', (tester) async {
+      await pumpApp(tester);
+      await tester.runAsync(() => state.playNow(state.results.first.primary, autostart: false));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('level-loudness')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+      expect(backend.audioFilter, contains('loudnorm'));
+      await tester.tap(find.byKey(const Key('vocal-cut')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+      expect(backend.audioFilter, audioFilterChain(levelLoudness: true, vocalCut: true));
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        final b = FakeBackend();
+        final again = AppState(db, KaraokeEngine(b, scanEdges: scan));
+        await again.init(rescanLibrary: false);
+        expect(again.engine.levelLoudness, isTrue);
+        expect(again.engine.vocalCut, isTrue);
+      });
+      await tester.tap(find.byKey(const Key('vocal-cut')));
+      await tester.tap(find.byKey(const Key('level-loudness')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+      expect(backend.audioFilter, '');
+    });
+
+    test('the filter graph is wrapped for mpv with its exact length', () {
+      final f = audioFilterChain(keyShift: 2, levelLoudness: true, vocalCut: true);
+      final m = RegExp(r'^lavfi=graph=%(\d+)%(.*)$').firstMatch(f)!;
+      expect(m.group(2)!.length, int.parse(m.group(1)!));
+      expect(audioFilterChain(), '');
+    });
+  });
+
+  testWidgets('EZTiger Basic has no Pro sound controls, skins or second deck', (tester) async {
+    isPro = false;
+    await tester.runAsync(() => db.setMeta('key_shifts', '{"x": 2}'));
+    await pumpApp(tester);
+    expect(find.byType(ProSoundRow), findsNothing);
+    await tester.runAsync(() => state.playNow(state.results.first.primary, autostart: false));
+    await tester.pump();
+    expect(state.engine.keyShift, 0);
+    expect(backend.audioFilter, '');
+    await tester.tap(find.byKey(const Key('main-menu')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.byKey(const Key('menu-skin')), findsNothing);
+    expect(find.byKey(const Key('menu-two-decks')), findsNothing);
+    expect(editionName, 'EZTiger Basic');
+  });
 
   testWidgets('shows the library, searches and queues a song', (tester) async {
     await pumpApp(tester);
@@ -759,7 +879,7 @@ void main() {
     }
     await tester.tap(find.byKey(const Key('read-me')));
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('EZTiger Basic · Read me'), findsOneWidget);
+    expect(find.text('EZTiger Pro · Read me'), findsOneWidget);
     expect(find.textContaining('Autocue loads the next song'), findsOneWidget);
     expect(find.textContaining('THANKS for using my first ever Claude created App'), findsOneWidget);
     // The last line is reachable by scrolling.
@@ -771,7 +891,7 @@ void main() {
     expect(find.textContaining('remembers your settings'), findsOneWidget);
     await tester.tap(find.text('Close'));
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('EZTiger Basic · Read me'), findsNothing);
+    expect(find.text('EZTiger Pro · Read me'), findsNothing);
   });
 
   testWidgets('tablet: press and hold drags a song to the queue, or opens the menu', (tester) async {

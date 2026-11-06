@@ -13,6 +13,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app_state.dart';
+import 'edition.dart';
 import 'media_kit_backend.dart';
 import 'player.dart';
 import 'second_screen.dart';
@@ -30,7 +31,7 @@ Future<void> main(List<String> args) async {
   MediaKit.ensureInitialized();
   await windowManager.ensureInitialized();
   await windowManager.waitUntilReadyToShow(
-    const WindowOptions(title: 'EZTiger Basic', size: Size(1400, 860), minimumSize: Size(1000, 640), center: true),
+    WindowOptions(title: editionName, size: Size(1400, 860), minimumSize: Size(1000, 640), center: true),
     () async {
       await windowManager.show();
       await windowManager.focus();
@@ -45,12 +46,12 @@ Future<void> main(List<String> args) async {
 
   // Two players, for the 2-deck mode; the second waits idle otherwise.
   final backends = <KaraokeEngine, MediaKitBackend>{};
-  for (var i = 0; i < 2; i++) {
+  for (var i = 0; i < (isPro ? 2 : 1); i++) {
     final backend = MediaKitBackend();
     backends[KaraokeEngine(backend)] = backend;
   }
   final decks = backends.keys.toList();
-  final state = AppState(db, decks[0], deckB: decks[1]);
+  final state = AppState(db, decks[0], deckB: decks.length > 1 ? decks[1] : null);
   await state.init();
 
   runApp(

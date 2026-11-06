@@ -47,6 +47,9 @@ class FakeBackend implements MediaBackend {
   final opensAt = <Duration>[];
   @override
   Future<void> setVolume(double v) async => volume = v;
+  String audioFilter = '';
+  @override
+  Future<void> setAudioFilter(String filter) async => audioFilter = filter;
   void finish() => _done.add(true);
   void at(Duration d) => _pos.add(d);
 

@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_state.dart';
+import '../edition.dart';
 import '../platform.dart';
 import 'android_folders.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'dialogs.dart';
 import 'logo.dart';
+import 'pro_sound.dart';
 import 'read_me.dart';
 
 /// The left column of the mockup: player, settings, library, search and
@@ -23,23 +25,24 @@ class Rack extends StatelessWidget {
     return Container(
       color: context.ez.panel,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _BrandRow(),
-          SizedBox(height: 8),
-          PlayerStrip(),
-          SizedBox(height: 6),
-          SeekBar(),
-          _VolumeRow(),
-          _DeckLine(),
-          SizedBox(height: 8),
-          ListText(child: LibraryTabs()),
-          SizedBox(height: 8),
-          ListText(child: SearchBox()),
-          SizedBox(height: 6),
-          Expanded(child: ListText(child: ResultsTable())),
-          _StatusLine(),
+          const _BrandRow(),
+          const SizedBox(height: 8),
+          const PlayerStrip(),
+          const SizedBox(height: 6),
+          const SeekBar(),
+          const _VolumeRow(),
+          if (isPro) const ProSoundRow(),
+          const _DeckLine(),
+          const SizedBox(height: 8),
+          const ListText(child: LibraryTabs()),
+          const SizedBox(height: 8),
+          const ListText(child: SearchBox()),
+          const SizedBox(height: 6),
+          const Expanded(child: ListText(child: ResultsTable())),
+          const _StatusLine(),
         ],
       ),
     );
@@ -173,7 +176,8 @@ class _MainMenu extends StatelessWidget {
           ),
         ),
         const PopupMenuDivider(),
-        PopupMenuItem(
+        if (isPro)
+          PopupMenuItem(
           key: const Key('menu-skin'),
           value: 'skins',
           child: Row(
@@ -363,6 +367,7 @@ class PlayerStrip extends StatelessWidget {
                             : (t == null ? 'READY' : (e.playing ? 'NOW PLAYING' : 'CUED')),
                         style: TextStyle(fontFamily: vfdFont, fontSize: 9, color: EzColors.vfdSub, letterSpacing: 2),
                       ),
+                      if (isPro) ...[const SizedBox(width: 8), KeyWarning(engine: e)],
                       const Spacer(),
                       if (t != null)
                         Text(

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import 'common.dart';
 import '../app_state.dart';
+import '../edition.dart';
+import 'pro_sound.dart';
 import 'output_panel.dart';
 
 /// The view for performing, with the tablet on the mic stand: the lyrics or
@@ -90,6 +92,7 @@ class _Controls extends StatelessWidget {
               t == null ? 'READY' : (e.playing ? 'NOW PLAYING' : 'CUED · PRESS PLAY'),
               style: TextStyle(fontFamily: vfdFont, fontSize: 14, color: EzColors.vfdSub, letterSpacing: 2),
             ),
+            if (isPro) ...[const SizedBox(width: 10), KeyWarning(engine: e, fontSize: 16)],
             const Spacer(),
             // Swap the lyrics and the buttons left and right.
             IconButton(

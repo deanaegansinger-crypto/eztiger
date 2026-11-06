@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../edition.dart';
 import '../platform.dart';
 import '../theme.dart';
 import 'common.dart';
@@ -10,7 +11,7 @@ final _scroll = ScrollController();
 Future<void> showReadMe(BuildContext context) => showDialog<void>(
   context: context,
   builder: (context) => AlertDialog(
-    title: Text(touchUi ? 'EZTiger for Android · Read me' : 'EZTiger Basic · Read me'),
+    title: Text(touchUi ? 'EZTiger for Android · Read me' : '$editionName · Read me'),
     content: SizedBox(
       width: 600,
       // Tall enough to show it all on most screens, and scrolls (with a

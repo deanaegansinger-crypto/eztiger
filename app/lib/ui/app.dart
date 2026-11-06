@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_state.dart';
+import '../edition.dart';
 import '../second_screen.dart';
 import '../theme.dart';
 import 'common.dart';
@@ -25,7 +26,7 @@ class EztigerApp extends StatelessWidget {
       builder: (context, _) => _SkinRepaint(
         skin: state.skin,
         child: MaterialApp(
-          title: 'EZTiger Basic',
+          title: editionName,
           debugShowCheckedModeBanner: false,
           theme: buildTheme(state.dark, EzSkin.byId(state.skin)),
           // Space plays/pauses anywhere, except while typing in a text box
@@ -85,7 +86,7 @@ class LoadingApp extends StatelessWidget {
   const LoadingApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'EZTiger Basic',
+    title: editionName,
     debugShowCheckedModeBanner: false,
     theme: buildTheme(true),
     home: Scaffold(

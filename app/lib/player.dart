@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:archive/archive_io.dart';
@@ -20,6 +21,9 @@ abstract class MediaBackend {
 
   /// 0-100.
   Future<void> setVolume(double volume);
+
+  /// Sets mpv's audio filter chain (see [audioFilterChain]); '' clears it.
+  Future<void> setAudioFilter(String filter);
   Stream<Duration> get position;
   Stream<Duration> get duration;
   Stream<bool> get playing;
@@ -86,6 +90,29 @@ class KaraokeEngine extends ChangeNotifier {
   bool muted = false;
   String? error;
 
+  /// Pro: the key, in semitones up (+) or down (-), from [minKey] to [maxKey].
+  int keyShift = 0;
+  static const minKey = -3, maxKey = 3;
+
+  /// Pro: evens out the loudness, so quiet and loud tracks play at about
+  /// the same level.
+  bool levelLoudness = false;
+
+  /// Pro: cuts the lead vocal (what is panned to the middle).
+  bool vocalCut = false;
+
+  /// The saved key for a song, looked up as it loads (EZTiger Pro).
+  int Function(Track track)? keyShiftFor;
+
+  /// Told when the key is changed by hand, to remember it for the song.
+  void Function(Track track, int semitones)? onKeyShift;
+
+  /// When the loaded song came up in a changed key, for the flashing
+  /// warning; null when it loaded in its own key.
+  DateTime? keyWarningSince;
+
+  String _appliedFilter = '';
+
   /// Called when the current track plays to the end.
   VoidCallback? onFinished;
 
@@ -145,6 +172,9 @@ class KaraokeEngine extends ChangeNotifier {
         _cdg = CdgDecoder(await File(cdgPath).readAsBytes());
         await _render();
       }
+      keyShift = (keyShiftFor?.call(track) ?? 0).clamp(minKey, maxKey);
+      keyWarningSince = keyShift != 0 ? DateTime.now() : null;
+      await _applyFilter();
       edges = await _edgesOf(media);
       final first = edges?.start ?? Duration.zero;
       if (skipSilence && first > const Duration(milliseconds: 400)) {
@@ -218,6 +248,44 @@ class KaraokeEngine extends ChangeNotifier {
   }
 
   Future<void> seek(Duration to) => backend.seek(to);
+
+  /// Moves the key up or down, from -3 to +3 semitones, and remembers it for
+  /// this song.
+  Future<void> setKeyShift(int semitones) async {
+    final k = semitones.clamp(minKey, maxKey);
+    if (k == keyShift) return;
+    keyShift = k;
+    if (k == 0) keyWarningSince = null;
+    final t = current;
+    if (t != null) onKeyShift?.call(t, k);
+    await _applyFilter();
+    notifyListeners();
+  }
+
+  Future<void> setLevelLoudness(bool on) async {
+    if (on == levelLoudness) return;
+    levelLoudness = on;
+    await _applyFilter();
+    notifyListeners();
+  }
+
+  Future<void> setVocalCut(bool on) async {
+    if (on == vocalCut) return;
+    vocalCut = on;
+    await _applyFilter();
+    notifyListeners();
+  }
+
+  Future<void> _applyFilter() async {
+    final f = audioFilterChain(keyShift: keyShift, levelLoudness: levelLoudness, vocalCut: vocalCut);
+    if (f == _appliedFilter) return;
+    _appliedFilter = f;
+    try {
+      await backend.setAudioFilter(f);
+    } catch (_) {
+      // A player without filters still plays, in the song's own key.
+    }
+  }
 
   Future<void> setVolume(double v) async {
     _fadeId++;
@@ -307,4 +375,40 @@ class KaraokeEngine extends ChangeNotifier {
     cdgFrame.value?.dispose();
     super.dispose();
   }
+}
+
+/// The mpv audio filter chain for the Pro sound options: an ffmpeg filter
+/// graph wrapped as mpv's `lavfi` filter, or '' when nothing is switched on.
+///
+/// * Key change: speeds the sound up (or down) by the key's ratio, which
+///   raises (or lowers) the pitch, then time-stretches it back to the
+///   song's own speed, so the song and the CDG lyrics stay in time.
+/// * Vocal cut: the left channel minus the right (and the other way round)
+///   cancels whatever is panned to the middle, usually the lead vocal.
+///   The bass and kick drum are usually in the middle too, so the sound
+///   below 150 Hz is kept as it was.
+/// * Even out loudness: ffmpeg's loudnorm (EBU R128), aiming every song at
+///   the same loudness as it plays.
+String audioFilterChain({int keyShift = 0, bool levelLoudness = false, bool vocalCut = false}) {
+  const rate = 48000;
+  final parts = <String>[];
+  if (vocalCut) {
+    parts.add(
+      'aformat=channel_layouts=stereo,asplit=2[full][side];[full]lowpass=f=150[low];'
+      '[side]highpass=f=150,pan=stereo|c0=c0-c1|c1=c1-c0[high];[low][high]amix=inputs=2:normalize=0',
+    );
+  }
+  if (keyShift != 0) {
+    final ratio = math.pow(2, keyShift / 12);
+    parts.add(
+      'aresample=$rate,asetrate=${(rate * ratio).round()},aresample=$rate,'
+      'atempo=${(1 / ratio).toStringAsFixed(6)}',
+    );
+  }
+  if (levelLoudness) parts.add('loudnorm=I=-16:TP=-1.5:LRA=11,aresample=$rate');
+  if (parts.isEmpty) return '';
+  final graph = parts.join(',');
+  // mpv's %length% quoting passes the graph through untouched, brackets,
+  // commas and all.
+  return 'lavfi=graph=%${graph.length}%$graph';
 }
