@@ -624,6 +624,26 @@ void main() {
     });
     await tester.pump();
     expect(state.engine.playing, isTrue);
+
+    // The time and the seek bar follow the song as it plays.
+    Slider stageSeek() => tester.widget<Slider>(
+      find.descendant(of: find.byType(StageView), matching: find.byType(Slider)).first,
+    );
+    await tester.runAsync(() async {
+      backend.at(const Duration(minutes: 1));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    });
+    await tester.pump();
+    expect(find.text('-${fmt(const Duration(minutes: 2))}'), findsOneWidget);
+    expect(stageSeek().value, const Duration(minutes: 1).inMilliseconds);
+    await tester.runAsync(() async {
+      backend.at(const Duration(minutes: 2));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    });
+    await tester.pump();
+    expect(find.text('-${fmt(const Duration(minutes: 1))}'), findsOneWidget);
+    expect(stageSeek().value, const Duration(minutes: 2).inMilliseconds);
+
     await tester.runAsync(() async {
       await tester.tap(find.byKey(const Key('stage-next')));
       await Future<void>.delayed(const Duration(milliseconds: 100));

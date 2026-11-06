@@ -67,8 +67,13 @@ class _Lyrics extends StatelessWidget {
 class _Controls extends StatelessWidget {
   const _Controls();
 
+  // This widget is const, so the stage view's own rebuild skips it: listen
+  // to the player here, or the time and seek bar stand still while playing.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ListenableBuilder(listenable: AppScope.of(context).engine, builder: (context, _) => _build(context));
+
+  Widget _build(BuildContext context) {
     final s = AppScope.of(context);
     final e = s.engine;
     final t = e.current;
