@@ -26,6 +26,12 @@ class MediaKitBackend implements MediaBackend {
   @override
   Future<void> setVolume(double volume) => player.setVolume(volume);
   @override
+  Future<void> setAudioFilter(String filter) async {
+    final native = player.platform;
+    if (native is NativePlayer) await native.setProperty('af', filter);
+  }
+
+  @override
   Stream<Duration> get position => player.stream.position;
   @override
   Stream<Duration> get duration => player.stream.duration;

@@ -18,7 +18,7 @@ class KaraokeScreen extends StatelessWidget {
     final video = AppScope.videoOf(context);
     Widget content;
     if (e.isVideo && video != null) {
-      content = video(context);
+      content = video(context, e);
     } else if (e.hasCdg) {
       content = ValueListenableBuilder(
         valueListenable: e.cdgFrame,
@@ -39,7 +39,7 @@ class KaraokeScreen extends StatelessWidget {
           children: [
             const EzLogo(size: 160),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'EZTIGER',
               style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: EzColors.brass, letterSpacing: 6),
             ),
@@ -47,9 +47,9 @@ class KaraokeScreen extends StatelessWidget {
             Text(
               t == null ? 'Up next…' : t.title,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, color: EzColors.cyan),
+              style: TextStyle(fontSize: 18, color: EzColors.cyan),
             ),
-            if (t?.artist != null) Text(t!.artist!, style: const TextStyle(fontSize: 13, color: EzColors.vfdSub)),
+            if (t?.artist != null) Text(t!.artist!, style: TextStyle(fontSize: 13, color: EzColors.vfdSub)),
             if (e.singer != null) Text('🎤 ${e.singer}', style: const TextStyle(fontSize: 13, color: Colors.white70)),
           ],
         ),
@@ -102,7 +102,7 @@ class _OutputPanelState extends State<OutputPanel> {
                   color: context.ez.raised,
                   child: Row(
                     children: [
-                      const HeadText('Karaoke output', color: EzColors.brass),
+                      HeadText('Karaoke output', color: EzColors.brass),
                       const Spacer(),
                       if (AppScope.secondScreenOf(context) case final second?)
                         Padding(

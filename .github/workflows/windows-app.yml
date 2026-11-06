@@ -61,10 +61,29 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      # EZTiger Pro: the same code, built with the Pro features on and the
+      # gold Pro icon, then its own installer (which upgrades Basic in place).
+      - name: Build Pro
+        shell: pwsh
+        run: |
+          Copy-Item windows\runner\resources\app_icon_pro.ico windows\runner\resources\app_icon.ico -Force
+          flutter build windows --release --dart-define=EZ_EDITION=pro
+          if ($LASTEXITCODE -ne 0) { throw "Pro build failed" }
+
+      - name: Make the Pro installer
+        shell: pwsh
+        working-directory: installer
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=${env:APP_VERSION}" "/DEdition=Pro" "/DSourceDir=..\app\build\windows\x64\runner\Release" eztiger.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+          Get-ChildItem Output | Format-Table Name, Length
+
       - uses: actions/upload-artifact@v4
         with:
           name: EZtiger-Setup
-          path: installer/Output/EZtiger-Setup.exe
+          path: |
+            installer/Output/EZtiger-Setup.exe
+            installer/Output/EZTiger-Pro-Setup.exe
 
       - name: Publish a test download
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -74,7 +93,9 @@ jobs:
           name: EZtiger ${{ env.APP_VERSION }} (test build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
           prerelease: true
-          files: installer/Output/EZtiger-Setup.exe
+          files: |
+            installer/Output/EZtiger-Setup.exe
+            installer/Output/EZTiger-Pro-Setup.exe
           body: |
             Test build from `${{ github.ref_name }}`.
-            Download **EZtiger-Setup.exe** below and run it. Windows may say "Windows protected your PC" because the installer isn't signed yet: click **More info**, then **Run anyway**.
+            **EZTiger-Pro-Setup.exe** is EZTiger Pro, and installs over Basic as an upgrade. **EZtiger-Setup.exe** is EZTiger Basic. Windows may say "Windows protected your PC" because the installer isn't signed yet: click **More info**, then **Run anyway**.

@@ -1,8 +1,11 @@
 import 'dart:io';
 
 import 'package:eztiger/app_state.dart';
+import 'package:eztiger/edition.dart';
+import 'package:eztiger/ui/pro_sound.dart';
 import 'package:eztiger/platform.dart';
 import 'package:eztiger/player.dart';
+import 'package:eztiger/theme.dart';
 import 'package:eztiger/ui/app.dart';
 import 'package:eztiger/ui/output_panel.dart';
 import 'package:eztiger/ui/common.dart';
@@ -30,6 +33,9 @@ void main() {
   Future<AudioEdges?> scan(String path) async => edges[path.split(RegExp(r'[\\/]')).last];
 
   setUp(() async {
+    // The tests try EZTiger Pro, which has everything Basic has and more;
+    // the Basic tests switch it off.
+    isPro = true;
     edges.clear();
     lib = makeLibrary();
     db = await EztigerDatabase.open(databaseFactoryFfiNoIsolate, inMemoryDatabasePath);
@@ -38,6 +44,7 @@ void main() {
   });
 
   tearDown(() async {
+    EzSkin.current = EzSkin.classic;
     await db.close();
     lib.deleteSync(recursive: true);
   });
@@ -53,6 +60,164 @@ void main() {
     await tester.pumpWidget(EztigerApp(state: state));
     await tester.pump();
   }
+
+  group('EZTiger Pro sound', () {
+    testWidgets('key change: up to 3 semitones, remembered for the song, and a warning on load', (tester) async {
+      await pumpApp(tester);
+      final tracks = state.results.map((g) => g.primary).toList();
+      await tester.runAsync(() => state.playNow(tracks[0], autostart: false));
+      await tester.pump();
+      expect(find.byType(ProSoundRow), findsOneWidget);
+      expect(find.byKey(const Key('key-warning')), findsNothing);
+      expect(backend.audioFilter, '');
+
+      for (var i = 0; i < 5; i++) {
+        await tester.tap(find.byKey(const Key('key-up')), warnIfMissed: false);
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await tester.pump();
+      }
+      expect(state.engine.keyShift, 3); // no further than 3 up
+      expect(find.text('+3'), findsOneWidget);
+      expect(backend.audioFilter, audioFilterChain(keyShift: 3));
+      expect(backend.audioFilter, contains('asetrate=57082'));
+      for (var i = 0; i < 8; i++) {
+        await tester.tap(find.byKey(const Key('key-down')), warnIfMissed: false);
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await tester.pump();
+      }
+      expect(state.engine.keyShift, -3); // no further than 3 down
+      await tester.tap(find.byKey(const Key('key-up')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+      expect(state.engine.keyShift, -2);
+
+      // Another song plays in its own key...
+      await tester.runAsync(() => state.playNow(tracks[1], autostart: false));
+      await tester.pump();
+      expect(state.engine.keyShift, 0);
+      expect(backend.audioFilter, '');
+      expect(find.byKey(const Key('key-warning')), findsNothing);
+
+      // ...and the first comes back in its changed key, with the warning.
+      await tester.runAsync(() => state.playNow(tracks[0], autostart: false));
+      await tester.pump();
+      expect(state.engine.keyShift, -2);
+      expect(backend.audioFilter, audioFilterChain(keyShift: -2));
+      expect(find.byKey(const Key('key-warning')), findsOneWidget);
+      expect(find.text('KEY −2'), findsOneWidget);
+
+      // Remembered after a restart too.
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        final again = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan));
+        await again.init(rescanLibrary: false);
+        expect(again.keyShifts[tracks[0].path], -2);
+      });
+
+      // The 0 in the middle puts it back in its own key, and forgets it.
+      await tester.tap(find.byKey(const Key('key-reset')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump(const Duration(seconds: 1));
+      expect(state.engine.keyShift, 0);
+      expect(state.keyShifts, isEmpty);
+      expect(find.byKey(const Key('key-warning')), findsNothing);
+    });
+
+    testWidgets('Level and Vocal cut switch the filters on and are remembered', (tester) async {
+      await pumpApp(tester);
+      await tester.runAsync(() => state.playNow(state.results.first.primary, autostart: false));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('level-loudness')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+      expect(backend.audioFilter, contains('loudnorm'));
+      await tester.tap(find.byKey(const Key('vocal-cut')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+      expect(backend.audioFilter, audioFilterChain(levelLoudness: true, vocalCut: true));
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        final b = FakeBackend();
+        final again = AppState(db, KaraokeEngine(b, scanEdges: scan));
+        await again.init(rescanLibrary: false);
+        expect(again.engine.levelLoudness, isTrue);
+        expect(again.engine.vocalCut, isTrue);
+      });
+      await tester.tap(find.byKey(const Key('vocal-cut')));
+      await tester.tap(find.byKey(const Key('level-loudness')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+      expect(backend.audioFilter, '');
+    });
+
+    test('the filter graph is wrapped for mpv with its exact length', () {
+      final f = audioFilterChain(keyShift: 2, levelLoudness: true, vocalCut: true);
+      final m = RegExp(r'^lavfi=graph=%(\d+)%(.*)$').firstMatch(f)!;
+      expect(m.group(2)!.length, int.parse(m.group(1)!));
+      expect(audioFilterChain(), '');
+    });
+  });
+
+  test('sync: playlists and keys go from the PC to a tablet with the library somewhere else', () async {
+    await state.init(rescanLibrary: false);
+    await state.addRootFolder(lib.path);
+    final all = {for (final g in state.results) g.primary.fileName: g.primary};
+    final waterloo = all['Abba - Waterloo.mp3']!, prayer = all['Bon Jovi - Livin On A Prayer.mp3']!;
+    await state.createPlaylist('Friday', tracks: [prayer, waterloo]);
+    state.keyShifts[waterloo.path] = -2;
+    final json = await state.exportSync();
+
+    // The tablet: the same songs, in another folder, with "Pop" as its library.
+    final tab = Directory.systemTemp.createTempSync('eztiger_tablet');
+    addTearDown(() => tab.deleteSync(recursive: true));
+    for (final f in ['SD/Pop/Abba - Waterloo.mp3', 'SD/Pop/Abba - Waterloo.cdg', 'SD/Rock/Bon Jovi - Livin On A Prayer.mp3']) {
+      File('${tab.path}/$f')
+        ..parent.createSync(recursive: true)
+        ..writeAsBytesSync(List.filled(f.endsWith('.cdg') ? 24 * 300 : 10, 0));
+    }
+    final tdb = await EztigerDatabase.open(databaseFactoryFfiNoIsolate, inMemoryDatabasePath);
+    addTearDown(tdb.close);
+    final tablet = AppState(tdb, KaraokeEngine(FakeBackend(), scanEdges: scan));
+    await tablet.init(rescanLibrary: false);
+    await tablet.addRootFolder('${tab.path}/SD/Pop');
+    await tablet.addRootFolder('${tab.path}/SD/Rock');
+    final r = await tablet.importSync(json);
+    expect(r.playlists, 1);
+    expect(r.songs, 2);
+    expect(r.keys, 1);
+    expect(r.missing, isEmpty);
+    final pl = tablet.playlists.single;
+    expect(pl.name, 'Friday');
+    final songs = await tdb.playlists.tracks(pl.id);
+    expect(songs.map((t) => t.fileName), ['Bon Jovi - Livin On A Prayer.mp3', 'Abba - Waterloo.mp3']);
+    expect(tablet.keyShifts[songs[1].path], -2);
+    // Saved, so the tablet keeps the key after a restart.
+    expect(await tdb.getMeta('key_shifts'), contains('-2'));
+
+    // Loading it again replaces the playlist instead of doubling it.
+    await tablet.importSync(json);
+    expect(tablet.playlists.length, 1);
+    expect(tablet.playlists.single.trackCount, 2);
+    await expectLater(tablet.importSync('{"x": 1}'), throwsFormatException);
+  });
+
+  testWidgets('EZTiger Basic has no Pro sound controls, skins or second deck', (tester) async {
+    isPro = false;
+    await tester.runAsync(() => db.setMeta('key_shifts', '{"x": 2}'));
+    await pumpApp(tester);
+    expect(find.byType(ProSoundRow), findsNothing);
+    await tester.runAsync(() => state.playNow(state.results.first.primary, autostart: false));
+    await tester.pump();
+    expect(state.engine.keyShift, 0);
+    expect(backend.audioFilter, '');
+    await tester.tap(find.byKey(const Key('main-menu')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.byKey(const Key('menu-skin')), findsNothing);
+    expect(find.byKey(const Key('menu-two-decks')), findsNothing);
+    expect(editionName, 'EZTiger Basic');
+  });
 
   testWidgets('shows the library, searches and queues a song', (tester) async {
     await pumpApp(tester);
@@ -137,6 +302,41 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
     expect(state.dark, isFalse);
+  });
+
+  testWidgets('a skin picked in the menu changes the colours and is remembered', (tester) async {
+    await pumpApp(tester);
+    Color wordmark() => tester.widget<Text>(find.text('EZTIGER').first).style!.color!;
+    expect(wordmark(), EzSkin.classic.brass);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    // The classic skin has a light screen too; the others don't.
+    expect(find.text('Light'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('menu-skin')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    for (final skin in EzSkin.all) {
+      expect(find.byKey(Key('skin-${skin.id}')), findsOneWidget);
+    }
+    await tester.tap(find.byKey(const Key('skin-reactor')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(state.skin, 'reactor');
+    expect(EzSkin.current, EzSkin.reactor);
+    expect(wordmark(), EzSkin.reactor.brass);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('Light'), findsNothing);
+    expect(find.text('Reactor'), findsOneWidget); // the skin's name by "Skin"
+    // Saved with the other settings, for the next start.
+    final saved = await tester.runAsync(() => db.getMeta('settings'));
+    expect(saved, contains('"skin":"reactor"'));
   });
 
   testWidgets('shift-click selects a block, and dragging it queues them all', (tester) async {
@@ -626,9 +826,8 @@ void main() {
     expect(state.engine.playing, isTrue);
 
     // The time and the seek bar follow the song as it plays.
-    Slider stageSeek() => tester.widget<Slider>(
-      find.descendant(of: find.byType(StageView), matching: find.byType(Slider)).first,
-    );
+    Slider stageSeek() =>
+        tester.widget<Slider>(find.descendant(of: find.byType(StageView), matching: find.byType(Slider)).first);
     await tester.runAsync(() async {
       backend.at(const Duration(minutes: 1));
       await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -722,7 +921,7 @@ void main() {
     }
     await tester.tap(find.byKey(const Key('read-me')));
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('EZTiger Basic · Read me'), findsOneWidget);
+    expect(find.text('EZTiger Pro · Read me'), findsOneWidget);
     expect(find.textContaining('Autocue loads the next song'), findsOneWidget);
     expect(find.textContaining('THANKS for using my first ever Claude created App'), findsOneWidget);
     // The last line is reachable by scrolling.
@@ -734,7 +933,7 @@ void main() {
     expect(find.textContaining('remembers your settings'), findsOneWidget);
     await tester.tap(find.text('Close'));
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('EZTiger Basic · Read me'), findsNothing);
+    expect(find.text('EZTiger Pro · Read me'), findsNothing);
   });
 
   testWidgets('tablet: press and hold drags a song to the queue, or opens the menu', (tester) async {
@@ -844,5 +1043,141 @@ void main() {
     await tester.pump();
     expect(find.byType(PlaylistsPanel), findsOneWidget);
     expect(state.libraryCollapsed, isFalse);
+  });
+
+  testWidgets('stage view: move and remove queued songs, and Single/Autoplay', (tester) async {
+    await pumpApp(tester);
+    final tracks = state.results.map((g) => g.primary).toList();
+    await tester.runAsync(() async {
+      for (final t in tracks) {
+        await state.enqueue(t);
+      }
+      state.setStageView(true);
+    });
+    await tester.pump();
+    // The first song is cued, so two wait in Up Next.
+    List<int> waiting() => [
+      for (final q in state.queue)
+        if (!q.played && q.id != state.nowPlayingQueueId) q.track.id,
+    ];
+    expect(waiting(), [tracks[1].id, tracks[2].id]);
+    final second = state.queue[1], third = state.queue[2];
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(ValueKey('stage-down-${second.id}')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(waiting(), [tracks[2].id, tracks[1].id]);
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(ValueKey('stage-up-${second.id}')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(waiting(), [tracks[1].id, tracks[2].id]);
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(ValueKey('stage-remove-${third.id}')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(waiting(), [tracks[1].id]);
+    expect(find.byKey(ValueKey('stage-next-${third.id}')), findsNothing);
+
+    expect(state.mode, PlayMode.single);
+    await tester.tap(find.byKey(const Key('stage-mode-autoplay')));
+    await tester.pump();
+    expect(state.mode, PlayMode.autoplay);
+    await tester.tap(find.byKey(const Key('stage-mode-single')));
+    await tester.pump();
+    expect(state.mode, PlayMode.single);
+  });
+
+  group('2 decks', () {
+    late FakeBackend backendB;
+    late AppState two;
+    setUp(() {
+      backendB = FakeBackend();
+      two = AppState(
+        db,
+        KaraokeEngine(backend, scanEdges: scan),
+        deckB: KaraokeEngine(backendB, scanEdges: scan),
+      );
+    });
+
+    Future<List<Track>> queueAll() async {
+      await two.init();
+      await two.addRootFolder(lib.path);
+      final tracks = two.results.map((g) => g.primary).toList();
+      for (final t in tracks) {
+        await two.enqueue(t);
+      }
+      await two.setTwoDecks(true);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      return tracks;
+    }
+
+    test('the next song waits on the other deck, and the decks take turns', () async {
+      final tracks = await queueAll();
+      expect(two.liveDeck, 0);
+      expect(two.engine.current?.id, tracks[0].id);
+      expect(two.standby!.current?.id, tracks[1].id, reason: 'the next song is cued on deck B');
+      expect(two.standby!.playing, isFalse);
+
+      await two.playPause();
+      await two.next();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(two.liveDeck, 1);
+      expect(two.engine.current?.id, tracks[1].id);
+      expect(two.engine.playing, isTrue);
+      expect(backend.calls.last, isNot('play'));
+      expect(two.standby!.current?.id, tracks[2].id, reason: 'deck A takes the song after');
+
+      // Moving songs in the queue re-cues the waiting deck.
+      await two.clearQueue();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(two.standby!.current, isNull);
+    });
+
+    test('autoplay: the end of a song starts the other deck', () async {
+      final tracks = await queueAll();
+      two.setMode(PlayMode.autoplay);
+      await two.playPause();
+      backend.finish();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(two.liveDeck, 1);
+      expect(two.engine.current?.id, tracks[1].id);
+      expect(two.engine.playing, isTrue);
+      expect(two.queue.first.played, isTrue);
+    });
+
+    test('crossfade overlaps the two decks', () async {
+      final tracks = await queueAll();
+      two.toggleCrossfade();
+      await two.playPause();
+      backend.at(const Duration(minutes: 2, seconds: 58)); // 2 seconds left
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(two.liveDeck, 1, reason: 'the next song has started');
+      expect(two.engine.current?.id, tracks[1].id);
+      expect(two.engine.playing, isTrue);
+      expect(backend.volume, lessThan(100), reason: 'deck A fading out');
+      expect(two.decks[0].current?.id, tracks[0].id, reason: 'still playing out on deck A');
+      await Future<void>.delayed(const Duration(milliseconds: 2200));
+      expect(two.standby!.current?.id, tracks[2].id, reason: 'then deck A takes the song after');
+      expect(two.queue.where((e) => !e.played).length, 2);
+    });
+
+    test('turning 2 decks off stops the waiting deck; it is remembered', () async {
+      await queueAll();
+      expect(two.decks[1].current, isNotNull);
+      await two.setTwoDecks(false);
+      expect(two.decks[1].current, isNull);
+      expect(two.standby, isNull);
+      await two.setTwoDecks(true);
+      final again = AppState(db, KaraokeEngine(FakeBackend()), deckB: KaraokeEngine(FakeBackend()));
+      await again.init(rescanLibrary: false);
+      expect(again.twoDecks, isTrue);
+      final single = AppState(db, KaraokeEngine(FakeBackend()));
+      await single.init(rescanLibrary: false);
+      expect(single.twoDecks, isFalse, reason: 'no second deck on the tablet');
+    });
   });
 }

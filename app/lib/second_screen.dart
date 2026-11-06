@@ -32,8 +32,11 @@ const _channel = WindowMethodChannel('eztiger/output', mode: ChannelMode.unidire
 /// Main-window side: opens the output window on the second screen and keeps
 /// it showing what the player is playing.
 class SecondScreen extends ChangeNotifier {
-  SecondScreen(this.engine);
-  final KaraokeEngine engine;
+  SecondScreen(this._engine);
+
+  /// The player to show: in 2-deck mode, whichever deck is live.
+  final KaraokeEngine Function() _engine;
+  KaraokeEngine get engine => _engine();
 
   bool get isOpen => _window != null;
   WindowController? _window;
@@ -262,7 +265,7 @@ class _OutputView extends StatelessWidget {
                   children: [
                     const EzLogo(size: 160),
                     const SizedBox(height: 12),
-                    const Text(
+                    Text(
                       'EZTIGER',
                       style: TextStyle(
                         fontSize: 64,
@@ -275,10 +278,10 @@ class _OutputView extends StatelessWidget {
                     Text(
                       model.title ?? 'Up next…',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 36, color: EzColors.cyan),
+                      style: TextStyle(fontSize: 36, color: EzColors.cyan),
                     ),
                     if (model.artist != null)
-                      Text(model.artist!, style: const TextStyle(fontSize: 24, color: EzColors.vfdSub)),
+                      Text(model.artist!, style: TextStyle(fontSize: 24, color: EzColors.vfdSub)),
                     if (model.singer != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 12),
