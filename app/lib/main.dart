@@ -37,6 +37,7 @@ Future<void> main(List<String> args) async {
     },
   );
 
+  runApp(const LoadingApp()); // until the song database is open
   sqfliteFfiInit();
   final dir = await getApplicationSupportDirectory();
   await Directory(dir.path).create(recursive: true);
@@ -65,6 +66,7 @@ Future<void> runOnTablet() async {
   await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
   await WakelockPlus.enable();
 
+  runApp(const LoadingApp()); // until the song database is open
   sqfliteFfiInit();
   final dir = await getApplicationSupportDirectory();
   await Directory(dir.path).create(recursive: true);

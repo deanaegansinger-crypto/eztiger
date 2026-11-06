@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../platform.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'output_panel.dart';
 import 'queue_panel.dart';
 import 'rack.dart';
+import 'stage_view.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.setFullScreen});
@@ -19,7 +21,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool fullScreen = false;
-  double queueHeight = 210;
+  // Taller on the tablet, where the rows are taller for a finger.
+  double queueHeight = touchUi ? 330 : 210;
 
   Future<void> _setFull(bool v) async {
     setState(() => fullScreen = v);
@@ -46,6 +49,8 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Scaffold(
             body: fullScreen
                 ? GestureDetector(onDoubleTap: () => _setFull(false), child: const KaraokeScreen())
+                : s.stageView
+                ? SafeArea(child: StageView(onFullScreen: () => _setFull(true)))
                 : SafeArea(
                     child: LayoutBuilder(
                       builder: (context, c) {

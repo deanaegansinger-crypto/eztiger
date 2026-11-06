@@ -4,9 +4,11 @@ import 'package:eztiger/app_state.dart';
 import 'package:eztiger/platform.dart';
 import 'package:eztiger/player.dart';
 import 'package:eztiger/ui/app.dart';
+import 'package:eztiger/ui/output_panel.dart';
 import 'package:eztiger/ui/common.dart';
 import 'package:eztiger/ui/queue_panel.dart';
 import 'package:eztiger/ui/rack.dart';
+import 'package:eztiger/ui/stage_view.dart';
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -126,8 +128,14 @@ void main() {
 
   testWidgets('light mode switches the theme', (tester) async {
     await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     await tester.tap(find.text('Light'));
-    await tester.pump();
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     expect(state.dark, isFalse);
   });
 
@@ -184,6 +192,41 @@ void main() {
     state.selectRow(1, ctrl: true);
     await tester.runAsync(state.removeSelectedFromPlaylist);
     expect(state.results, hasLength(1));
+  });
+
+  testWidgets('the queue is saved as a new playlist, then added to it again', (tester) async {
+    await pumpApp(tester);
+    Future<void> settle() async {
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    final tracks = state.results.map((g) => g.primary).toList();
+    await tester.runAsync(() => state.enqueueAll(tracks.sublist(0, 2)));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('save-queue')));
+    await settle();
+    await tester.tap(find.text('★ New playlist from the queue (2 songs)…'));
+    await settle();
+    await tester.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)), 'Saturday');
+    await tester.tap(find.text('OK'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await settle();
+    final saturday = state.playlists.singleWhere((p) => p.name == 'Saturday');
+    final saved = await tester.runAsync(() => db.playlists.tracks(saturday.id));
+    expect(saved!.map((t) => t.id), tracks.sublist(0, 2).map((t) => t.id));
+
+    // One more song in the queue, then "Add the queue to Saturday".
+    await tester.runAsync(() => state.enqueue(tracks[2]));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('save-queue')));
+    await settle();
+    await tester.tap(find.text('★ Add the queue to Saturday'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await settle();
+    expect(state.playlists.singleWhere((p) => p.name == 'Saturday').trackCount, 5);
   });
 
   testWidgets('the seek bar skips through the song', (tester) async {
@@ -483,8 +526,174 @@ void main() {
     expect(backend.volume, closeTo(80 / 3, 1)); // the next song starts at a third, then fades up
   });
 
+  testWidgets('load playlist puts a saved playlist into the queue', (tester) async {
+    await pumpApp(tester);
+    Future<void> settle() async {
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    final tracks = state.results.map((g) => g.primary).toList();
+    // With no playlists yet, the menu says how to make one.
+    await tester.tap(find.byKey(const Key('load-playlist')));
+    await settle();
+    expect(find.textContaining('No playlists yet'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await settle();
+
+    await tester.runAsync(() => state.createPlaylist('Friday', tracks: tracks.sublist(0, 2)));
+    await tester.pump();
+    expect(state.queue, isEmpty);
+    await tester.tap(find.byKey(const Key('load-playlist')));
+    await settle();
+    await tester.tap(find.text('★ Friday  (2 songs)'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await settle();
+    expect(state.queue.map((e) => e.track.id), tracks.sublist(0, 2).map((t) => t.id));
+  });
+
+  testWidgets('double-clicking the karaoke output opens full screen, and again closes it', (tester) async {
+    await pumpApp(tester);
+    expect(find.byType(OutputPanel), findsOneWidget);
+    await tester.tap(find.byKey(const Key('output-screen')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byKey(const Key('output-screen')));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(OutputPanel), findsNothing); // full screen lyrics only
+    expect(find.byType(KaraokeScreen), findsOneWidget);
+
+    await tester.tap(find.byType(KaraokeScreen));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byType(KaraokeScreen));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(OutputPanel), findsOneWidget);
+  });
+
+  testWidgets('a please-wait message shows while the library loads', (tester) async {
+    await tester.pumpWidget(const LoadingApp());
+    expect(find.text('Loading your song library… please wait'), findsOneWidget);
+
+    await pumpApp(tester);
+    expect(find.byKey(const Key('loading-banner')), findsNothing);
+    final scan = tester.runAsync(state.rescan);
+    await tester.pump();
+    expect(find.byKey(const Key('loading-banner')), findsOneWidget);
+    await scan;
+    await tester.pump();
+    expect(find.byKey(const Key('loading-banner')), findsNothing);
+  });
+
+  testWidgets('stage view: big buttons, what is next, and back to the library', (tester) async {
+    await pumpApp(tester);
+    final tracks = state.results.map((g) => g.primary).toList();
+    await tester.runAsync(() async {
+      await state.enqueue(tracks[0], singer: 'Dean');
+      await state.enqueue(tracks[1], singer: 'Mike');
+    });
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('stage-view')));
+    await tester.pump();
+    expect(find.byType(StageView), findsOneWidget);
+    expect(find.byType(QueuePanel), findsNothing);
+    // The cued song is big at the top, and the next singer is up next.
+    expect(find.text(tracks[0].title), findsWidgets);
+    expect(find.text('UP NEXT · 1'), findsOneWidget);
+    expect(find.text(tracks[1].title), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('stage-play'))).width, greaterThanOrEqualTo(100));
+
+    // Lyrics on the left, buttons on the right; ⇄ swaps them.
+    double lyricsX() => tester.getCenter(find.byKey(const Key('stage-lyrics'))).dx;
+    double playX() => tester.getCenter(find.byKey(const Key('stage-play'))).dx;
+    expect(lyricsX(), lessThan(playX()));
+    await tester.tap(find.byKey(const Key('stage-swap')));
+    await tester.pump();
+    expect(state.stageLyricsRight, isTrue);
+    expect(lyricsX(), greaterThan(playX()));
+
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('stage-play')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(state.engine.playing, isTrue);
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('stage-next')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(state.engine.current?.id, tracks[1].id);
+    expect(find.text('UP NEXT · NOTHING QUEUED'), findsOneWidget);
+
+    // Double-tap the lyrics for full screen, and again to come back.
+    await tester.tap(find.byKey(const Key('stage-lyrics')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byKey(const Key('stage-lyrics')));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(StageView), findsNothing);
+    await tester.tap(find.byType(KaraokeScreen));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byType(KaraokeScreen));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(StageView), findsOneWidget);
+
+    // It's remembered, so the app opens in stage view at the next gig.
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final again = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan));
+      await again.init(rescanLibrary: false);
+      expect(again.stageView, isTrue);
+      expect(again.stageLyricsRight, isTrue);
+    });
+
+    await tester.tap(find.byKey(const Key('stage-exit')));
+    await tester.pump();
+    expect(find.byType(StageView), findsNothing);
+    expect(find.byType(QueuePanel), findsOneWidget);
+  });
+
+  testWidgets('the menu makes the song lists larger, but not the player', (tester) async {
+    await pumpApp(tester);
+    await tester.runAsync(() => state.enqueue(state.results.first.primary));
+    await tester.pump();
+    double sizeOf(Finder f) => tester.getSize(f).height;
+    final song = state.results.first.primary.title;
+    Finder inResults() => find.descendant(of: find.byType(ResultsTable), matching: find.text(song));
+    Finder inQueue() => find.descendant(of: find.byType(QueuePanel), matching: find.text(song));
+    final before = sizeOf(inResults());
+    final queueBefore = sizeOf(inQueue());
+    final logoBefore = sizeOf(find.text('EZTIGER').first);
+
+    await tester.tap(find.byKey(const Key('main-menu')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.tap(find.byKey(const Key('text-size-Extra large')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(state.textScale, 1.5);
+    expect(sizeOf(inResults()), greaterThan(before * 1.3));
+    expect(sizeOf(inQueue()), greaterThan(queueBefore * 1.3));
+    expect(sizeOf(find.text('EZTIGER').first), logoBefore);
+    expect(tester.takeException(), isNull); // nothing overflows
+
+    await tester.runAsync(() async {
+      // Saved for next time.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final again = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan));
+      await again.init(rescanLibrary: false);
+      expect(again.textScale, 1.5);
+    });
+  });
+
   testWidgets('the Read me sheet opens from the top', (tester) async {
     await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     await tester.tap(find.byKey(const Key('read-me')));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('EZTiger Basic · Read me'), findsOneWidget);

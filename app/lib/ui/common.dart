@@ -54,32 +54,35 @@ class EzSwitch extends StatelessWidget {
   Widget build(BuildContext context) => InkWell(
     onTap: onChanged,
     borderRadius: BorderRadius.circular(10),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 11)),
-        const SizedBox(width: 6),
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: 30,
-          height: 16,
-          padding: const EdgeInsets.all(1),
-          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-          decoration: BoxDecoration(
-            color: value ? EzColors.cyan : const Color(0xFF3A3D4D),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: context.ez.border),
-          ),
-          child: Container(
-            width: 12,
-            height: 12,
+    child: Padding(
+      padding: EdgeInsets.symmetric(vertical: touchUi ? 10 : 0, horizontal: touchUi ? 4 : 0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 11)),
+          const SizedBox(width: 6),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 30,
+            height: 16,
+            padding: const EdgeInsets.all(1),
+            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: value ? const Color(0xFF06231F) : const Color(0xFFCFD0D8),
+              color: value ? EzColors.cyan : const Color(0xFF3A3D4D),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: context.ez.border),
+            ),
+            child: Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: value ? const Color(0xFF06231F) : const Color(0xFFCFD0D8),
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }
@@ -113,7 +116,7 @@ class Segmented<T> extends StatelessWidget {
             onTap: () => onChanged(e.key),
             borderRadius: BorderRadius.circular(10),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+              padding: EdgeInsets.symmetric(horizontal: touchUi ? 14 : 9, vertical: touchUi ? 9 : 3),
               decoration: BoxDecoration(
                 color: e.key == value ? accent : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
@@ -318,3 +321,53 @@ class MenuArea extends StatelessWidget {
     child: child,
   );
 }
+
+/// The song lists' text size (see [AppState.textScale]): text inside is
+/// drawn larger, and [listSize] grows the fixed row heights and columns.
+/// Buttons and filters inside keep their size with [ListControls].
+class ListText extends StatelessWidget {
+  const ListText({super.key, required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    final scale = AppScope.of(context).textScale;
+    if (scale == 1) return child;
+    final outer = MediaQuery.textScalerOf(context);
+    return _OuterTextScale(
+      scaler: outer,
+      child: MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(outer.scale(14) / 14 * scale)),
+        child: child,
+      ),
+    );
+  }
+}
+
+/// Buttons and filters inside a [ListText]: they stay their normal size.
+class ListControls extends StatelessWidget {
+  const ListControls({super.key, required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    final outer = context.dependOnInheritedWidgetOfExactType<_OuterTextScale>();
+    if (outer == null) return child;
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaler: outer.scaler),
+      child: child,
+    );
+  }
+}
+
+class _OuterTextScale extends InheritedWidget {
+  const _OuterTextScale({required this.scaler, required super.child});
+  final TextScaler scaler;
+  @override
+  bool updateShouldNotify(_OuterTextScale old) => old.scaler != scaler;
+}
+
+/// A row height or column width in the song lists, grown with the text size,
+/// and taller on the tablet so a finger can hit one row.
+double listSize(BuildContext context, double v) => v * AppScope.of(context).textScale * (touchUi ? 1.4 : 1);
+
+/// Button padding: compact for a mouse, roomier for a finger on the tablet.
+VisualDensity get tapDensity => touchUi ? VisualDensity.standard : VisualDensity.compact;

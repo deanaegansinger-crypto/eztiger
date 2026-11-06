@@ -1,6 +1,8 @@
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/material.dart';
 
+import '../app_state.dart';
+import '../platform.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'dialogs.dart';
@@ -13,6 +15,10 @@ class QueuePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
+    return ListText(child: _build(context, s));
+  }
+
+  Widget _build(BuildContext context, AppState s) {
     return DragTarget<SongDrag>(
       onAcceptWithDetails: (d) => s.dropIntoQueue(d.data, s.queue.length),
       builder: (context, cand, _) => Container(
@@ -28,43 +34,62 @@ class QueuePanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                HeadText(
-                  'Queue · ${s.queue.length - s.playedCount} to sing'
-                  '${s.playedCount > 0 ? ' · ${s.playedCount} played' : ''}',
-                  color: EzColors.brass,
-                ),
-                const Spacer(),
-                if (s.playedCount > 0)
-                  TextButton(
-                    key: const Key('clear-played'),
-                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                    onPressed: s.clearPlayed,
-                    child: const Text('Clear played', style: TextStyle(fontSize: 11)),
+            ListControls(
+              child: Row(
+                children: [
+                  // The title gives way to the buttons on a narrow screen.
+                  Expanded(
+                    flex: 2,
+                    child: HeadText(
+                      'Queue · ${s.queue.length - s.playedCount} to sing'
+                      '${s.playedCount > 0 ? ' · ${s.playedCount} played' : ''}',
+                      color: EzColors.brass,
+                    ),
                   ),
-                if (s.queue.isNotEmpty)
-                  TextButton(
-                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                    onPressed: s.clearQueue,
-                    child: const Text('Clear', style: TextStyle(fontSize: 11)),
+                  // On a narrow screen the buttons scroll sideways rather than spill over.
+                  Flexible(
+                    flex: 3,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      reverse: true,
+                      child: Row(
+                        children: [
+                          const _LoadPlaylistButton(),
+                          if (s.queue.isNotEmpty) const _SaveQueueButton(),
+                          if (s.playedCount > 0)
+                            TextButton(
+                              key: const Key('clear-played'),
+                              style: TextButton.styleFrom(visualDensity: tapDensity),
+                              onPressed: s.clearPlayed,
+                              child: const Text('Clear played', style: TextStyle(fontSize: 11)),
+                            ),
+                          if (s.queue.isNotEmpty)
+                            TextButton(
+                              style: TextButton.styleFrom(visualDensity: tapDensity),
+                              onPressed: s.clearQueue,
+                              child: const Text('Clear', style: TextStyle(fontSize: 11)),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
-              ],
+                ],
+              ),
             ),
             Container(
               padding: const EdgeInsets.symmetric(vertical: 3),
               decoration: BoxDecoration(
                 border: Border(bottom: BorderSide(color: context.ez.border)),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  SizedBox(width: 28, child: HeadText('#')),
-                  Expanded(flex: 5, child: HeadText('Title')),
-                  Expanded(flex: 5, child: HeadText('Artist — Singer')),
-                  SizedBox(width: 44, child: HeadText('Type')),
-                  SizedBox(width: 96, child: HeadText('Played')),
-                  Expanded(flex: 2, child: HeadText('Location')),
-                  SizedBox(width: 24),
+                  SizedBox(width: listSize(context, 28), child: const HeadText('#')),
+                  const Expanded(flex: 5, child: HeadText('Title')),
+                  const Expanded(flex: 5, child: HeadText('Artist — Singer')),
+                  SizedBox(width: listSize(context, 44), child: const HeadText('Type')),
+                  SizedBox(width: listSize(context, 96), child: const HeadText('Played')),
+                  const Expanded(flex: 2, child: HeadText('Location')),
+                  SizedBox(width: listSize(context, 24)),
                 ],
               ),
             ),
@@ -78,13 +103,88 @@ class QueuePanel extends StatelessWidget {
                     )
                   : ListView.builder(
                       itemCount: s.queue.length,
-                      itemExtent: 28,
+                      itemExtent: listSize(context, 28),
                       itemBuilder: (context, i) => _QueueRow(key: ValueKey(s.queue[i].id), entry: s.queue[i], index: i),
                     ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// "📂 Load playlist": puts a saved playlist's songs at the end of the queue.
+class _LoadPlaylistButton extends StatelessWidget {
+  const _LoadPlaylistButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    return PopupMenuButton<int>(
+      key: const Key('load-playlist'),
+      tooltip: 'Add a saved playlist to the queue',
+      itemBuilder: (_) => [
+        if (s.playlists.isEmpty)
+          const PopupMenuItem(enabled: false, child: Text('No playlists yet: use "★ Save as playlist" first'))
+        else
+          for (final p in s.playlists)
+            PopupMenuItem(
+              value: p.id,
+              child: Text('★ ${p.name}  (${p.trackCount == 1 ? '1 song' : '${p.trackCount} songs'})'),
+            ),
+      ],
+      onSelected: (id) async {
+        final p = s.playlists.firstWhere((p) => p.id == id);
+        s.status = 'Added "${p.name}" to the queue';
+        await s.enqueueAll(await s.db.playlists.tracks(id));
+      },
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: touchUi ? 12 : 8, vertical: touchUi ? 12 : 4),
+        child: Text('📂 Load playlist', style: TextStyle(fontSize: 11, color: EzColors.brass)),
+      ),
+    );
+  }
+}
+
+/// "★ Save as playlist": the songs in the queue become a new playlist, or are
+/// added to one already made. It can also be dragged onto a playlist.
+class _SaveQueueButton extends StatelessWidget {
+  const _SaveQueueButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final tracks = [for (final e in s.queue) e.track];
+    final n = tracks.length == 1 ? '1 song' : '${tracks.length} songs';
+    final button = PopupMenuButton<String>(
+      key: const Key('save-queue'),
+      tooltip: 'Save the queue as a playlist',
+      itemBuilder: (_) => [
+        PopupMenuItem(value: 'new', child: Text('★ New playlist from the queue ($n)…')),
+        for (final p in s.playlists) PopupMenuItem(value: 'pl:${p.id}', child: Text('★ Add the queue to ${p.name}')),
+      ],
+      onSelected: (c) async {
+        if (c == 'new') {
+          final name = await askText(context, title: 'New playlist from the queue ($n)', label: 'Name');
+          if (name != null) await s.createPlaylist(name, tracks: tracks);
+        } else if (c.startsWith('pl:')) {
+          await s.addToPlaylist(int.parse(c.substring(3)), tracks);
+        }
+      },
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: touchUi ? 12 : 8, vertical: touchUi ? 12 : 4),
+        child: Text('★ Save as playlist', style: TextStyle(fontSize: 11, color: EzColors.brass)),
+      ),
+    );
+    // Dragging the button carries the whole queue, to drop on a playlist.
+    // (Marked as queue songs, so letting go over the queue changes nothing.)
+    final drag = SongDrag(tracks, queueIds: [for (final e in s.queue) e.id]);
+    return Draggable<SongDrag>(
+      data: drag,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: dragChip(drag),
+      child: button,
     );
   }
 }
@@ -108,11 +208,15 @@ class _QueueRow extends StatelessWidget {
       child: SongDraggable(
         data: drag,
         onMenu: (at) async {
-          final c = await showMenuAt<String>(context, at, const [
-            PopupMenuItem(value: 'play', child: Text('▶ Play now')),
-            PopupMenuItem(value: 'singer', child: Text('🎤 Set singer…')),
-            PopupMenuItem(value: 'edit', child: Text('✏️ Edit tags…')),
-            PopupMenuItem(value: 'remove', child: Text('✕ Remove')),
+          final c = await showMenuAt<String>(context, at, [
+            const PopupMenuItem(value: 'play', child: Text('▶ Play now')),
+            const PopupMenuItem(value: 'singer', child: Text('🎤 Set singer…')),
+            const PopupMenuItem(value: 'edit', child: Text('✏️ Edit tags…')),
+            const PopupMenuDivider(),
+            const PopupMenuItem(value: 'new', child: Text('★ New playlist with this song…')),
+            for (final p in s.playlists) PopupMenuItem(value: 'pl:${p.id}', child: Text('★ Add to ${p.name}')),
+            const PopupMenuDivider(),
+            const PopupMenuItem(value: 'remove', child: Text('✕ Remove')),
           ]);
           if (!context.mounted) return;
           switch (c) {
@@ -128,21 +232,26 @@ class _QueueRow extends StatelessWidget {
               if (name != null) await s.setSinger(entry, name);
             case 'edit':
               await showEditTags(context, t);
+            case 'new':
+              final name = await askText(context, title: 'New playlist', label: 'Name');
+              if (name != null) await s.createPlaylist(name, tracks: [t]);
             case 'remove':
               await s.removeFromQueue(entry);
+            default:
+              if (c != null && c.startsWith('pl:')) await s.addToPlaylist(int.parse(c.substring(3)), [t]);
           }
         },
         child: InkWell(
           onDoubleTap: () => s.playEntry(entry),
           child: Container(
-            height: 24,
+            height: listSize(context, 24),
             color: playing ? EzColors.brass.withValues(alpha: 0.2) : null,
             child: Opacity(
               opacity: played ? 0.55 : 1,
               child: Row(
                 children: [
                   SizedBox(
-                    width: 28,
+                    width: listSize(context, 28),
                     child: playing
                         ? const Icon(Icons.play_arrow, size: 14, color: EzColors.brass)
                         : played
@@ -181,11 +290,11 @@ class _QueueRow extends StatelessWidget {
                     ),
                   ),
                   SizedBox(
-                    width: 44,
+                    width: listSize(context, 44),
                     child: Align(alignment: Alignment.centerLeft, child: TypeChip(t.type)),
                   ),
                   SizedBox(
-                    width: 96,
+                    width: listSize(context, 96),
                     child: Text(
                       entry.playedAt != null
                           ? whenText(entry.playedAt!)
@@ -207,7 +316,7 @@ class _QueueRow extends StatelessWidget {
                     ),
                   ),
                   SizedBox(
-                    width: 24,
+                    width: listSize(context, 24),
                     child: InkWell(
                       onTap: () => s.removeFromQueue(entry),
                       child: const Icon(Icons.close, size: 14, color: EzColors.red),

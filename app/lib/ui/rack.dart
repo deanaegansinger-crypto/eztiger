@@ -35,11 +35,11 @@ class Rack extends StatelessWidget {
           SizedBox(height: 6),
           _TogglesRow(),
           SizedBox(height: 8),
-          LibraryTabs(),
+          ListText(child: LibraryTabs()),
           SizedBox(height: 8),
-          SearchBox(),
+          ListText(child: SearchBox()),
           SizedBox(height: 6),
-          Expanded(child: ResultsTable()),
+          Expanded(child: ListText(child: ResultsTable())),
           _StatusLine(),
         ],
       ),
@@ -86,20 +86,95 @@ class _BrandRow extends StatelessWidget {
         ),
         const Spacer(),
         TextButton.icon(
-          key: const Key('read-me'),
-          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-          onPressed: () => showReadMe(context),
-          icon: const Icon(Icons.help_outline, size: 16, color: EzColors.cyan),
-          label: const Text('Read me', style: TextStyle(fontSize: 11, color: EzColors.cyan)),
+          key: const Key('stage-view'),
+          style: TextButton.styleFrom(visualDensity: tapDensity, foregroundColor: EzColors.brass),
+          onPressed: () => s.setStageView(true),
+          icon: const Icon(Icons.mic_external_on, size: 18),
+          label: const Text('Stage', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
         ),
-        const SizedBox(width: 6),
-        Segmented<bool>(
-          options: const {true: 'Dark', false: 'Light'},
-          value: s.dark,
-          onChanged: (v) => v != s.dark ? s.toggleDark() : null,
-          accent: EzColors.brass,
-        ),
+        const _MainMenu(),
       ],
+    );
+  }
+}
+
+/// "☰ Menu" in the top bar: the Read me, and settings such as text size.
+class _MainMenu extends StatelessWidget {
+  const _MainMenu();
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    return PopupMenuButton<String>(
+      key: const Key('main-menu'),
+      tooltip: 'Menu',
+      itemBuilder: (_) => [
+        const PopupMenuItem(
+          key: Key('read-me'),
+          value: 'readme',
+          child: Row(children: [Icon(Icons.help_outline, size: 18), SizedBox(width: 10), Text('Read me')]),
+        ),
+        const PopupMenuItem(
+          value: 'stage',
+          child: Row(children: [Icon(Icons.mic_external_on, size: 18), SizedBox(width: 10), Text('Stage view')]),
+        ),
+        CheckedPopupMenuItem(
+          key: const Key('stage-lyrics-left'),
+          value: 'lyricsLeft',
+          checked: !s.stageLyricsRight,
+          child: const Text('Stage: lyrics on the left'),
+        ),
+        CheckedPopupMenuItem(
+          key: const Key('stage-lyrics-right'),
+          value: 'lyricsRight',
+          checked: s.stageLyricsRight,
+          child: const Text('Stage: lyrics on the right'),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          enabled: false,
+          height: 28,
+          child: Text('SCREEN', style: TextStyle(fontSize: 11, letterSpacing: 1)),
+        ),
+        CheckedPopupMenuItem(value: 'dark', checked: s.dark, child: const Text('Dark')),
+        CheckedPopupMenuItem(value: 'light', checked: !s.dark, child: const Text('Light')),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          enabled: false,
+          height: 28,
+          child: Text('TEXT SIZE · SONG LISTS', style: TextStyle(fontSize: 11, letterSpacing: 1)),
+        ),
+        for (final MapEntry(key: scale, value: label) in AppState.textScaleChoices.entries)
+          CheckedPopupMenuItem(
+            key: Key('text-size-$label'),
+            value: 'scale:$scale',
+            checked: s.textScale == scale,
+            child: Text(label, style: TextStyle(fontSize: 14 * scale)),
+          ),
+      ],
+      onSelected: (c) {
+        if (c == 'readme') {
+          showReadMe(context);
+        } else if (c == 'dark' || c == 'light') {
+          if ((c == 'dark') != s.dark) s.toggleDark();
+        } else if (c == 'lyricsLeft' || c == 'lyricsRight') {
+          s.setStageLyricsRight(c == 'lyricsRight');
+        } else if (c == 'stage') {
+          s.setStageView(true);
+        } else if (c.startsWith('scale:')) {
+          s.setTextScale(double.parse(c.substring(6)));
+        }
+      },
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: touchUi ? 12 : 8, vertical: touchUi ? 12 : 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.menu, size: 16, color: EzColors.cyan),
+            SizedBox(width: 4),
+            Text('Menu', style: TextStyle(fontSize: 11, color: EzColors.cyan)),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -213,9 +288,13 @@ class _Transport extends StatelessWidget {
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(
-            width: big ? 44 : 34,
-            height: big ? 44 : 34,
-            child: Icon(icon, size: big ? 26 : 18, color: big ? EzColors.onBrass : context.ez.text),
+            width: (big ? 44 : 34) * (touchUi ? 1.4 : 1),
+            height: (big ? 44 : 34) * (touchUi ? 1.4 : 1),
+            child: Icon(
+              icon,
+              size: (big ? 26 : 18) * (touchUi ? 1.4 : 1),
+              color: big ? EzColors.onBrass : context.ez.text,
+            ),
           ),
         ),
       ),
@@ -254,8 +333,8 @@ class _SeekBarState extends State<SeekBar> {
           child: SliderTheme(
             data: SliderTheme.of(context).copyWith(
               trackHeight: 4,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+              thumbShape: RoundSliderThumbShape(enabledThumbRadius: touchUi ? 10 : 6),
+              overlayShape: RoundSliderOverlayShape(overlayRadius: touchUi ? 22 : 12),
               activeTrackColor: EzColors.cyan,
               thumbColor: EzColors.cyan,
               inactiveTrackColor: context.ez.border,
@@ -300,12 +379,15 @@ class _VolumeRow extends StatelessWidget {
       children: [
         InkWell(
           onTap: e.toggleMute,
-          child: Icon(e.muted ? Icons.volume_off : Icons.volume_up, size: 18, color: context.ez.textDim),
+          child: Padding(
+            padding: EdgeInsets.all(touchUi ? 8 : 0),
+            child: Icon(e.muted ? Icons.volume_off : Icons.volume_up, size: 18, color: context.ez.textDim),
+          ),
         ),
         Expanded(
           child: SliderTheme(
             data: SliderTheme.of(context)
-                .copyWith(trackHeight: 3, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6)),
+                .copyWith(trackHeight: 3, thumbShape: RoundSliderThumbShape(enabledThumbRadius: touchUi ? 10 : 6)),
             child: Slider(value: e.muted ? 0 : e.volume, max: 100, activeColor: EzColors.brass, onChanged: e.setVolume),
           ),
         ),
@@ -381,25 +463,27 @@ class _LibraryTabsState extends State<LibraryTabs> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            _TabButton(label: '📁 Library', selected: tab == 0, onTap: () => setState(() => tab = 0)),
-            const SizedBox(width: 6),
-            DragTarget<SongDrag>(
-              onWillAcceptWithDetails: (_) {
-                if (tab != 1) setState(() => tab = 1);
-                return false;
-              },
-              builder: (context, _, _) =>
-                  _TabButton(label: '★ Playlists', selected: tab == 1, onTap: () => setState(() => tab = 1)),
-            ),
-            const Spacer(),
-            if (tab == 0) const _AddFolderButton(),
-          ],
+        ListControls(
+          child: Row(
+            children: [
+              _TabButton(label: '📁 Library', selected: tab == 0, onTap: () => setState(() => tab = 0)),
+              const SizedBox(width: 6),
+              DragTarget<SongDrag>(
+                onWillAcceptWithDetails: (_) {
+                  if (tab != 1) setState(() => tab = 1);
+                  return false;
+                },
+                builder: (context, _, _) =>
+                    _TabButton(label: '★ Playlists', selected: tab == 1, onTap: () => setState(() => tab = 1)),
+              ),
+              const Spacer(),
+              if (tab == 0) const _AddFolderButton(),
+            ],
+          ),
         ),
         const SizedBox(height: 4),
         ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 150, minHeight: 60),
+          constraints: BoxConstraints(maxHeight: listSize(context, 150), minHeight: 60),
           child: RaisedBox(
             padding: const EdgeInsets.all(4),
             child: tab == 0 ? const FolderTree() : const PlaylistsPanel(),
@@ -420,7 +504,7 @@ class _TabButton extends StatelessWidget {
     onTap: onTap,
     borderRadius: BorderRadius.circular(6),
     child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: EdgeInsets.symmetric(horizontal: touchUi ? 14 : 10, vertical: touchUi ? 10 : 4),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: selected ? EzColors.brass : Colors.transparent, width: 2)),
       ),
@@ -442,7 +526,7 @@ class _AddFolderButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     return TextButton.icon(
-      style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: EzColors.brass),
+      style: TextButton.styleFrom(visualDensity: tapDensity, foregroundColor: EzColors.brass),
       icon: const Icon(Icons.create_new_folder_outlined, size: 16),
       label: const Text('Add folder', style: TextStyle(fontSize: 11)),
       onPressed: s.scanning
@@ -629,7 +713,7 @@ class PlaylistsPanel extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: TextButton(
-                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: EzColors.brass),
+                  style: TextButton.styleFrom(visualDensity: tapDensity, foregroundColor: EzColors.brass),
                   onPressed: () async {
                     final name = await askText(context, title: 'New playlist', label: 'Name');
                     if (name != null) await s.createPlaylist(name);
@@ -643,7 +727,7 @@ class PlaylistsPanel extends StatelessWidget {
             ),
             const Spacer(),
             TextButton(
-              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+              style: TextButton.styleFrom(visualDensity: tapDensity),
               onPressed: s.openHistory,
               child: const Text('🕘 History', style: TextStyle(fontSize: 11)),
             ),
@@ -653,7 +737,8 @@ class PlaylistsPanel extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(6),
             child: Text(
-              'Drag songs onto "+ Create" to make a playlist.',
+              'Drag songs from the list or the queue onto "+ Create" to make a playlist, '
+              'or press "★ Save as playlist" on the queue.',
               style: TextStyle(fontSize: 11, color: context.ez.textDim),
             ),
           ),
@@ -861,6 +946,7 @@ class _ResultsTableState extends State<ResultsTable> {
             style: TextStyle(fontSize: 11, color: context.ez.textDim),
           ),
           const SizedBox(height: 4),
+          if (s.scanning) const LoadingBanner(),
           const _FilterBar(),
           const _ResultsHeader(),
           Expanded(
@@ -874,7 +960,7 @@ class _ResultsTableState extends State<ResultsTable> {
                             ? 'Empty playlist. Drag songs here, or right-click it and paste.'
                             : s.roots.isEmpty
                             ? 'Add a folder to start.'
-                            : (s.scanning ? 'Scanning…' : 'Nothing found.'),
+                            : (s.scanning ? 'Loading your songs… please wait.' : 'Nothing found.'),
                         textAlign: TextAlign.center,
                         style: TextStyle(color: context.ez.textDim),
                       ),
@@ -885,7 +971,7 @@ class _ResultsTableState extends State<ResultsTable> {
                     onAcceptWithDetails: (d) => s.dropIntoPlaylist(s.selectedPlaylistId!, d.data, groups.length),
                     builder: (context, _, _) => ListView.builder(
                       itemCount: groups.length,
-                      itemExtent: 28,
+                      itemExtent: listSize(context, 28),
                       itemBuilder: (context, i) => ResultRow(group: groups[i], index: i, focus: focus),
                     ),
                   ),
@@ -903,43 +989,45 @@ class _FilterBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     final label = TextStyle(fontSize: 11, color: context.ez.textDim);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 4,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Type ', style: label),
-              Segmented<TrackType?>(
-                key: const Key('type-filter'),
-                options: {null: 'All', for (final t in TrackType.values) t: t.label},
-                value: s.typeFilter,
-                onChanged: s.setTypeFilter,
-              ),
-            ],
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Sort ', style: label),
-              Segmented<SearchSort>(
-                key: const Key('sort'),
-                options: const {
-                  SearchSort.relevance: 'Best match',
-                  SearchSort.title: 'Title A–Z',
-                  SearchSort.artist: 'Artist A–Z',
-                },
-                value: s.sort,
-                onChanged: s.setSort,
-                accent: EzColors.brass,
-              ),
-            ],
-          ),
-        ],
+    return ListControls(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Type ', style: label),
+                Segmented<TrackType?>(
+                  key: const Key('type-filter'),
+                  options: {null: 'All', for (final t in TrackType.values) t: t.label},
+                  value: s.typeFilter,
+                  onChanged: s.setTypeFilter,
+                ),
+              ],
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Sort ', style: label),
+                Segmented<SearchSort>(
+                  key: const Key('sort'),
+                  options: const {
+                    SearchSort.relevance: 'Best match',
+                    SearchSort.title: 'Title A–Z',
+                    SearchSort.artist: 'Artist A–Z',
+                  },
+                  value: s.sort,
+                  onChanged: s.setSort,
+                  accent: EzColors.brass,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -968,7 +1056,7 @@ class _ResultsHeader extends StatelessWidget {
         children: [
           Expanded(flex: 5, child: sortable('Title', SearchSort.title)),
           Expanded(flex: 4, child: sortable('Artist', SearchSort.artist)),
-          const SizedBox(width: 44, child: HeadText('Type')),
+          SizedBox(width: listSize(context, 44), child: const HeadText('Type')),
           const Expanded(flex: 3, child: HeadText('Location')),
         ],
       ),
@@ -1036,7 +1124,7 @@ class _ResultRowState extends State<ResultRow> {
               ),
             ),
             SizedBox(
-              width: 44,
+              width: listSize(context, 44),
               child: Align(alignment: Alignment.centerLeft, child: TypeChip(t.type)),
             ),
             Expanded(
@@ -1141,6 +1229,56 @@ Future<void> trackMenu(BuildContext context, Offset at, SearchGroup group, {requ
       await showEditTags(context, t);
     default:
       if (choice.startsWith('pl:')) await s.addToPlaylist(int.parse(choice.substring(3)), tracks);
+  }
+}
+
+/// Shown over the song list while the library is being read, so nobody
+/// thinks the app has stopped working.
+class LoadingBanner extends StatelessWidget {
+  const LoadingBanner({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    return ListControls(
+      child: Container(
+        key: const Key('loading-banner'),
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: EzColors.cyan.withValues(alpha: 0.15),
+          border: Border.all(color: EzColors.cyan),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: EzColors.cyan),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Loading your song library… please wait',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: EzColors.cyan),
+                  ),
+                  Text(
+                    'It\'s working: a big collection can take a minute. ${s.status}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: context.ez.textDim),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

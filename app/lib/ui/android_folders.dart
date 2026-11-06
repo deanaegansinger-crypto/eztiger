@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
 
@@ -21,19 +22,42 @@ Future<bool> ensureStorageAccess() async {
 Future<bool> hasStorageAccess() async =>
     await Permission.manageExternalStorage.isGranted || await Permission.storage.isGranted;
 
-/// The tablet's storage: internal storage and any SD card or USB stick.
-List<(String, String)> storageRoots() {
-  final roots = <(String, String)>[];
-  const internal = '/storage/emulated/0';
-  if (Directory(internal).existsSync()) roots.add(('Tablet storage', internal));
+const _storageChannel = MethodChannel('eztiger/storage');
+
+/// A place to look for songs: internal storage, an SD card or a USB stick.
+typedef StorageRoot = ({String label, String path, bool removable});
+
+/// The device's storage: internal storage and any SD card or USB stick.
+/// Android 11 and later won't let apps list /storage, so the volumes come
+/// from Android itself (MainActivity.kt); listing /storage is only a fallback.
+Future<List<StorageRoot>> storageRoots() async {
+  final roots = <StorageRoot>[];
+  void add(String label, String path, bool removable) {
+    if (roots.any((r) => r.path == path) || !Directory(path).existsSync()) return;
+    roots.add((label: label, path: path, removable: removable));
+  }
+
+  try {
+    final volumes = await _storageChannel.invokeListMethod<Map<Object?, Object?>>('volumes') ?? const [];
+    for (final v in volumes) {
+      final path = v['path'];
+      if (path is! String) continue;
+      final removable = v['removable'] == true;
+      final label = v['label'];
+      add(label is String && label.isNotEmpty ? label : (removable ? 'SD card' : 'Internal storage'), path, removable);
+    }
+  } catch (_) {
+    // Fall back to the guesses below.
+  }
+  add('Internal storage', '/storage/emulated/0', false);
   try {
     for (final d in Directory('/storage').listSync().whereType<Directory>()) {
       final name = p.basename(d.path);
       if (name == 'emulated' || name == 'self') continue;
-      roots.add(('SD card ($name)', d.path));
+      add('SD card ($name)', d.path, true);
     }
   } catch (_) {
-    // /storage can't be listed on some tablets; internal storage still works.
+    // Android 11 and later refuse this; the list from Android covers it.
   }
   return roots;
 }
@@ -71,9 +95,17 @@ class _FolderBrowser extends StatefulWidget {
 }
 
 class _FolderBrowserState extends State<_FolderBrowser> {
-  final roots = storageRoots();
+  List<StorageRoot>? roots; // null while loading
   String? dir; // null: the list of storage places
   List<Directory> subfolders = [];
+
+  @override
+  void initState() {
+    super.initState();
+    storageRoots().then((r) {
+      if (mounted) setState(() => roots = r);
+    });
+  }
 
   void _open(String? path) {
     var subs = <Directory>[];
@@ -94,7 +126,7 @@ class _FolderBrowserState extends State<_FolderBrowser> {
 
   String? get _parent {
     final d = dir;
-    if (d == null || roots.any((r) => r.$2 == d)) return null;
+    if (d == null || (roots ?? const []).any((r) => r.path == d)) return null;
     return p.dirname(d);
   }
 
@@ -110,12 +142,15 @@ class _FolderBrowserState extends State<_FolderBrowser> {
           children: [
             if (d != null)
               ListTile(leading: const Icon(Icons.arrow_upward), title: const Text('Back'), onTap: () => _open(_parent)),
-            if (d == null)
-              for (final (label, path) in roots)
+            if (d == null && roots == null)
+              const ListTile(title: Text('Looking for storage…'))
+            else if (d == null)
+              for (final r in roots!)
                 ListTile(
-                  leading: Icon(label.startsWith('SD') ? Icons.sd_card : Icons.tablet_android, color: EzColors.brass),
-                  title: Text(label),
-                  onTap: () => _open(path),
+                  leading: Icon(r.removable ? Icons.sd_card : Icons.smartphone, color: EzColors.brass),
+                  title: Text(r.label),
+                  subtitle: Text(r.path),
+                  onTap: () => _open(r.path),
                 )
             else if (subfolders.isEmpty)
               const ListTile(title: Text('No folders in here.'))
