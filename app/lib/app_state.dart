@@ -39,6 +39,9 @@ class AppState extends ChangeNotifier {
   /// In the stage view: the lyrics on the right and the buttons on the
   /// left, instead of the other way round.
   bool stageLyricsRight = false;
+
+  /// The Library / Playlists box is folded away, for more room for the songs.
+  bool libraryCollapsed = false;
   static final textScaleChoices = {1.0: 'Normal', 1.25: 'Large', 1.5: 'Extra large'};
   bool autocue = true;
 
@@ -112,6 +115,7 @@ class AppState extends ChangeNotifier {
       crossfade = m['crossfade'] as bool? ?? crossfade;
       stageView = m['stage'] as bool? ?? stageView;
       stageLyricsRight = m['stageLyricsRight'] as bool? ?? stageLyricsRight;
+      libraryCollapsed = m['libraryCollapsed'] as bool? ?? libraryCollapsed;
       final scale = (m['textScale'] as num?)?.toDouble();
       if (textScaleChoices.containsKey(scale)) textScale = scale!;
       autocue = m['autocue'] as bool? ?? autocue;
@@ -139,6 +143,7 @@ class AppState extends ChangeNotifier {
       'textScale': textScale,
       'stage': stageView,
       'stageLyricsRight': stageLyricsRight,
+      'libraryCollapsed': libraryCollapsed,
       'autocue': autocue,
       'fadeMs': fadeOutTime.inMilliseconds,
       'type': typeFilter?.name,
@@ -188,6 +193,11 @@ class AppState extends ChangeNotifier {
 
   void setStageLyricsRight(bool v) {
     stageLyricsRight = v;
+    notifyListeners();
+  }
+
+  void setLibraryCollapsed(bool v) {
+    libraryCollapsed = v;
     notifyListeners();
   }
 
