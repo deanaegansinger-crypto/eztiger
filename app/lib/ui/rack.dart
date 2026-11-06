@@ -16,6 +16,7 @@ import 'common.dart';
 import 'dialogs.dart';
 import 'logo.dart';
 import 'pro_sound.dart';
+import 'twin_decks.dart';
 import 'read_me.dart';
 
 /// The left column of the mockup: player, settings, library, search and
@@ -25,6 +26,8 @@ class Rack extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Pro with 2 decks: deck A and deck B side by side, slimmer.
+    final twin = isPro && AppScope.of(context).twoDecks;
     return Container(
       color: context.ez.panel,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
@@ -33,12 +36,11 @@ class Rack extends StatelessWidget {
         children: [
           const _BrandRow(),
           const SizedBox(height: 8),
-          const PlayerStrip(),
-          const SizedBox(height: 6),
-          const SeekBar(),
+          if (twin) const TwinDecks() else ...[const PlayerStrip(), const SizedBox(height: 6), const SeekBar()],
+          if (isPro) const CrossfadeRow(),
           const _VolumeRow(),
           if (isPro) const ProSoundRow(),
-          const _DeckLine(),
+          if (!twin) const _DeckLine(),
           const SizedBox(height: 8),
           const ListText(child: LibraryTabs()),
           const SizedBox(height: 8),
@@ -187,19 +189,21 @@ class _MainMenu extends StatelessWidget {
             checked: s.twoDecks,
             child: const Text('2 decks (trial)'),
           ),
-        _menuRow(
-          menu,
-          'Fade over',
-          Segmented<Duration>(
-            key: const Key('fade-length'),
-            options: {
-              for (final d in AppState.fadeOutChoices)
-                d: d.inMilliseconds % 1000 == 0 ? '${d.inSeconds}s' : '${d.inMilliseconds / 1000}s',
-            },
-            value: s.fadeOutTime,
-            onChanged: s.setFadeOut,
+        // Pro sets the time with the crossfade slider under the player.
+        if (!isPro)
+          _menuRow(
+            menu,
+            'Fade over',
+            Segmented<Duration>(
+              key: const Key('fade-length'),
+              options: {
+                for (final d in AppState.fadeOutChoices)
+                  d: d.inMilliseconds % 1000 == 0 ? '${d.inSeconds}s' : '${d.inMilliseconds / 1000}s',
+              },
+              value: s.fadeOutTime,
+              onChanged: s.setFadeOut,
+            ),
           ),
-        ),
         if (s.canSync) ...[
           const PopupMenuDivider(),
           const PopupMenuItem(
@@ -1295,7 +1299,9 @@ class _ResultRowState extends State<ResultRow> {
     final t = group.primary;
     final selected = s.selection.contains(index);
     final row = InkWell(
-      onDoubleTap: () => s.playNow(t, autostart: false), // loads it, paused, like dropping it on the player
+      // Loads it, paused, like dropping it on the player. With 2 decks and a
+      // song playing, it goes on the other deck as the next song.
+      onDoubleTap: () => isPro && s.twoDecks ? s.loadNext([t]) : s.playNow(t, autostart: false),
       child: Container(
         color: selected
             ? EzColors.brass.withValues(alpha: 0.28)

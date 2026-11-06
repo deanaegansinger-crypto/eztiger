@@ -48,6 +48,9 @@ class FakeBackend implements MediaBackend {
   @override
   Future<void> setVolume(double v) async => volume = v;
   String audioFilter = '';
+  double pitch = 1;
+  @override
+  Future<void> setPitch(double ratio) async => pitch = ratio;
   @override
   Future<void> setAudioFilter(String filter) async => audioFilter = filter;
   void finish() => _done.add(true);

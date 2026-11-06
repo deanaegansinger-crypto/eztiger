@@ -137,11 +137,31 @@ class AppState extends ChangeNotifier {
   static const fadeLevel = 1 / 3;
   static const fadeInTime = Duration(seconds: 2);
 
+  /// Pro: the crossfade slider goes from 0 (a cut) to 6 seconds.
+  static const maxFade = Duration(seconds: 6);
+
+  /// Pro, 2 decks: the next song comes in while this one fades (overlap),
+  /// or after it has faded out (back to back).
+  bool fadeOverlap = true;
+
+  /// Pro: equal-power fades (smooth) or straight-line ones.
+  bool smoothFades = true;
+
+  /// How long the next song takes to come in. Pro mixes over the slider's
+  /// time (overlapping), or up to 2 s after a fade out; Basic always 2 s.
+  Duration? get fadeInLength {
+    if (!isPro) return fadeInTime;
+    if (fadeOutTime < const Duration(milliseconds: 300)) return null;
+    if (standby != null && fadeOverlap) return fadeOutTime;
+    return fadeOutTime < fadeInTime ? fadeOutTime : fadeInTime;
+  }
+
   /// Loads everything saved. [rescanLibrary] is false on Android until the
   /// app is allowed to read the SD card (it rescans once it is).
   Future<void> init({bool rescanLibrary = true}) async {
     await _loadSettings();
     await _loadKeys();
+    _applyFadeShape();
     await _reloadFolders();
     await _reloadQueue();
     await _reloadPlaylists();
@@ -168,6 +188,13 @@ class AppState extends ChangeNotifier {
       autocue = m['autocue'] as bool? ?? autocue;
       final fadeMs = m['fadeMs'] as int?;
       fadeOutTime = fadeOutChoices.where((d) => d.inMilliseconds == fadeMs).firstOrNull ?? fadeOutTime;
+      if (isPro && fadeMs != null && fadeMs >= 0 && fadeMs <= maxFade.inMilliseconds) {
+        fadeOutTime = Duration(milliseconds: fadeMs);
+      }
+      if (isPro) {
+        fadeOverlap = m['fadeOverlap'] as bool? ?? fadeOverlap;
+        smoothFades = m['smoothFades'] as bool? ?? smoothFades;
+      }
       typeFilter = TrackType.values.asNameMap()[m['type']];
       sort = SearchSort.values.asNameMap()[m['sort']] ?? sort;
       engine.volume = (m['volume'] as num?)?.toDouble() ?? engine.volume;
@@ -202,6 +229,8 @@ class AppState extends ChangeNotifier {
       'twoDecks': twoDecks,
       'autocue': autocue,
       'fadeMs': fadeOutTime.inMilliseconds,
+      'fadeOverlap': fadeOverlap,
+      'smoothFades': smoothFades,
       'type': typeFilter?.name,
       'sort': sort.name,
       'volume': engine.volume,
@@ -318,6 +347,7 @@ class AppState extends ChangeNotifier {
     if (!canTwoDecks || v == twoDecks) return;
     final other = decks[1 - _live];
     twoDecks = v;
+    _applyFadeShape();
     notifyListeners();
     if (v) {
       await _cueStandby();
@@ -370,6 +400,53 @@ class AppState extends ChangeNotifier {
   void setFadeOut(Duration d) {
     fadeOutTime = d;
     notifyListeners();
+  }
+
+  void setFadeOverlap(bool v) {
+    fadeOverlap = v;
+    _applyFadeShape();
+    notifyListeners();
+  }
+
+  void setSmoothFades(bool v) {
+    smoothFades = v;
+    _applyFadeShape();
+    notifyListeners();
+  }
+
+  /// Pro: an overlapping mix brings the next song up from silence; a fade
+  /// that leaves a gap brings it up from a third, as Basic does.
+  void _applyFadeShape() {
+    for (final d in decks) {
+      d.smoothFades = isPro && smoothFades;
+      d.fadeInFrom = isPro && twoDecks && fadeOverlap ? 0 : 1 / 3;
+    }
+  }
+
+  /// Pro: mixes into the next song now, over the crossfade time.
+  Future<void> mixNow() async {
+    if (_fading || engine.current == null || upNext == null) return;
+    if (!engine.playing) return next(fadeIn: null);
+    _startCrossfade(fadeOutTime < const Duration(milliseconds: 200) ? const Duration(milliseconds: 200) : fadeOutTime);
+  }
+
+  /// Pro, 2 decks: double-click a song (or drop it on the deck that isn't
+  /// playing) to put it on that deck. It goes into the queue as the next
+  /// song, so whatever was waiting there moves back to second, where it can
+  /// stay or be taken off. With no song playing it loads on the live deck.
+  Future<void> loadNext(List<Track> tracks, {List<int> queueIds = const []}) async {
+    if (standby == null || !engine.playing) {
+      return dropOnPlayer(SongDrag(tracks, queueIds: queueIds));
+    }
+    final up = upNext;
+    final at = up == null ? queue.length : queue.indexOf(up);
+    if (queueIds.isNotEmpty) {
+      await db.queue.moveBlock(queueIds, at);
+    } else {
+      await db.queue.insertAll(tracks.map((t) => t.id), at: at);
+    }
+    await _reloadQueue();
+    await _cueStandby();
   }
 
   void toggleAutocue() {
@@ -595,6 +672,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> clearQueue() async {
     await db.queue.clear();
+    queuePlaylistId = null;
     nowPlayingQueueId = null;
     await engine.stop();
     await _reloadQueue();
@@ -715,7 +793,7 @@ class AppState extends ChangeNotifier {
       return;
     }
     if (mode == PlayMode.autoplay || crossfade) {
-      await _cue(next, autostart: true, fadeIn: crossfade ? fadeInTime : null);
+      await _cue(next, autostart: true, fadeIn: crossfade ? fadeInLength : null);
     } else if (autocue) {
       await _cue(next, autostart: false); // ready to go, paused
     } else {
@@ -734,11 +812,14 @@ class AppState extends ChangeNotifier {
     if (left > fadeOutTime) return;
     if (left < const Duration(milliseconds: 200)) left = const Duration(milliseconds: 200); // already in the silence
     if (identical(engine.current, _noFadeFor)) return;
-    if (standby != null) {
+    _startCrossfade(left);
+  }
+
+  void _startCrossfade(Duration over) {
+    if (standby != null && fadeOverlap) {
       // Two decks: the next song comes in on the other deck while this one
       // fades out, overlapping.
       _fading = true;
-      final over = left;
       () async {
         await _finishCurrent();
         final up = upNext;
@@ -746,19 +827,20 @@ class AppState extends ChangeNotifier {
           _fading = false;
           return;
         }
-        await _cue(up, autostart: true, fadeIn: fadeInTime, fadeOutOld: over);
+        await _cue(up, autostart: true, fadeIn: fadeInLength, fadeOutOld: over);
       }();
       return;
     }
     _fading = true;
     final token = ++_fadeToken;
     final song = engine.current;
-    engine.fadeOut(over: left, to: fadeLevel).then((done) async {
+    // Pro fades all the way out; Basic dips to a third.
+    engine.fadeOut(over: over, to: isPro ? 0 : fadeLevel).then((done) async {
       if (token != _fadeToken) return; // something else already moved on
       _fading = false;
       if (!identical(engine.current, song)) return;
       if (done) {
-        await next(fadeIn: fadeInTime);
+        await next(fadeIn: fadeInLength);
       } else {
         _noFadeFor = song; // paused or volume moved: let it play out
       }
@@ -955,6 +1037,33 @@ class AppState extends ChangeNotifier {
     await db.playlists.addAll(playlistId, tracks.map((t) => t.id));
     final name = playlists.where((p) => p.id == playlistId).map((p) => p.name).firstOrNull ?? 'playlist';
     status = 'Added ${tracks.length} ${tracks.length == 1 ? 'song' : 'songs'} to $name';
+    await _reloadPlaylists();
+    if (view == ResultsView.playlist && selectedPlaylistId == playlistId) await refreshResults();
+  }
+
+  /// The playlist last loaded into the queue, so the changes made to the
+  /// set while singing can be saved back to it (EZTiger Pro).
+  int? queuePlaylistId;
+  Playlist? get queuePlaylist => playlists.where((p) => p.id == queuePlaylistId).firstOrNull;
+
+  /// Adds a saved playlist's songs to the queue, and remembers it.
+  Future<void> loadPlaylistIntoQueue(int playlistId) async {
+    final p = playlists.where((p) => p.id == playlistId).firstOrNull;
+    if (p == null) return;
+    status = 'Added "${p.name}" to the queue';
+    await enqueueAll(await db.playlists.tracks(playlistId));
+    queuePlaylistId = playlistId;
+    notifyListeners();
+  }
+
+  /// Pro: the playlist becomes the queue as it is now, sung songs and all,
+  /// in the order on screen.
+  Future<void> replacePlaylistWithQueue(int playlistId) async {
+    final old = await db.playlists.tracks(playlistId);
+    if (old.isNotEmpty) await db.playlists.removePositions(playlistId, List.generate(old.length, (i) => i));
+    await db.playlists.addAll(playlistId, queue.map((e) => e.track.id));
+    final p = playlists.where((p) => p.id == playlistId).firstOrNull;
+    status = 'Saved the queue to "${p?.name ?? 'the playlist'}"';
     await _reloadPlaylists();
     if (view == ResultsView.playlist && selectedPlaylistId == playlistId) await refreshResults();
   }
