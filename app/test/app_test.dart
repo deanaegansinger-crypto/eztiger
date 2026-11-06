@@ -518,8 +518,47 @@ void main() {
     expect(backend.volume, closeTo(80 / 3, 1)); // the next song starts at a third, then fades up
   });
 
+  testWidgets('the menu makes the song lists larger, but not the player', (tester) async {
+    await pumpApp(tester);
+    await tester.runAsync(() => state.enqueue(state.results.first.primary));
+    await tester.pump();
+    double sizeOf(Finder f) => tester.getSize(f).height;
+    final song = state.results.first.primary.title;
+    Finder inResults() => find.descendant(of: find.byType(ResultsTable), matching: find.text(song));
+    Finder inQueue() => find.descendant(of: find.byType(QueuePanel), matching: find.text(song));
+    final before = sizeOf(inResults());
+    final queueBefore = sizeOf(inQueue());
+    final logoBefore = sizeOf(find.text('EZTIGER').first);
+
+    await tester.tap(find.byKey(const Key('main-menu')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.tap(find.byKey(const Key('text-size-Extra large')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(state.textScale, 1.5);
+    expect(sizeOf(inResults()), greaterThan(before * 1.3));
+    expect(sizeOf(inQueue()), greaterThan(queueBefore * 1.3));
+    expect(sizeOf(find.text('EZTIGER').first), logoBefore);
+    expect(tester.takeException(), isNull); // nothing overflows
+
+    await tester.runAsync(() async {
+      // Saved for next time.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final again = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan));
+      await again.init(rescanLibrary: false);
+      expect(again.textScale, 1.5);
+    });
+  });
+
   testWidgets('the Read me sheet opens from the top', (tester) async {
     await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     await tester.tap(find.byKey(const Key('read-me')));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('EZTiger Basic · Read me'), findsOneWidget);

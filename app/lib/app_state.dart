@@ -27,6 +27,11 @@ class AppState extends ChangeNotifier {
   bool dark = true;
   PlayMode mode = PlayMode.single;
   bool crossfade = false;
+
+  /// Text size for the song lists (queue, search results, library and
+  /// playlists): 1 is normal. The player and karaoke screen don't change.
+  double textScale = 1.0;
+  static final textScaleChoices = {1.0: 'Normal', 1.25: 'Large', 1.5: 'Extra large'};
   bool autocue = true;
 
   // Library tree.
@@ -97,6 +102,8 @@ class AppState extends ChangeNotifier {
       dark = m['dark'] as bool? ?? dark;
       mode = PlayMode.values.asNameMap()[m['mode']] ?? mode;
       crossfade = m['crossfade'] as bool? ?? crossfade;
+      final scale = (m['textScale'] as num?)?.toDouble();
+      if (textScaleChoices.containsKey(scale)) textScale = scale!;
       autocue = m['autocue'] as bool? ?? autocue;
       final fadeMs = m['fadeMs'] as int?;
       fadeOutTime = fadeOutChoices.where((d) => d.inMilliseconds == fadeMs).firstOrNull ?? fadeOutTime;
@@ -119,6 +126,7 @@ class AppState extends ChangeNotifier {
       'dark': dark,
       'mode': mode.name,
       'crossfade': crossfade,
+      'textScale': textScale,
       'autocue': autocue,
       'fadeMs': fadeOutTime.inMilliseconds,
       'type': typeFilter?.name,
@@ -158,6 +166,11 @@ class AppState extends ChangeNotifier {
 
   void setMode(PlayMode m) {
     mode = m;
+    notifyListeners();
+  }
+
+  void setTextScale(double v) {
+    textScale = v;
     notifyListeners();
   }
 

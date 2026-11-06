@@ -1,6 +1,7 @@
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/material.dart';
 
+import '../app_state.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'dialogs.dart';
@@ -13,6 +14,10 @@ class QueuePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
+    return ListText(child: _build(context, s));
+  }
+
+  Widget _build(BuildContext context, AppState s) {
     return DragTarget<SongDrag>(
       onAcceptWithDetails: (d) => s.dropIntoQueue(d.data, s.queue.length),
       builder: (context, cand, _) => Container(
@@ -28,44 +33,46 @@ class QueuePanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                HeadText(
-                  'Queue · ${s.queue.length - s.playedCount} to sing'
-                  '${s.playedCount > 0 ? ' · ${s.playedCount} played' : ''}',
-                  color: EzColors.brass,
-                ),
-                const Spacer(),
-                if (s.queue.isNotEmpty) const _SaveQueueButton(),
-                if (s.playedCount > 0)
-                  TextButton(
-                    key: const Key('clear-played'),
-                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                    onPressed: s.clearPlayed,
-                    child: const Text('Clear played', style: TextStyle(fontSize: 11)),
+            ListControls(
+              child: Row(
+                children: [
+                  HeadText(
+                    'Queue · ${s.queue.length - s.playedCount} to sing'
+                    '${s.playedCount > 0 ? ' · ${s.playedCount} played' : ''}',
+                    color: EzColors.brass,
                   ),
-                if (s.queue.isNotEmpty)
-                  TextButton(
-                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                    onPressed: s.clearQueue,
-                    child: const Text('Clear', style: TextStyle(fontSize: 11)),
-                  ),
-              ],
+                  const Spacer(),
+                  if (s.queue.isNotEmpty) const _SaveQueueButton(),
+                  if (s.playedCount > 0)
+                    TextButton(
+                      key: const Key('clear-played'),
+                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                      onPressed: s.clearPlayed,
+                      child: const Text('Clear played', style: TextStyle(fontSize: 11)),
+                    ),
+                  if (s.queue.isNotEmpty)
+                    TextButton(
+                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                      onPressed: s.clearQueue,
+                      child: const Text('Clear', style: TextStyle(fontSize: 11)),
+                    ),
+                ],
+              ),
             ),
             Container(
               padding: const EdgeInsets.symmetric(vertical: 3),
               decoration: BoxDecoration(
                 border: Border(bottom: BorderSide(color: context.ez.border)),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  SizedBox(width: 28, child: HeadText('#')),
-                  Expanded(flex: 5, child: HeadText('Title')),
-                  Expanded(flex: 5, child: HeadText('Artist — Singer')),
-                  SizedBox(width: 44, child: HeadText('Type')),
-                  SizedBox(width: 96, child: HeadText('Played')),
-                  Expanded(flex: 2, child: HeadText('Location')),
-                  SizedBox(width: 24),
+                  SizedBox(width: listSize(context, 28), child: const HeadText('#')),
+                  const Expanded(flex: 5, child: HeadText('Title')),
+                  const Expanded(flex: 5, child: HeadText('Artist — Singer')),
+                  SizedBox(width: listSize(context, 44), child: const HeadText('Type')),
+                  SizedBox(width: listSize(context, 96), child: const HeadText('Played')),
+                  const Expanded(flex: 2, child: HeadText('Location')),
+                  SizedBox(width: listSize(context, 24)),
                 ],
               ),
             ),
@@ -79,7 +86,7 @@ class QueuePanel extends StatelessWidget {
                     )
                   : ListView.builder(
                       itemCount: s.queue.length,
-                      itemExtent: 28,
+                      itemExtent: listSize(context, 28),
                       itemBuilder: (context, i) => _QueueRow(key: ValueKey(s.queue[i].id), entry: s.queue[i], index: i),
                     ),
             ),
@@ -187,14 +194,14 @@ class _QueueRow extends StatelessWidget {
         child: InkWell(
           onDoubleTap: () => s.playEntry(entry),
           child: Container(
-            height: 24,
+            height: listSize(context, 24),
             color: playing ? EzColors.brass.withValues(alpha: 0.2) : null,
             child: Opacity(
               opacity: played ? 0.55 : 1,
               child: Row(
                 children: [
                   SizedBox(
-                    width: 28,
+                    width: listSize(context, 28),
                     child: playing
                         ? const Icon(Icons.play_arrow, size: 14, color: EzColors.brass)
                         : played
@@ -233,11 +240,11 @@ class _QueueRow extends StatelessWidget {
                     ),
                   ),
                   SizedBox(
-                    width: 44,
+                    width: listSize(context, 44),
                     child: Align(alignment: Alignment.centerLeft, child: TypeChip(t.type)),
                   ),
                   SizedBox(
-                    width: 96,
+                    width: listSize(context, 96),
                     child: Text(
                       entry.playedAt != null
                           ? whenText(entry.playedAt!)
@@ -259,7 +266,7 @@ class _QueueRow extends StatelessWidget {
                     ),
                   ),
                   SizedBox(
-                    width: 24,
+                    width: listSize(context, 24),
                     child: InkWell(
                       onTap: () => s.removeFromQueue(entry),
                       child: const Icon(Icons.close, size: 14, color: EzColors.red),

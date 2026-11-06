@@ -35,11 +35,11 @@ class Rack extends StatelessWidget {
           SizedBox(height: 6),
           _TogglesRow(),
           SizedBox(height: 8),
-          LibraryTabs(),
+          ListText(child: LibraryTabs()),
           SizedBox(height: 8),
-          SearchBox(),
+          ListText(child: SearchBox()),
           SizedBox(height: 6),
-          Expanded(child: ResultsTable()),
+          Expanded(child: ListText(child: ResultsTable())),
           _StatusLine(),
         ],
       ),
@@ -85,13 +85,7 @@ class _BrandRow extends StatelessWidget {
           ],
         ),
         const Spacer(),
-        TextButton.icon(
-          key: const Key('read-me'),
-          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-          onPressed: () => showReadMe(context),
-          icon: const Icon(Icons.help_outline, size: 16, color: EzColors.cyan),
-          label: const Text('Read me', style: TextStyle(fontSize: 11, color: EzColors.cyan)),
-        ),
+        const _MainMenu(),
         const SizedBox(width: 6),
         Segmented<bool>(
           options: const {true: 'Dark', false: 'Light'},
@@ -100,6 +94,57 @@ class _BrandRow extends StatelessWidget {
           accent: EzColors.brass,
         ),
       ],
+    );
+  }
+}
+
+/// "☰ Menu" in the top bar: the Read me, and settings such as text size.
+class _MainMenu extends StatelessWidget {
+  const _MainMenu();
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    return PopupMenuButton<String>(
+      key: const Key('main-menu'),
+      tooltip: 'Menu',
+      itemBuilder: (_) => [
+        const PopupMenuItem(
+          key: Key('read-me'),
+          value: 'readme',
+          child: Row(children: [Icon(Icons.help_outline, size: 18), SizedBox(width: 10), Text('Read me')]),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          enabled: false,
+          height: 28,
+          child: Text('TEXT SIZE · SONG LISTS', style: TextStyle(fontSize: 11, letterSpacing: 1)),
+        ),
+        for (final MapEntry(key: scale, value: label) in AppState.textScaleChoices.entries)
+          CheckedPopupMenuItem(
+            key: Key('text-size-$label'),
+            value: 'scale:$scale',
+            checked: s.textScale == scale,
+            child: Text(label, style: TextStyle(fontSize: 14 * scale)),
+          ),
+      ],
+      onSelected: (c) {
+        if (c == 'readme') {
+          showReadMe(context);
+        } else if (c.startsWith('scale:')) {
+          s.setTextScale(double.parse(c.substring(6)));
+        }
+      },
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.menu, size: 16, color: EzColors.cyan),
+            SizedBox(width: 4),
+            Text('Menu', style: TextStyle(fontSize: 11, color: EzColors.cyan)),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -381,25 +426,27 @@ class _LibraryTabsState extends State<LibraryTabs> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            _TabButton(label: '📁 Library', selected: tab == 0, onTap: () => setState(() => tab = 0)),
-            const SizedBox(width: 6),
-            DragTarget<SongDrag>(
-              onWillAcceptWithDetails: (_) {
-                if (tab != 1) setState(() => tab = 1);
-                return false;
-              },
-              builder: (context, _, _) =>
-                  _TabButton(label: '★ Playlists', selected: tab == 1, onTap: () => setState(() => tab = 1)),
-            ),
-            const Spacer(),
-            if (tab == 0) const _AddFolderButton(),
-          ],
+        ListControls(
+          child: Row(
+            children: [
+              _TabButton(label: '📁 Library', selected: tab == 0, onTap: () => setState(() => tab = 0)),
+              const SizedBox(width: 6),
+              DragTarget<SongDrag>(
+                onWillAcceptWithDetails: (_) {
+                  if (tab != 1) setState(() => tab = 1);
+                  return false;
+                },
+                builder: (context, _, _) =>
+                    _TabButton(label: '★ Playlists', selected: tab == 1, onTap: () => setState(() => tab = 1)),
+              ),
+              const Spacer(),
+              if (tab == 0) const _AddFolderButton(),
+            ],
+          ),
         ),
         const SizedBox(height: 4),
         ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 150, minHeight: 60),
+          constraints: BoxConstraints(maxHeight: listSize(context, 150), minHeight: 60),
           child: RaisedBox(
             padding: const EdgeInsets.all(4),
             child: tab == 0 ? const FolderTree() : const PlaylistsPanel(),
@@ -886,7 +933,7 @@ class _ResultsTableState extends State<ResultsTable> {
                     onAcceptWithDetails: (d) => s.dropIntoPlaylist(s.selectedPlaylistId!, d.data, groups.length),
                     builder: (context, _, _) => ListView.builder(
                       itemCount: groups.length,
-                      itemExtent: 28,
+                      itemExtent: listSize(context, 28),
                       itemBuilder: (context, i) => ResultRow(group: groups[i], index: i, focus: focus),
                     ),
                   ),
@@ -904,43 +951,45 @@ class _FilterBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     final label = TextStyle(fontSize: 11, color: context.ez.textDim);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 4,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Type ', style: label),
-              Segmented<TrackType?>(
-                key: const Key('type-filter'),
-                options: {null: 'All', for (final t in TrackType.values) t: t.label},
-                value: s.typeFilter,
-                onChanged: s.setTypeFilter,
-              ),
-            ],
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Sort ', style: label),
-              Segmented<SearchSort>(
-                key: const Key('sort'),
-                options: const {
-                  SearchSort.relevance: 'Best match',
-                  SearchSort.title: 'Title A–Z',
-                  SearchSort.artist: 'Artist A–Z',
-                },
-                value: s.sort,
-                onChanged: s.setSort,
-                accent: EzColors.brass,
-              ),
-            ],
-          ),
-        ],
+    return ListControls(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Type ', style: label),
+                Segmented<TrackType?>(
+                  key: const Key('type-filter'),
+                  options: {null: 'All', for (final t in TrackType.values) t: t.label},
+                  value: s.typeFilter,
+                  onChanged: s.setTypeFilter,
+                ),
+              ],
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Sort ', style: label),
+                Segmented<SearchSort>(
+                  key: const Key('sort'),
+                  options: const {
+                    SearchSort.relevance: 'Best match',
+                    SearchSort.title: 'Title A–Z',
+                    SearchSort.artist: 'Artist A–Z',
+                  },
+                  value: s.sort,
+                  onChanged: s.setSort,
+                  accent: EzColors.brass,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -969,7 +1018,7 @@ class _ResultsHeader extends StatelessWidget {
         children: [
           Expanded(flex: 5, child: sortable('Title', SearchSort.title)),
           Expanded(flex: 4, child: sortable('Artist', SearchSort.artist)),
-          const SizedBox(width: 44, child: HeadText('Type')),
+          SizedBox(width: listSize(context, 44), child: const HeadText('Type')),
           const Expanded(flex: 3, child: HeadText('Location')),
         ],
       ),
@@ -1037,7 +1086,7 @@ class _ResultRowState extends State<ResultRow> {
               ),
             ),
             SizedBox(
-              width: 44,
+              width: listSize(context, 44),
               child: Align(alignment: Alignment.centerLeft, child: TypeChip(t.type)),
             ),
             Expanded(

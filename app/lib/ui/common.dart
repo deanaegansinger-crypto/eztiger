@@ -318,3 +318,49 @@ class MenuArea extends StatelessWidget {
     child: child,
   );
 }
+
+/// The song lists' text size (see [AppState.textScale]): text inside is
+/// drawn larger, and [listSize] grows the fixed row heights and columns.
+/// Buttons and filters inside keep their size with [ListControls].
+class ListText extends StatelessWidget {
+  const ListText({super.key, required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    final scale = AppScope.of(context).textScale;
+    if (scale == 1) return child;
+    final outer = MediaQuery.textScalerOf(context);
+    return _OuterTextScale(
+      scaler: outer,
+      child: MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(outer.scale(14) / 14 * scale)),
+        child: child,
+      ),
+    );
+  }
+}
+
+/// Buttons and filters inside a [ListText]: they stay their normal size.
+class ListControls extends StatelessWidget {
+  const ListControls({super.key, required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    final outer = context.dependOnInheritedWidgetOfExactType<_OuterTextScale>();
+    if (outer == null) return child;
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaler: outer.scaler),
+      child: child,
+    );
+  }
+}
+
+class _OuterTextScale extends InheritedWidget {
+  const _OuterTextScale({required this.scaler, required super.child});
+  final TextScaler scaler;
+  @override
+  bool updateShouldNotify(_OuterTextScale old) => old.scaler != scaler;
+}
+
+/// A row height or column width in the song lists, grown with the text size.
+double listSize(BuildContext context, double v) => v * AppScope.of(context).textScale;
