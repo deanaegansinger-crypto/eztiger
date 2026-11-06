@@ -1,3 +1,5 @@
+import 'package:eztiger/licence.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -82,4 +84,25 @@ Directory makeLibrary() {
   file('Pop/Queen - Bohemian Rhapsody.mp4');
   file('Rock/Bon Jovi - Livin On A Prayer.mp3');
   return root;
+}
+
+class FakeShop implements LicenceServer {
+  final good = <String>{'GOOD-KEY'};
+  bool online = true, refunded = false;
+  int validates = 0;
+
+  @override
+  Future<LicenceCheck> activate(String key, {required String instanceName}) async {
+    if (!online) throw Exception('offline');
+    return good.contains(key)
+        ? const LicenceCheck(ok: true, instance: 'inst-1')
+        : const LicenceCheck(ok: false, message: 'That key was not accepted.');
+  }
+
+  @override
+  Future<LicenceCheck> validate(String key, {String? instance}) async {
+    validates++;
+    if (!online) throw Exception('offline');
+    return refunded ? const LicenceCheck(ok: false, definite: true) : const LicenceCheck(ok: true);
+  }
 }

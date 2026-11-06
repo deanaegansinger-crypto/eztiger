@@ -26,13 +26,6 @@ Future<void> showReadMe(BuildContext context) => showDialog<void>(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: EdgeInsets.only(bottom: 6),
-                child: Text(
-                  'THANKS for using my first ever Claude created App - ENJOY!!',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: EzColors.brass),
-                ),
-              ),
               for (final (head, lines)
                   in touchUi
                       ? [_tablet, ..._sections.where((x) => x != _secondScreen)]
@@ -73,6 +66,7 @@ const _pro = (
     'With 2 decks on, double-click a song (or drop it on the deck that is not playing) to make it the next song. Whatever was waiting moves back to second in the queue, where you can leave it or take it off. Drop a song on the ON AIR deck to play it now.',
     'X-fade, under the decks: the slider sets the crossfade from 0 (a straight cut) to 6 seconds. Overlap brings the next song in under the last one; In turn fades one out, then the next in. Smooth fades sound even all the way through; Linear is the plain fade.',
     "Tonight's playlist is the list of songs to sing (Basic calls it the queue). Save changes to a playlist: after Load playlist, change Tonight's playlist as you go (add, move or take songs off), then press 💾 Save to <playlist> above it. The Save menu can also replace any playlist with Tonight's playlist.",
+    'Trial: the Pro installer gives every Pro feature for 14 days (the days left show by the PRO badge). After that EZTiger carries on as Basic, with everything kept, until a licence key is entered in ☰ Menu → Enter licence key. The key is checked online once; after that it works without the internet.',
     'Skins (☰ Menu → Skin): six looks for the whole app.',
     'Sync PC ⇄ tablet (☰ Menu): Save sync file writes your playlists and song keys to EZtiger-sync.json. Copy it to the tablet (or put it in the library folder before you copy that), then Load sync file there. It works the other way round too. Songs are matched by where they sit in the library folder, or by file name.',
   ],

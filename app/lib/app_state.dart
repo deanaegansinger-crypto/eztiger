@@ -51,7 +51,7 @@ class AppState extends ChangeNotifier {
   /// 2-deck mode: the queue feeds the two players in turn. While one plays,
   /// the next song waits cued on the other, and a crossfade overlaps them.
   bool twoDecks = false;
-  bool get canTwoDecks => decks.length > 1;
+  bool get canTwoDecks => decks.length > 1 && isPro;
 
   /// In 2-deck mode, the deck that isn't playing, where the next song waits.
   KaraokeEngine? get standby => twoDecks && canTwoDecks ? decks[1 - _live] : null;
@@ -167,6 +167,17 @@ class AppState extends ChangeNotifier {
     await _reloadPlaylists();
     await refreshResults();
     if (rescanLibrary && roots.isNotEmpty) unawaited(rescan());
+  }
+
+  /// Pro was switched on by a licence key: bring back the Pro settings
+  /// (skin, 2 decks, fades, Level and Vocal cut) and the song keys.
+  Future<void> editionChanged() async {
+    if (isPro) {
+      await _loadSettings();
+      await _loadKeys();
+    }
+    _applyFadeShape();
+    notifyListeners();
   }
 
   // ------------------------------------------------------------ settings

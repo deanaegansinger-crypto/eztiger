@@ -14,6 +14,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app_state.dart';
 import 'edition.dart';
+import 'licence.dart';
 import 'media_kit_backend.dart';
 import 'player.dart';
 import 'second_screen.dart';
@@ -44,15 +45,25 @@ Future<void> main(List<String> args) async {
   await Directory(dir.path).create(recursive: true);
   final db = await EztigerDatabase.open(databaseFactoryFfi, p.join(dir.path, 'eztiger.db'));
 
-  // Two players, for the 2-deck mode; the second waits idle otherwise.
+  // Pro: the 14-day trial, or a licence key. Without either, Basic.
+  if (builtAsPro) {
+    final l = licence = Licence(db);
+    await l.load();
+    isPro = l.proActive;
+    await windowManager.setTitle(editionName);
+  }
+
+  // Two players, for the 2-deck mode; the second waits idle otherwise. The
+  // Pro build always has both, so a key entered later switches 2 decks on.
   final backends = <KaraokeEngine, MediaKitBackend>{};
-  for (var i = 0; i < (isPro ? 2 : 1); i++) {
+  for (var i = 0; i < (builtAsPro ? 2 : 1); i++) {
     final backend = MediaKitBackend();
     backends[KaraokeEngine(backend)] = backend;
   }
   final decks = backends.keys.toList();
   final state = AppState(db, decks[0], deckB: decks.length > 1 ? decks[1] : null);
   await state.init();
+  licence?.addListener(state.editionChanged);
 
   runApp(
     EztigerApp(
@@ -63,7 +74,10 @@ Future<void> main(List<String> args) async {
       secondScreen: SecondScreen(() => state.engine),
     ),
   );
-  WidgetsBinding.instance.addPostFrameCallback((_) => state.startUp());
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    state.startUp();
+    licence?.recheckInBackground();
+  });
 }
 
 /// The Android tablet: one screen, landscape, kept awake, and the library on
