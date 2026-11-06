@@ -32,8 +32,6 @@ class Rack extends StatelessWidget {
           SizedBox(height: 6),
           SeekBar(),
           _VolumeRow(),
-          SizedBox(height: 6),
-          _TogglesRow(),
           SizedBox(height: 8),
           ListText(child: LibraryTabs()),
           SizedBox(height: 8),
@@ -107,7 +105,7 @@ class _MainMenu extends StatelessWidget {
     return PopupMenuButton<String>(
       key: const Key('main-menu'),
       tooltip: 'Menu',
-      itemBuilder: (_) => [
+      itemBuilder: (menu) => [
         const PopupMenuItem(
           key: Key('read-me'),
           value: 'readme',
@@ -117,26 +115,60 @@ class _MainMenu extends StatelessWidget {
           value: 'stage',
           child: Row(children: [Icon(Icons.mic_external_on, size: 18), SizedBox(width: 10), Text('Stage view')]),
         ),
-        CheckedPopupMenuItem(
-          key: const Key('stage-lyrics-left'),
-          value: 'lyricsLeft',
-          checked: !s.stageLyricsRight,
-          child: const Text('Stage: lyrics on the left'),
-        ),
-        CheckedPopupMenuItem(
-          key: const Key('stage-lyrics-right'),
-          value: 'lyricsRight',
-          checked: s.stageLyricsRight,
-          child: const Text('Stage: lyrics on the right'),
+        _menuRow(
+          menu,
+          'Stage lyrics',
+          Segmented<bool>(
+            key: const Key('menu-lyrics-side'),
+            options: const {false: 'Left', true: 'Right'},
+            value: s.stageLyricsRight,
+            onChanged: s.setStageLyricsRight,
+          ),
         ),
         const PopupMenuDivider(),
         const PopupMenuItem(
           enabled: false,
           height: 28,
-          child: Text('SCREEN', style: TextStyle(fontSize: 11, letterSpacing: 1)),
+          child: Text('PLAYBACK', style: TextStyle(fontSize: 11, letterSpacing: 1)),
         ),
-        CheckedPopupMenuItem(value: 'dark', checked: s.dark, child: const Text('Dark')),
-        CheckedPopupMenuItem(value: 'light', checked: !s.dark, child: const Text('Light')),
+        CheckedPopupMenuItem(
+          key: const Key('menu-autocue'),
+          value: 'autocue',
+          checked: s.autocue,
+          child: const Text('Autocue'),
+        ),
+        CheckedPopupMenuItem(
+          key: const Key('menu-crossfade'),
+          value: 'crossfade',
+          checked: s.crossfade,
+          child: const Text('Crossfade'),
+        ),
+        _menuRow(
+          menu,
+          'Fade over',
+          Segmented<Duration>(
+            key: const Key('fade-length'),
+            options: {
+              for (final d in AppState.fadeOutChoices)
+                d: d.inMilliseconds % 1000 == 0 ? '${d.inSeconds}s' : '${d.inMilliseconds / 1000}s',
+            },
+            value: s.fadeOutTime,
+            onChanged: s.setFadeOut,
+          ),
+        ),
+        const PopupMenuDivider(),
+        _menuRow(
+          menu,
+          'Screen',
+          Segmented<bool>(
+            key: const Key('menu-theme'),
+            options: const {true: 'Dark', false: 'Light'},
+            value: s.dark,
+            onChanged: (dark) {
+              if (dark != s.dark) s.toggleDark();
+            },
+          ),
+        ),
         const PopupMenuDivider(),
         const PopupMenuItem(
           enabled: false,
@@ -154,12 +186,12 @@ class _MainMenu extends StatelessWidget {
       onSelected: (c) {
         if (c == 'readme') {
           showReadMe(context);
-        } else if (c == 'dark' || c == 'light') {
-          if ((c == 'dark') != s.dark) s.toggleDark();
-        } else if (c == 'lyricsLeft' || c == 'lyricsRight') {
-          s.setStageLyricsRight(c == 'lyricsRight');
         } else if (c == 'stage') {
           s.setStageView(true);
+        } else if (c == 'autocue') {
+          s.toggleAutocue();
+        } else if (c == 'crossfade') {
+          s.toggleCrossfade();
         } else if (c.startsWith('scale:')) {
           s.setTextScale(double.parse(c.substring(6)));
         }
@@ -178,6 +210,24 @@ class _MainMenu extends StatelessWidget {
     );
   }
 }
+
+/// A menu row with a label and a choice of buttons; picking one closes the menu.
+PopupMenuItem<String> _menuRow<T>(BuildContext menu, String label, Segmented<T> choice) => PopupMenuItem<String>(
+  child: Row(
+    children: [
+      Expanded(child: Text(label)),
+      Segmented<T>(
+        key: choice.key,
+        options: choice.options,
+        value: choice.value,
+        onChanged: (v) {
+          choice.onChanged(v);
+          Navigator.pop(menu);
+        },
+      ),
+    ],
+  ),
+);
 
 /// The green-screen "VFD" display plus the transport buttons.
 class PlayerStrip extends StatelessWidget {
@@ -367,6 +417,7 @@ class _SeekBarState extends State<SeekBar> {
   }
 }
 
+/// Single / Autoplay, then a short volume bar.
 class _VolumeRow extends StatelessWidget {
   const _VolumeRow();
   @override
@@ -374,9 +425,17 @@ class _VolumeRow extends StatelessWidget {
       ListenableBuilder(listenable: AppScope.of(context).engine, builder: (context, _) => _build(context));
 
   Widget _build(BuildContext context) {
-    final e = AppScope.of(context).engine;
+    final s = AppScope.of(context);
+    final e = s.engine;
     return Row(
       children: [
+        Segmented<PlayMode>(
+          key: const Key('play-mode'),
+          options: const {PlayMode.single: 'Single', PlayMode.autoplay: 'Autoplay'},
+          value: s.mode,
+          onChanged: s.setMode,
+        ),
+        const SizedBox(width: 10),
         InkWell(
           onTap: e.toggleMute,
           child: Padding(
@@ -404,50 +463,6 @@ class _VolumeRow extends StatelessWidget {
   }
 }
 
-class _TogglesRow extends StatelessWidget {
-  const _TogglesRow();
-  @override
-  Widget build(BuildContext context) {
-    final s = AppScope.of(context);
-    return Wrap(
-      spacing: 14,
-      runSpacing: 6,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Mode', style: TextStyle(fontSize: 11)),
-            const SizedBox(width: 6),
-            Segmented<PlayMode>(
-              options: const {PlayMode.single: 'Single', PlayMode.autoplay: 'Autoplay'},
-              value: s.mode,
-              onChanged: s.setMode,
-            ),
-          ],
-        ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            EzSwitch(label: 'Crossfade', value: s.crossfade, onChanged: s.toggleCrossfade),
-            const SizedBox(width: 6),
-            Segmented<Duration>(
-              key: const Key('fade-length'),
-              options: {
-                for (final d in AppState.fadeOutChoices)
-                  d: d.inMilliseconds % 1000 == 0 ? '${d.inSeconds}s' : '${d.inMilliseconds / 1000}s',
-              },
-              value: s.fadeOutTime,
-              onChanged: s.setFadeOut,
-            ),
-          ],
-        ),
-        EzSwitch(label: 'Autocue', value: s.autocue, onChanged: s.toggleAutocue),
-      ],
-    );
-  }
-}
-
 /// "📁 Library" and "★ Playlists" tabs.
 class LibraryTabs extends StatefulWidget {
   const LibraryTabs({super.key});
@@ -458,37 +473,54 @@ class LibraryTabs extends StatefulWidget {
 class _LibraryTabsState extends State<LibraryTabs> {
   int tab = 0;
 
+  /// Picks a tab, and unfolds the box if it was folded away.
+  void _show(AppState s, int t) {
+    setState(() => tab = t);
+    if (s.libraryCollapsed) s.setLibraryCollapsed(false);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final collapsed = s.libraryCollapsed;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ListControls(
           child: Row(
             children: [
-              _TabButton(label: '📁 Library', selected: tab == 0, onTap: () => setState(() => tab = 0)),
+              _TabButton(label: '📁 Library', selected: tab == 0 && !collapsed, onTap: () => _show(s, 0)),
               const SizedBox(width: 6),
               DragTarget<SongDrag>(
                 onWillAcceptWithDetails: (_) {
-                  if (tab != 1) setState(() => tab = 1);
+                  if (tab != 1 || collapsed) _show(s, 1);
                   return false;
                 },
                 builder: (context, _, _) =>
-                    _TabButton(label: '★ Playlists', selected: tab == 1, onTap: () => setState(() => tab = 1)),
+                    _TabButton(label: '★ Playlists', selected: tab == 1 && !collapsed, onTap: () => _show(s, 1)),
               ),
               const Spacer(),
-              if (tab == 0) const _AddFolderButton(),
+              if (tab == 0 && !collapsed) const _AddFolderButton(),
+              IconButton(
+                key: const Key('library-fold'),
+                tooltip: collapsed ? 'Show folders and playlists' : 'Fold away, for more room for songs',
+                visualDensity: tapDensity,
+                onPressed: () => s.setLibraryCollapsed(!collapsed),
+                icon: Icon(collapsed ? Icons.expand_more : Icons.expand_less, size: 20, color: context.ez.textDim),
+              ),
             ],
           ),
         ),
-        const SizedBox(height: 4),
-        ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: listSize(context, 150), minHeight: 60),
-          child: RaisedBox(
-            padding: const EdgeInsets.all(4),
-            child: tab == 0 ? const FolderTree() : const PlaylistsPanel(),
+        if (!collapsed) ...[
+          const SizedBox(height: 4),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: listSize(context, 150), minHeight: 60),
+            child: RaisedBox(
+              padding: const EdgeInsets.all(4),
+              child: tab == 0 ? const FolderTree() : const PlaylistsPanel(),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }

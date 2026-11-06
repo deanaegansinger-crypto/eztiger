@@ -64,6 +64,7 @@ const _sections = <(String, List<String>)>[
     'Getting started',
     [
       'Library tab: click Add folder and pick your karaoke folder. EZtiger scans it, and rescans it each time it starts.',
+      'The arrow at the right of the Library / Playlists tabs folds that box away, for more room for the song list. Tap a tab to bring it back.',
       'Type in the search box to find songs by title or artist. Use the type filter (CDG, MP4…) and the A–Z sort above the list.',
     ],
   ),
@@ -86,7 +87,8 @@ const _sections = <(String, List<String>)>[
   (
     'Mode, Crossfade and Autocue',
     [
-      'Single stops after each song. Autoplay goes straight on to the next one in the queue.',
+      'Single / Autoplay is next to the volume. Single stops after each song. Autoplay goes straight on to the next one in the queue.',
+      'Autocue and Crossfade are in the ☰ Menu, under Playback.',
       'Autocue loads the next song ready to go, and starts it at its first note, past the silence at the start.',
       'Crossfade fades out before the silence at the end of a song (over 4 s, 2 s or 0.2 s, down to a third of the volume) and brings the next song in at its first note.',
     ],

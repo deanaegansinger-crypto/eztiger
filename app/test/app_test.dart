@@ -509,8 +509,14 @@ void main() {
     silentEnds();
     final tracks = state.results.map((g) => g.primary).toList();
     state.toggleCrossfade();
+    await tester.tap(find.byKey(const Key('main-menu')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     await tester.tap(find.descendant(of: find.byKey(const Key('fade-length')), matching: find.text('0.2s')));
-    await tester.pump();
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     expect(state.fadeOutTime, const Duration(milliseconds: 200));
     await tester.runAsync(() async {
       await state.enqueue(tracks[0]);
@@ -772,5 +778,51 @@ void main() {
     expect(find.text('🎤 Set singer…'), findsOneWidget);
     // Letting go on itself didn't move it.
     expect(state.queue.map((e) => e.track.id), [tracks[0].id, tracks[1].id]);
+  });
+
+  testWidgets('Autocue and Crossfade are in the menu, and Single/Autoplay sits by the volume', (tester) async {
+    await pumpApp(tester);
+    final autocue = state.autocue, crossfade = state.crossfade;
+    await tester.tap(find.byKey(const Key('main-menu')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.tap(find.byKey(const Key('menu-autocue')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(state.autocue, !autocue);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.tap(find.byKey(const Key('menu-crossfade')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(state.crossfade, !crossfade);
+
+    await tester.tap(find.descendant(of: find.byKey(const Key('play-mode')), matching: find.text('Autoplay')));
+    await tester.pump();
+    expect(state.mode, PlayMode.autoplay);
+    // Same row as the volume bar.
+    final mode = tester.getCenter(find.byKey(const Key('play-mode')));
+    final slider = tester.getCenter(find.byIcon(state.engine.muted ? Icons.volume_off : Icons.volume_up).first);
+    expect((mode.dy - slider.dy).abs(), lessThan(12));
+  });
+
+  testWidgets('the Library / Playlists box folds away and comes back', (tester) async {
+    await pumpApp(tester);
+    expect(find.byType(FolderTree), findsOneWidget);
+    final before = tester.getSize(find.byType(ResultsTable)).height;
+    await tester.tap(find.byKey(const Key('library-fold')));
+    await tester.pump();
+    expect(find.byType(FolderTree), findsNothing);
+    expect(state.libraryCollapsed, isTrue);
+    expect(tester.getSize(find.byType(ResultsTable)).height, greaterThan(before + 40));
+    await tester.tap(find.text('★ Playlists'));
+    await tester.pump();
+    expect(find.byType(PlaylistsPanel), findsOneWidget);
+    expect(state.libraryCollapsed, isFalse);
   });
 }
