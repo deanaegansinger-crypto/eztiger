@@ -91,6 +91,7 @@ const _sections = <(String, List<String>)>[
       'Autocue and Crossfade are in the ☰ Menu, under Playback.',
       'Autocue loads the next song ready to go, and starts it at its first note, past the silence at the start.',
       'Crossfade fades out before the silence at the end of a song (over 4 s, 2 s or 0.2 s, down to a third of the volume) and brings the next song in at its first note.',
+      '2 decks (trial, in the ☰ Menu under Playback, on Windows): two players share the one queue and take turns. While one plays, the next song waits ready on the other, so it starts straight away; with Crossfade on, the two songs overlap as one fades out and the next comes in.',
     ],
   ),
   (
@@ -108,7 +109,7 @@ const _sections = <(String, List<String>)>[
   (
     'Your settings',
     [
-      '🎤 Stage, top right: the view for performing, with the tablet on the mic stand. Lyrics large on the left; the song, time left, big Restart / Play / Next buttons, the volume and the next songs on the right. Double-tap a song in Up next to play it now, or the lyrics for full screen. The ⇄ button (or the Menu) swaps the lyrics to the other side. Library goes back. EZtiger opens in the view you used last.',
+      '🎤 Stage, top right: the view for performing, with the tablet on the mic stand. Lyrics large on the left; the song, time left, big Restart / Play / Next buttons, the volume and the next songs on the right. Double-tap a song in Up next to play it now; its ↑ ↓ arrows move it up or down and ✕ takes it out of the queue. Single / Autoplay sits by the volume. Double-tap the lyrics for full screen. The ⇄ button (or the Menu) swaps the lyrics to the other side. Library goes back. EZtiger opens in the view you used last.',
       '☰ Menu, top right: the Read me, Dark or Light screen, and Text size, which makes the song lists larger (Normal, Large or Extra large). The player and lyrics stay as they are.',
       'EZtiger remembers your settings, volume and the loaded song for next time.',
     ],

@@ -32,6 +32,7 @@ class Rack extends StatelessWidget {
           SizedBox(height: 6),
           SeekBar(),
           _VolumeRow(),
+          _DeckLine(),
           SizedBox(height: 8),
           ListText(child: LibraryTabs()),
           SizedBox(height: 8),
@@ -150,6 +151,14 @@ class _MainMenu extends StatelessWidget {
           checked: s.crossfade,
           child: const Text('Crossfade'),
         ),
+        // Windows only for now: a trial of two players fed by one queue.
+        if (s.canTwoDecks && !touchUi)
+          CheckedPopupMenuItem(
+            key: const Key('menu-two-decks'),
+            value: 'two-decks',
+            checked: s.twoDecks,
+            child: const Text('2 decks (trial)'),
+          ),
         _menuRow(
           menu,
           'Fade over',
@@ -223,6 +232,8 @@ class _MainMenu extends StatelessWidget {
           s.toggleAutocue();
         } else if (c == 'crossfade') {
           s.toggleCrossfade();
+        } else if (c == 'two-decks') {
+          s.setTwoDecks(!s.twoDecks);
         } else if (c.startsWith('scale:')) {
           s.setTextScale(double.parse(c.substring(6)));
         }
@@ -1407,6 +1418,29 @@ class _StatusLine extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// In 2-deck mode: which deck is playing, and the song waiting on the other.
+class _DeckLine extends StatelessWidget {
+  const _DeckLine();
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final sb = s.standby;
+    if (sb == null) return const SizedBox.shrink();
+    final live = s.liveDeck == 0 ? 'A' : 'B', other = s.liveDeck == 0 ? 'B' : 'A';
+    final waiting = s.standbyQueueId != null ? sb.current?.title : null;
+    return Padding(
+      key: const Key('deck-line'),
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        'On deck $live  ·  deck $other: ${waiting == null ? 'nothing cued' : 'next ready, $waiting'}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 11, color: context.ez.textDim),
       ),
     );
   }

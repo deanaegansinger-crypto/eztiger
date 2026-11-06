@@ -3,8 +3,12 @@ import 'package:flutter/material.dart';
 
 import '../app_state.dart';
 import '../platform.dart';
+import '../player.dart';
 import '../second_screen.dart';
 import '../theme.dart';
+
+/// Builds the video surface of one player.
+typedef VideoBuilder = Widget Function(BuildContext context, KaraokeEngine engine);
 
 /// Gives every widget below it the [AppState], and rebuilds them when it
 /// changes.
@@ -13,13 +17,13 @@ class AppScope extends InheritedNotifier<AppState> {
     : super(notifier: state);
 
   /// Builds the video surface for video tracks (null in tests).
-  final WidgetBuilder? videoBuilder;
+  final VideoBuilder? videoBuilder;
 
   /// Opens the output on a second screen (null in tests).
   final SecondScreen? secondScreen;
 
   static AppState of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<AppScope>()!.notifier!;
-  static WidgetBuilder? videoOf(BuildContext context) =>
+  static VideoBuilder? videoOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AppScope>()!.videoBuilder;
   static SecondScreen? secondScreenOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AppScope>()!.secondScreen;
