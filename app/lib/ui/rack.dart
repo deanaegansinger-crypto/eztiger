@@ -909,6 +909,7 @@ class _ResultsTableState extends State<ResultsTable> {
             style: TextStyle(fontSize: 11, color: context.ez.textDim),
           ),
           const SizedBox(height: 4),
+          if (s.scanning) const LoadingBanner(),
           const _FilterBar(),
           const _ResultsHeader(),
           Expanded(
@@ -922,7 +923,7 @@ class _ResultsTableState extends State<ResultsTable> {
                             ? 'Empty playlist. Drag songs here, or right-click it and paste.'
                             : s.roots.isEmpty
                             ? 'Add a folder to start.'
-                            : (s.scanning ? 'Scanning…' : 'Nothing found.'),
+                            : (s.scanning ? 'Loading your songs… please wait.' : 'Nothing found.'),
                         textAlign: TextAlign.center,
                         style: TextStyle(color: context.ez.textDim),
                       ),
@@ -1191,6 +1192,56 @@ Future<void> trackMenu(BuildContext context, Offset at, SearchGroup group, {requ
       await showEditTags(context, t);
     default:
       if (choice.startsWith('pl:')) await s.addToPlaylist(int.parse(choice.substring(3)), tracks);
+  }
+}
+
+/// Shown over the song list while the library is being read, so nobody
+/// thinks the app has stopped working.
+class LoadingBanner extends StatelessWidget {
+  const LoadingBanner({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    return ListControls(
+      child: Container(
+        key: const Key('loading-banner'),
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: EzColors.cyan.withValues(alpha: 0.15),
+          border: Border.all(color: EzColors.cyan),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: EzColors.cyan),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Loading your song library… please wait',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: EzColors.cyan),
+                  ),
+                  Text(
+                    'It\'s working: a big collection can take a minute. ${s.status}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: context.ez.textDim),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

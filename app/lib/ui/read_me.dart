@@ -96,18 +96,26 @@ const _sections = <(String, List<String>)>[
     [
       'Select songs (click, Shift+click for a block, Ctrl+click to pick, Ctrl+A for all) and drag them onto a playlist or onto + Create.',
       'Ctrl+C copies the selected songs as a text list; Ctrl+V pastes a song list (from Notepad or an email) into an open playlist.',
+      'To sing a saved playlist: press "📂 Load playlist" above the queue and pick it. Its songs go to the end of the queue.',
       'To keep the songs in the queue: press "★ Save as playlist" above the queue and give it a name, or add them to a playlist you already have. You can also drag that button onto a playlist.',
       'Single songs in the queue: drag one onto a playlist, or right-click it for "★ Add to …".',
       'Right-click a playlist to open it, paste into it, save the queue to it, or send it all to the queue.',
     ],
   ),
   _secondScreen,
-  ('Your settings', ['EZtiger remembers your settings, volume and the loaded song for next time.']),
+  (
+    'Your settings',
+    [
+      '☰ Menu, top right: Text size makes the song lists larger (Normal, Large or Extra large). The player and lyrics stay as they are.',
+      'EZtiger remembers your settings, volume and the loaded song for next time.',
+    ],
+  ),
 ];
 
 const _secondScreen = (
   'Second screen',
   [
+    'Double-click the karaoke output panel to show the lyrics full screen; double-click again or press Esc to come back.',
     'Click "2nd screen" on the output panel to open the lyrics window. With two monitors it goes full screen on the other one.',
     'In that window, double-click or press F11 to switch full screen on or off; Esc leaves full screen.',
   ],
@@ -119,6 +127,6 @@ const _tablet = (
     'Add folder: allow EZtiger to "manage all files" when Android asks (it needs that to read CDG and lyric files), then pick SD card and your karaoke folder.',
     'Double-tap a song to load it into the player. Press and hold a song, then move your finger to drag it onto the queue, the player or a playlist.',
     'Press and hold and let go without moving for the menu (what right-click does on Windows): add to queue, set the singer, playlists and more.',
-    'Full screen shows just the lyrics; double-tap or press Back to come out of it. The screen stays on while EZtiger is open.',
+    'Double-tap the karaoke output panel for full screen lyrics; double-tap again or press Back to come out of it. The screen stays on while EZtiger is open.',
   ],
 );

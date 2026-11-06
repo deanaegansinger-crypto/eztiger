@@ -36,26 +36,42 @@ class QueuePanel extends StatelessWidget {
             ListControls(
               child: Row(
                 children: [
-                  HeadText(
-                    'Queue · ${s.queue.length - s.playedCount} to sing'
-                    '${s.playedCount > 0 ? ' · ${s.playedCount} played' : ''}',
-                    color: EzColors.brass,
+                  // The title gives way to the buttons on a narrow screen.
+                  Expanded(
+                    flex: 2,
+                    child: HeadText(
+                      'Queue · ${s.queue.length - s.playedCount} to sing'
+                      '${s.playedCount > 0 ? ' · ${s.playedCount} played' : ''}',
+                      color: EzColors.brass,
+                    ),
                   ),
-                  const Spacer(),
-                  if (s.queue.isNotEmpty) const _SaveQueueButton(),
-                  if (s.playedCount > 0)
-                    TextButton(
-                      key: const Key('clear-played'),
-                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                      onPressed: s.clearPlayed,
-                      child: const Text('Clear played', style: TextStyle(fontSize: 11)),
+                  // On a narrow screen the buttons scroll sideways rather than spill over.
+                  Flexible(
+                    flex: 3,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      reverse: true,
+                      child: Row(
+                        children: [
+                          const _LoadPlaylistButton(),
+                          if (s.queue.isNotEmpty) const _SaveQueueButton(),
+                          if (s.playedCount > 0)
+                            TextButton(
+                              key: const Key('clear-played'),
+                              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                              onPressed: s.clearPlayed,
+                              child: const Text('Clear played', style: TextStyle(fontSize: 11)),
+                            ),
+                          if (s.queue.isNotEmpty)
+                            TextButton(
+                              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                              onPressed: s.clearQueue,
+                              child: const Text('Clear', style: TextStyle(fontSize: 11)),
+                            ),
+                        ],
+                      ),
                     ),
-                  if (s.queue.isNotEmpty)
-                    TextButton(
-                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                      onPressed: s.clearQueue,
-                      child: const Text('Clear', style: TextStyle(fontSize: 11)),
-                    ),
+                  ),
                 ],
               ),
             ),
@@ -92,6 +108,39 @@ class QueuePanel extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// "📂 Load playlist": puts a saved playlist's songs at the end of the queue.
+class _LoadPlaylistButton extends StatelessWidget {
+  const _LoadPlaylistButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    return PopupMenuButton<int>(
+      key: const Key('load-playlist'),
+      tooltip: 'Add a saved playlist to the queue',
+      itemBuilder: (_) => [
+        if (s.playlists.isEmpty)
+          const PopupMenuItem(enabled: false, child: Text('No playlists yet: use "★ Save as playlist" first'))
+        else
+          for (final p in s.playlists)
+            PopupMenuItem(
+              value: p.id,
+              child: Text('★ ${p.name}  (${p.trackCount == 1 ? '1 song' : '${p.trackCount} songs'})'),
+            ),
+      ],
+      onSelected: (id) async {
+        final p = s.playlists.firstWhere((p) => p.id == id);
+        s.status = 'Added "${p.name}" to the queue';
+        await s.enqueueAll(await s.db.playlists.tracks(id));
+      },
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Text('📂 Load playlist', style: TextStyle(fontSize: 11, color: EzColors.brass)),
       ),
     );
   }

@@ -127,7 +127,7 @@ class _OutputPanelState extends State<OutputPanel> {
                           ),
                         ),
                       Tooltip(
-                        message: 'Full screen (Esc to exit)',
+                        message: 'Full screen, or double-click the lyrics (Esc or double-click to exit)',
                         child: InkWell(onTap: widget.onFullScreen, child: const Icon(Icons.fullscreen, size: 18)),
                       ),
                     ],
@@ -138,7 +138,15 @@ class _OutputPanelState extends State<OutputPanel> {
             Expanded(
               child: Stack(
                 children: [
-                  const Positioned.fill(child: KaraokeScreen()),
+                  // Double-click (double-tap on the tablet) for full screen;
+                  // double-click again there to come back.
+                  Positioned.fill(
+                    child: GestureDetector(
+                      key: const Key('output-screen'),
+                      onDoubleTap: widget.onFullScreen,
+                      child: const KaraokeScreen(),
+                    ),
+                  ),
                   Positioned(
                     right: 0,
                     bottom: 0,
