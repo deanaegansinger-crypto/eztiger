@@ -186,6 +186,41 @@ void main() {
     expect(state.results, hasLength(1));
   });
 
+  testWidgets('the queue is saved as a new playlist, then added to it again', (tester) async {
+    await pumpApp(tester);
+    Future<void> settle() async {
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    final tracks = state.results.map((g) => g.primary).toList();
+    await tester.runAsync(() => state.enqueueAll(tracks.sublist(0, 2)));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('save-queue')));
+    await settle();
+    await tester.tap(find.text('★ New playlist from the queue (2 songs)…'));
+    await settle();
+    await tester.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)), 'Saturday');
+    await tester.tap(find.text('OK'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await settle();
+    final saturday = state.playlists.singleWhere((p) => p.name == 'Saturday');
+    final saved = await tester.runAsync(() => db.playlists.tracks(saturday.id));
+    expect(saved!.map((t) => t.id), tracks.sublist(0, 2).map((t) => t.id));
+
+    // One more song in the queue, then "Add the queue to Saturday".
+    await tester.runAsync(() => state.enqueue(tracks[2]));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('save-queue')));
+    await settle();
+    await tester.tap(find.text('★ Add the queue to Saturday'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await settle();
+    expect(state.playlists.singleWhere((p) => p.name == 'Saturday').trackCount, 5);
+  });
+
   testWidgets('the seek bar skips through the song', (tester) async {
     await pumpApp(tester);
     await tester.runAsync(() => state.playNow(state.results.first.primary));

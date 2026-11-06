@@ -36,6 +36,7 @@ class QueuePanel extends StatelessWidget {
                   color: EzColors.brass,
                 ),
                 const Spacer(),
+                if (s.queue.isNotEmpty) const _SaveQueueButton(),
                 if (s.playedCount > 0)
                   TextButton(
                     key: const Key('clear-played'),
@@ -89,6 +90,48 @@ class QueuePanel extends StatelessWidget {
   }
 }
 
+/// "★ Save as playlist": the songs in the queue become a new playlist, or are
+/// added to one already made. It can also be dragged onto a playlist.
+class _SaveQueueButton extends StatelessWidget {
+  const _SaveQueueButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final tracks = [for (final e in s.queue) e.track];
+    final n = tracks.length == 1 ? '1 song' : '${tracks.length} songs';
+    final button = PopupMenuButton<String>(
+      key: const Key('save-queue'),
+      tooltip: 'Save the queue as a playlist',
+      itemBuilder: (_) => [
+        PopupMenuItem(value: 'new', child: Text('★ New playlist from the queue ($n)…')),
+        for (final p in s.playlists) PopupMenuItem(value: 'pl:${p.id}', child: Text('★ Add the queue to ${p.name}')),
+      ],
+      onSelected: (c) async {
+        if (c == 'new') {
+          final name = await askText(context, title: 'New playlist from the queue ($n)', label: 'Name');
+          if (name != null) await s.createPlaylist(name, tracks: tracks);
+        } else if (c.startsWith('pl:')) {
+          await s.addToPlaylist(int.parse(c.substring(3)), tracks);
+        }
+      },
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Text('★ Save as playlist', style: TextStyle(fontSize: 11, color: EzColors.brass)),
+      ),
+    );
+    // Dragging the button carries the whole queue, to drop on a playlist.
+    // (Marked as queue songs, so letting go over the queue changes nothing.)
+    final drag = SongDrag(tracks, queueIds: [for (final e in s.queue) e.id]);
+    return Draggable<SongDrag>(
+      data: drag,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: dragChip(drag),
+      child: button,
+    );
+  }
+}
+
 class _QueueRow extends StatelessWidget {
   const _QueueRow({super.key, required this.entry, required this.index});
   final QueueEntry entry;
@@ -108,11 +151,15 @@ class _QueueRow extends StatelessWidget {
       child: SongDraggable(
         data: drag,
         onMenu: (at) async {
-          final c = await showMenuAt<String>(context, at, const [
-            PopupMenuItem(value: 'play', child: Text('▶ Play now')),
-            PopupMenuItem(value: 'singer', child: Text('🎤 Set singer…')),
-            PopupMenuItem(value: 'edit', child: Text('✏️ Edit tags…')),
-            PopupMenuItem(value: 'remove', child: Text('✕ Remove')),
+          final c = await showMenuAt<String>(context, at, [
+            const PopupMenuItem(value: 'play', child: Text('▶ Play now')),
+            const PopupMenuItem(value: 'singer', child: Text('🎤 Set singer…')),
+            const PopupMenuItem(value: 'edit', child: Text('✏️ Edit tags…')),
+            const PopupMenuDivider(),
+            const PopupMenuItem(value: 'new', child: Text('★ New playlist with this song…')),
+            for (final p in s.playlists) PopupMenuItem(value: 'pl:${p.id}', child: Text('★ Add to ${p.name}')),
+            const PopupMenuDivider(),
+            const PopupMenuItem(value: 'remove', child: Text('✕ Remove')),
           ]);
           if (!context.mounted) return;
           switch (c) {
@@ -128,8 +175,13 @@ class _QueueRow extends StatelessWidget {
               if (name != null) await s.setSinger(entry, name);
             case 'edit':
               await showEditTags(context, t);
+            case 'new':
+              final name = await askText(context, title: 'New playlist', label: 'Name');
+              if (name != null) await s.createPlaylist(name, tracks: [t]);
             case 'remove':
               await s.removeFromQueue(entry);
+            default:
+              if (c != null && c.startsWith('pl:')) await s.addToPlaylist(int.parse(c.substring(3)), [t]);
           }
         },
         child: InkWell(

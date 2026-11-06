@@ -96,6 +96,8 @@ const _sections = <(String, List<String>)>[
     [
       'Select songs (click, Shift+click for a block, Ctrl+click to pick, Ctrl+A for all) and drag them onto a playlist or onto + Create.',
       'Ctrl+C copies the selected songs as a text list; Ctrl+V pastes a song list (from Notepad or an email) into an open playlist.',
+      'To keep the songs in the queue: press "★ Save as playlist" above the queue and give it a name, or add them to a playlist you already have. You can also drag that button onto a playlist.',
+      'Single songs in the queue: drag one onto a playlist, or right-click it for "★ Add to …".',
       'Right-click a playlist to open it, paste into it, save the queue to it, or send it all to the queue.',
     ],
   ),

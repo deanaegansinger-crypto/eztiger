@@ -653,7 +653,8 @@ class PlaylistsPanel extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(6),
             child: Text(
-              'Drag songs onto "+ Create" to make a playlist.',
+              'Drag songs from the list or the queue onto "+ Create" to make a playlist, '
+              'or press "★ Save as playlist" on the queue.',
               style: TextStyle(fontSize: 11, color: context.ez.textDim),
             ),
           ),
