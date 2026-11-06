@@ -1,3 +1,5 @@
+import '../edition.dart';
+
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
@@ -102,7 +104,7 @@ class _OutputPanelState extends State<OutputPanel> {
                   color: context.ez.raised,
                   child: Row(
                     children: [
-                      HeadText('Karaoke output', color: EzColors.brass),
+                      HeadText(isPro ? 'Lyrics output' : 'Karaoke output', color: EzColors.brass),
                       const Spacer(),
                       if (AppScope.secondScreenOf(context) case final second?)
                         Padding(

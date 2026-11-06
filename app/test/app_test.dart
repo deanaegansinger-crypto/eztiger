@@ -78,8 +78,8 @@ void main() {
       }
       expect(state.engine.keyShift, 3); // no further than 3 up
       expect(find.text('+3'), findsOneWidget);
-      expect(backend.audioFilter, audioFilterChain(keyShift: 3));
-      expect(backend.audioFilter, contains('asetrate=57082'));
+      expect(backend.pitch, closeTo(1.189207, 1e-6)); // 3 semitones up
+      expect(backend.audioFilter, ''); // the key needs no ffmpeg filter
       for (var i = 0; i < 8; i++) {
         await tester.tap(find.byKey(const Key('key-down')), warnIfMissed: false);
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
@@ -95,14 +95,14 @@ void main() {
       await tester.runAsync(() => state.playNow(tracks[1], autostart: false));
       await tester.pump();
       expect(state.engine.keyShift, 0);
-      expect(backend.audioFilter, '');
+      expect(backend.pitch, 1);
       expect(find.byKey(const Key('key-warning')), findsNothing);
 
       // ...and the first comes back in its changed key, with the warning.
       await tester.runAsync(() => state.playNow(tracks[0], autostart: false));
       await tester.pump();
       expect(state.engine.keyShift, -2);
-      expect(backend.audioFilter, audioFilterChain(keyShift: -2));
+      expect(backend.pitch, closeTo(0.890899, 1e-6)); // 2 semitones down
       expect(find.byKey(const Key('key-warning')), findsOneWidget);
       expect(find.text('KEY −2'), findsOneWidget);
 
@@ -151,7 +151,7 @@ void main() {
     });
 
     test('the filter graph is wrapped for mpv with its exact length', () {
-      final f = audioFilterChain(keyShift: 2, levelLoudness: true, vocalCut: true);
+      final f = audioFilterChain(levelLoudness: true, vocalCut: true);
       final m = RegExp(r'^lavfi=graph=%(\d+)%(.*)$').firstMatch(f)!;
       expect(m.group(2)!.length, int.parse(m.group(1)!));
       expect(audioFilterChain(), '');
@@ -170,7 +170,11 @@ void main() {
     // The tablet: the same songs, in another folder, with "Pop" as its library.
     final tab = Directory.systemTemp.createTempSync('eztiger_tablet');
     addTearDown(() => tab.deleteSync(recursive: true));
-    for (final f in ['SD/Pop/Abba - Waterloo.mp3', 'SD/Pop/Abba - Waterloo.cdg', 'SD/Rock/Bon Jovi - Livin On A Prayer.mp3']) {
+    for (final f in [
+      'SD/Pop/Abba - Waterloo.mp3',
+      'SD/Pop/Abba - Waterloo.cdg',
+      'SD/Rock/Bon Jovi - Livin On A Prayer.mp3',
+    ]) {
       File('${tab.path}/$f')
         ..parent.createSync(recursive: true)
         ..writeAsBytesSync(List.filled(f.endsWith('.cdg') ? 24 * 300 : 10, 0));
@@ -206,6 +210,8 @@ void main() {
     await tester.runAsync(() => db.setMeta('key_shifts', '{"x": 2}'));
     await pumpApp(tester);
     expect(find.byType(ProSoundRow), findsNothing);
+    expect(find.textContaining('QUEUE · '), findsOneWidget, reason: 'Basic keeps the word queue');
+    expect(find.textContaining("Tonight's playlist"), findsNothing);
     await tester.runAsync(() => state.playNow(state.results.first.primary, autostart: false));
     await tester.pump();
     expect(state.engine.keyShift, 0);
@@ -235,7 +241,7 @@ void main() {
 
     await tester.runAsync(() => state.enqueue(state.results.first.primary));
     await tester.pump();
-    expect(find.textContaining('QUEUE · 1 TO SING'), findsOneWidget);
+    expect(find.textContaining("TONIGHT'S PLAYLIST · 1 TO SING"), findsOneWidget);
     // Autocue loads the first song paused.
     expect(state.engine.current?.title, 'Livin On A Prayer');
     expect(backend.calls, contains('pause'));
@@ -408,7 +414,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('save-queue')));
     await settle();
-    await tester.tap(find.text('★ New playlist from the queue (2 songs)…'));
+    await tester.tap(find.text("★ New playlist from Tonight's playlist (2 songs)…"));
     await settle();
     await tester.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)), 'Saturday');
     await tester.tap(find.text('OK'));
@@ -423,10 +429,79 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const Key('save-queue')));
     await settle();
-    await tester.tap(find.text('★ Add the queue to Saturday'));
+    await tester.tap(find.text("★ Add Tonight's playlist to Saturday"));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await settle();
     expect(state.playlists.singleWhere((p) => p.name == 'Saturday').trackCount, 5);
+  });
+
+  testWidgets('Pro: a playlist changed in the queue is saved back over itself', (tester) async {
+    await pumpApp(tester);
+    Future<void> settle() async {
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    final tracks = state.results.map((g) => g.primary).toList();
+    final id = (await tester.runAsync(() => state.createPlaylist('Friday', tracks: tracks.sublist(0, 2))))!;
+    await tester.runAsync(() => state.loadPlaylistIntoQueue(id));
+    await settle();
+    expect(state.queuePlaylist?.name, 'Friday');
+    expect(
+      find.textContaining("TONIGHT'S PLAYLIST · "),
+      findsOneWidget,
+      reason: 'Pro calls the queue Tonight\'s playlist',
+    );
+    // Live changes: drop the first song, add the third.
+    await tester.runAsync(() async {
+      await state.removeFromQueue(state.queue.first);
+      await state.enqueue(tracks[2]);
+    });
+    await settle();
+    await tester.tap(find.byKey(const Key('save-changes-button')));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await settle();
+    final saved = await tester.runAsync(() => db.playlists.tracks(id));
+    expect(saved!.map((t) => t.id), [tracks[1].id, tracks[2].id]);
+    expect(state.playlists.singleWhere((p) => p.name == 'Friday').trackCount, 2);
+  });
+
+  testWidgets('Pro 2 decks: the decks sit side by side, with the crossfade slider', (tester) async {
+    state = AppState(
+      db,
+      KaraokeEngine(backend, scanEdges: scan),
+      deckB: KaraokeEngine(FakeBackend(), scanEdges: scan),
+    );
+    await pumpApp(tester);
+    await tester.runAsync(() => state.setTwoDecks(true));
+    await tester.pump();
+    expect(find.byKey(const Key('deck-A')), findsOneWidget);
+    expect(find.byKey(const Key('deck-B')), findsOneWidget);
+    final a = tester.getTopLeft(find.byKey(const Key('deck-A')));
+    final b = tester.getTopLeft(find.byKey(const Key('deck-B')));
+    expect(a.dy, b.dy, reason: 'side by side');
+    expect(b.dx, greaterThan(a.dx));
+    expect(tester.getSize(find.byKey(const Key('deck-A'))).height, lessThan(110), reason: 'not deep');
+
+    expect(find.byKey(const Key('xfade-style')), findsOneWidget);
+    final slider = tester.widget<Slider>(find.byKey(const Key('xfade-time')));
+    expect(slider.max, 6);
+    slider.onChanged!(0);
+    await tester.pump();
+    expect(state.fadeOutTime, Duration.zero);
+    expect(tester.widget<Text>(find.byKey(const Key('xfade-label'))).data, 'Cut');
+    slider.onChanged!(5.5);
+    await tester.pump();
+    expect(state.fadeOutTime, const Duration(milliseconds: 5500));
+    expect(tester.widget<Text>(find.byKey(const Key('xfade-label'))).data, '5.5s');
+    await tester.tap(find.text('In turn'));
+    await tester.pump();
+    expect(state.fadeOverlap, isFalse);
+    await tester.tap(find.text('Linear'));
+    await tester.pump();
+    expect(state.smoothFades, isFalse);
+    expect(state.decks.every((d) => !d.smoothFades), isTrue);
   });
 
   testWidgets('the seek bar skips through the song', (tester) async {
@@ -704,7 +779,8 @@ void main() {
     expect(backend.opensAt.last, const Duration(milliseconds: 9850));
   });
 
-  testWidgets('the fade-out length can be 4, 2 or 0.2 seconds, down to a third', (tester) async {
+  testWidgets('Basic: the fade-out length can be 4, 2 or 0.2 seconds, down to a third', (tester) async {
+    isPro = false;
     await pumpApp(tester);
     silentEnds();
     final tracks = state.results.map((g) => g.primary).toList();
@@ -949,8 +1025,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('➕ Add to queue'), findsOneWidget);
-    await tester.tap(find.text('➕ Add to queue'));
+    expect(find.text("➕ Add to Tonight's playlist"), findsOneWidget);
+    await tester.tap(find.text("➕ Add to Tonight's playlist"));
     await tester.pump(const Duration(milliseconds: 500));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
     await tester.pump(const Duration(milliseconds: 500));
@@ -974,7 +1050,7 @@ void main() {
     });
     await tester.pump(const Duration(milliseconds: 500));
     expect(state.queue.length, 2);
-    expect(find.text('➕ Add to queue'), findsNothing); // no menu after a real drag
+    expect(find.text("➕ Add to Tonight's playlist"), findsNothing); // no menu after a real drag
   });
 
   testWidgets('tablet: holding a queued song still opens its menu', (tester) async {
@@ -1163,6 +1239,33 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 2200));
       expect(two.standby!.current?.id, tracks[2].id, reason: 'then deck A takes the song after');
       expect(two.queue.where((e) => !e.played).length, 2);
+    });
+
+    test(
+      'double-click while a song plays: it waits on the free deck, the old next song moves back to second',
+      () async {
+        final tracks = await queueAll();
+        await two.playPause();
+        expect(two.standby!.current?.id, tracks[1].id);
+        await two.loadNext([tracks[2]]);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        expect(two.standby!.current?.id, tracks[2].id, reason: 'the picked song is on the free deck');
+        final waiting = two.queue.where((e) => !e.played).map((e) => e.track.id).toList();
+        expect(waiting.indexOf(tracks[2].id), lessThan(waiting.lastIndexOf(tracks[1].id)));
+        expect(two.engine.current?.id, tracks[0].id, reason: 'the live song keeps playing');
+        expect(two.engine.playing, isTrue);
+      },
+    );
+
+    test('mix now brings in the waiting deck at once', () async {
+      final tracks = await queueAll();
+      two.setFadeOut(const Duration(milliseconds: 300));
+      await two.playPause();
+      await two.mixNow();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(two.liveDeck, 1);
+      expect(two.engine.current?.id, tracks[1].id);
+      expect(two.engine.playing, isTrue);
     });
 
     test('turning 2 decks off stops the waiting deck; it is remembered', () async {

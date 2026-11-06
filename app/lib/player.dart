@@ -24,6 +24,10 @@ abstract class MediaBackend {
 
   /// Sets mpv's audio filter chain (see [audioFilterChain]); '' clears it.
   Future<void> setAudioFilter(String filter);
+
+  /// Moves the pitch by [ratio] (1 = the song's own key) without changing
+  /// the tempo.
+  Future<void> setPitch(double ratio);
   Stream<Duration> get position;
   Stream<Duration> get duration;
   Stream<bool> get playing;
@@ -89,6 +93,9 @@ class KaraokeEngine extends ChangeNotifier {
   double volume = 80;
   bool muted = false;
   String? error;
+
+  /// Pro: fades follow an equal-power curve instead of a straight line.
+  bool smoothFades = false;
 
   /// Pro: the key, in semitones up (+) or down (-), from [minKey] to [maxKey].
   int keyShift = 0;
@@ -276,14 +283,22 @@ class KaraokeEngine extends ChangeNotifier {
     notifyListeners();
   }
 
+  double _appliedPitch = 1;
+
   Future<void> _applyFilter() async {
-    final f = audioFilterChain(keyShift: keyShift, levelLoudness: levelLoudness, vocalCut: vocalCut);
-    if (f == _appliedFilter) return;
-    _appliedFilter = f;
+    final f = audioFilterChain(levelLoudness: levelLoudness, vocalCut: vocalCut);
+    final pitch = keyRatio(keyShift);
     try {
-      await backend.setAudioFilter(f);
+      if (f != _appliedFilter) {
+        _appliedFilter = f;
+        await backend.setAudioFilter(f);
+      }
+      if (pitch != _appliedPitch) {
+        _appliedPitch = pitch;
+        await backend.setPitch(pitch);
+      }
     } catch (_) {
-      // A player without filters still plays, in the song's own key.
+      // A player that can't do it still plays, as the song is.
     }
   }
 
@@ -315,7 +330,11 @@ class KaraokeEngine extends ChangeNotifier {
     for (var i = 1; i <= steps; i++) {
       await Future<void>.delayed(over ~/ steps);
       if (id != _fadeId) return false;
-      await backend.setVolume((muted ? 0 : volume) * (from + (to - from) * i / steps));
+      final t = i / steps;
+      // Smooth: an equal-power curve, so an overlapping mix doesn't dip in
+      // the middle. Otherwise a straight line.
+      final k = smoothFades ? (to < from ? 1 - math.cos(t * math.pi / 2) : math.sin(t * math.pi / 2)) : t;
+      await backend.setVolume((muted ? 0 : volume) * (from + (to - from) * k));
     }
     return id == _fadeId;
   }
@@ -377,32 +396,29 @@ class KaraokeEngine extends ChangeNotifier {
   }
 }
 
+/// The pitch ratio for a key change of [semitones].
+double keyRatio(int semitones) => semitones == 0 ? 1 : math.pow(2, semitones / 12).toDouble();
+
 /// The mpv audio filter chain for the Pro sound options: an ffmpeg filter
 /// graph wrapped as mpv's `lavfi` filter, or '' when nothing is switched on.
 ///
-/// * Key change: speeds the sound up (or down) by the key's ratio, which
-///   raises (or lowers) the pitch, then time-stretches it back to the
-///   song's own speed, so the song and the CDG lyrics stay in time.
 /// * Vocal cut: the left channel minus the right (and the other way round)
 ///   cancels whatever is panned to the middle, usually the lead vocal.
 ///   The bass and kick drum are usually in the middle too, so the sound
 ///   below 150 Hz is kept as it was.
 /// * Even out loudness: ffmpeg's loudnorm (EBU R128), aiming every song at
 ///   the same loudness as it plays.
-String audioFilterChain({int keyShift = 0, bool levelLoudness = false, bool vocalCut = false}) {
+///
+/// The key change isn't here: it goes through mpv's own speed and
+/// scaletempo (see [MediaBackend.setPitch]), which every libmpv build has;
+/// the ffmpeg filters here need a libmpv built with them.
+String audioFilterChain({bool levelLoudness = false, bool vocalCut = false}) {
   const rate = 48000;
   final parts = <String>[];
   if (vocalCut) {
     parts.add(
       'aformat=channel_layouts=stereo,asplit=2[full][side];[full]lowpass=f=150[low];'
       '[side]highpass=f=150,pan=stereo|c0=c0-c1|c1=c1-c0[high];[low][high]amix=inputs=2:normalize=0',
-    );
-  }
-  if (keyShift != 0) {
-    final ratio = math.pow(2, keyShift / 12);
-    parts.add(
-      'aresample=$rate,asetrate=${(rate * ratio).round()},aresample=$rate,'
-      'atempo=${(1 / ratio).toStringAsFixed(6)}',
     );
   }
   if (levelLoudness) parts.add('loudnorm=I=-16:TP=-1.5:LRA=11,aresample=$rate');

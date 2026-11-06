@@ -70,6 +70,33 @@ jobs:
           flutter build windows --release --dart-define=EZ_EDITION=pro
           if ($LASTEXITCODE -ne 0) { throw "Pro build failed" }
 
+      # Pro's Level and Vocal cut need ffmpeg filters (loudnorm, lowpass,
+      # highpass, amix, asplit) that media_kit's bundled libmpv leaves out.
+      # Swap in a full libmpv build, pinned by name and SHA-256 (Dean OK'd
+      # this on 2026-11-06). Basic keeps the bundled one.
+      - name: Full libmpv for Pro
+        shell: pwsh
+        env:
+          LIBMPV_NAME: mpv-dev-x86_64-20261018-git-01e2533f31.7z
+          LIBMPV_SHA256: d7f5621f42b6e161fe032df914a10bdece28a89df3e57c6c3e16a5a250929b5e
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP libmpv
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          $archive = Join-Path $dir $env:LIBMPV_NAME
+          $url = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/$($env:LIBMPV_NAME)/download"
+          for ($i = 1; $i -le 4; $i++) {
+            curl.exe -fsSL --retry 3 -A "Wget/1.21" -o $archive $url
+            if ($LASTEXITCODE -eq 0 -and (Get-FileHash $archive -Algorithm SHA256).Hash -eq $env:LIBMPV_SHA256) { break }
+            if ($i -eq 4) { throw "Could not download $($env:LIBMPV_NAME) with the expected SHA-256" }
+            Start-Sleep -Seconds (2 * $i)
+          }
+          7z e $archive -o"$dir\out" libmpv-2.dll -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "7z failed" }
+          $release = "build\windows\x64\runner\Release"
+          if (-not (Test-Path "$release\libmpv-2.dll")) { throw "No bundled libmpv-2.dll to replace in $release" }
+          Copy-Item "$dir\out\libmpv-2.dll" "$release\libmpv-2.dll" -Force
+          Get-Item "$release\libmpv-2.dll" | Format-Table Name, Length
+
       - name: Make the Pro installer
         shell: pwsh
         working-directory: installer
