@@ -504,6 +504,36 @@ void main() {
     expect(state.decks.every((d) => !d.smoothFades), isTrue);
   });
 
+  testWidgets('Pro 2 decks, Stage view: both decks across the top, the transport on them', (tester) async {
+    state = AppState(
+      db,
+      KaraokeEngine(backend, scanEdges: scan),
+      deckB: KaraokeEngine(FakeBackend(), scanEdges: scan),
+    );
+    await pumpApp(tester);
+    await tester.runAsync(() async {
+      for (final g in state.results) {
+        await state.enqueue(g.primary);
+      }
+    });
+    await tester.pump();
+    await tester.runAsync(() => state.setTwoDecks(true));
+    await tester.pump();
+    state.setStageView(true);
+    await tester.pump();
+    final a = tester.getRect(find.byKey(const Key('deck-A')));
+    final b = tester.getRect(find.byKey(const Key('deck-B')));
+    expect(a.top, b.top);
+    expect(a.top, lessThan(20), reason: 'at the top of the screen');
+    expect(b.right - a.left, greaterThan(1300), reason: 'across the whole width');
+    expect(a.height, lessThan(170), reason: 'about half the old player block');
+    expect(find.byKey(const Key('stage-play')), findsNothing, reason: 'the transport is on the deck');
+    expect(find.byKey(const Key('stage-lyrics')), findsOneWidget);
+    expect(tester.getRect(find.byKey(const Key('stage-lyrics'))).top, greaterThan(a.bottom));
+    expect(find.byKey(const Key('deck-A-play')), findsOneWidget);
+    expect(find.byKey(const Key('deck-B-mix')), findsOneWidget);
+  });
+
   testWidgets('the seek bar skips through the song', (tester) async {
     await pumpApp(tester);
     await tester.runAsync(() => state.playNow(state.results.first.primary));
