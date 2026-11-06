@@ -3,8 +3,12 @@ import 'package:flutter/material.dart';
 
 import '../app_state.dart';
 import '../platform.dart';
+import '../player.dart';
 import '../second_screen.dart';
 import '../theme.dart';
+
+/// Builds the video surface of one player.
+typedef VideoBuilder = Widget Function(BuildContext context, KaraokeEngine engine);
 
 /// Gives every widget below it the [AppState], and rebuilds them when it
 /// changes.
@@ -13,13 +17,13 @@ class AppScope extends InheritedNotifier<AppState> {
     : super(notifier: state);
 
   /// Builds the video surface for video tracks (null in tests).
-  final WidgetBuilder? videoBuilder;
+  final VideoBuilder? videoBuilder;
 
   /// Opens the output on a second screen (null in tests).
   final SecondScreen? secondScreen;
 
   static AppState of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<AppScope>()!.notifier!;
-  static WidgetBuilder? videoOf(BuildContext context) =>
+  static VideoBuilder? videoOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AppScope>()!.videoBuilder;
   static SecondScreen? secondScreenOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AppScope>()!.secondScreen;
@@ -88,17 +92,13 @@ class EzSwitch extends StatelessWidget {
 }
 
 class Segmented<T> extends StatelessWidget {
-  const Segmented({
-    super.key,
-    required this.options,
-    required this.value,
-    required this.onChanged,
-    this.accent = EzColors.cyan,
-  });
+  const Segmented({super.key, required this.options, required this.value, required this.onChanged, this.accent});
+
+  /// The colour of the picked button (the skin's second accent if none).
+  final Color? accent;
   final Map<T, String> options;
   final T value;
   final ValueChanged<T> onChanged;
-  final Color accent;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -118,7 +118,7 @@ class Segmented<T> extends StatelessWidget {
             child: Container(
               padding: EdgeInsets.symmetric(horizontal: touchUi ? 14 : 9, vertical: touchUi ? 9 : 3),
               decoration: BoxDecoration(
-                color: e.key == value ? accent : Colors.transparent,
+                color: e.key == value ? (accent ?? EzColors.cyan) : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
@@ -189,7 +189,7 @@ Widget dragChip(SongDrag d) => Material(
     decoration: BoxDecoration(color: EzColors.brass, borderRadius: BorderRadius.circular(6)),
     child: Text(
       d.tracks.length == 1 ? d.tracks.first.title : '${d.tracks.length} songs',
-      style: const TextStyle(color: EzColors.onBrass, fontWeight: FontWeight.w700, fontSize: 12),
+      style: TextStyle(color: EzColors.onBrass, fontWeight: FontWeight.w700, fontSize: 12),
     ),
   ),
 );
