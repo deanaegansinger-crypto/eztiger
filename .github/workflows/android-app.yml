@@ -42,9 +42,19 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/eztiger.p12"
+            # Pasted secrets can pick up spaces or line breaks: drop them.
+            printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/eztiger.p12"
+            password=$(printf '%s' "$KEYSTORE_PASSWORD" | tr -d '[:space:]')
+            # The key file's fingerprint and the password length aren't secret,
+            # and show which of the two secrets is off if signing fails.
+            echo "Key file SHA-256: $(sha256sum "$RUNNER_TEMP/eztiger.p12" | cut -c1-64) (expected 63f8151f…be54)"
+            echo "Password length: ${#password} (expected 32)"
+            if ! keytool -list -keystore "$RUNNER_TEMP/eztiger.p12" -storetype PKCS12 -storepass "$password" > /dev/null 2>&1; then
+              echo "::error::The ANDROID_KEYSTORE_PASSWORD secret doesn't open the ANDROID_KEYSTORE_BASE64 key. Check both were pasted whole, and not swapped."
+              exit 1
+            fi
             echo "EZTIGER_KEYSTORE=$RUNNER_TEMP/eztiger.p12" >> "$GITHUB_ENV"
-            echo "EZTIGER_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "EZTIGER_KEYSTORE_PASSWORD=$password" >> "$GITHUB_ENV"
           else
             echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: signed with a throwaway debug key, so this APK won't install over an earlier one."
           fi
