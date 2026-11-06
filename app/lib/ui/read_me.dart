@@ -34,7 +34,9 @@ Future<void> showReadMe(BuildContext context) => showDialog<void>(
                 ),
               ),
               for (final (head, lines)
-                  in touchUi ? [_tablet, ..._sections.where((x) => x != _secondScreen)] : _sections) ...[
+                  in touchUi
+                      ? [_tablet, ..._sections.where((x) => x != _secondScreen)]
+                      : [if (isPro) _pro, ..._sections]) ...[
                 Padding(
                   padding: const EdgeInsets.only(top: 10, bottom: 4),
                   child: HeadText(head, color: EzColors.brass),
@@ -58,6 +60,18 @@ Future<void> showReadMe(BuildContext context) => showDialog<void>(
     ),
     actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
   ),
+);
+
+const _pro = (
+  'EZTiger Pro',
+  [
+    'KEY, under the volume: − and + move the song down or up a semitone, as far as 3 either way. The 0 in the middle puts it back. EZTiger remembers the key for each song, and when a song loads in a changed key, "KEY +2" (or −) flashes red on the player and the Stage view.',
+    'Level, under the volume: evens out the loudness, so quiet and loud MP3s and videos play at about the same level. It takes a moment to settle at the start of a song.',
+    'Vocal cut, under the volume: takes out the lead vocal on most stereo tracks (it cancels what sits in the middle, and keeps the bass). It works best on studio recordings; reverb and backing vocals can still come through.',
+    '2 decks (☰ Menu, under Playback): two players share the one queue and take turns. While one plays, the next song waits ready on the other, so it starts straight away; with Crossfade on, the two songs overlap as one fades out and the next comes in.',
+    'Skins (☰ Menu → Skin): six looks for the whole app.',
+    'Sync PC ⇄ tablet (☰ Menu): Save sync file writes your playlists and song keys to EZtiger-sync.json. Copy it to the tablet (or put it in the library folder before you copy that), then Load sync file there. It works the other way round too. Songs are matched by where they sit in the library folder, or by file name.',
+  ],
 );
 
 const _sections = <(String, List<String>)>[
@@ -92,7 +106,6 @@ const _sections = <(String, List<String>)>[
       'Autocue and Crossfade are in the ☰ Menu, under Playback.',
       'Autocue loads the next song ready to go, and starts it at its first note, past the silence at the start.',
       'Crossfade fades out before the silence at the end of a song (over 4 s, 2 s or 0.2 s, down to a third of the volume) and brings the next song in at its first note.',
-      '2 decks (trial, in the ☰ Menu under Playback, on Windows): two players share the one queue and take turns. While one plays, the next song waits ready on the other, so it starts straight away; with Crossfade on, the two songs overlap as one fades out and the next comes in.',
     ],
   ),
   (
@@ -133,5 +146,6 @@ const _tablet = (
     'Double-tap a song to load it into the player. Press and hold a song, then move your finger to drag it onto the queue, the player or a playlist.',
     'Press and hold and let go without moving for the menu (what right-click does on Windows): add to queue, set the singer, playlists and more.',
     'Double-tap the karaoke output panel for full screen lyrics; double-tap again or press Back to come out of it. The screen stays on while EZtiger is open.',
+    'Sync with the PC (☰ Menu): Load sync file brings in the playlists and song keys saved by EZTiger Pro on the PC; Save sync file sends yours back.',
   ],
 );

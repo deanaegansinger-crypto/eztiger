@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
@@ -7,6 +9,7 @@ import 'package:flutter/services.dart';
 import '../app_state.dart';
 import '../edition.dart';
 import '../platform.dart';
+import '../sync.dart';
 import 'android_folders.dart';
 import '../theme.dart';
 import 'common.dart';
@@ -73,26 +76,48 @@ class _BrandRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        // "BASIC" over "BY DEANO", stacked to save width.
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              decoration: BoxDecoration(
-                border: Border.all(color: EzColors.cyan),
-                borderRadius: BorderRadius.circular(3),
+        // Pro: a big gold PRO badge.
+        if (isPro) ...[
+          Container(
+            key: const Key('pro-badge'),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFFFFDE78), Color(0xFFC48A1E)],
               ),
-              child: Text(
-                'BASIC',
-                style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: EzColors.cyan, letterSpacing: 1.5),
-              ),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: const Color(0xFF7A5410)),
             ),
-            const SizedBox(height: 1),
-            Text('BY DEANO', style: TextStyle(fontSize: 8, color: context.ez.textDim, letterSpacing: 1.2)),
-          ],
-        ),
+            child: const Text(
+              'PRO',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF1A1206), letterSpacing: 2),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text('BY DEANO', style: TextStyle(fontSize: 8, color: context.ez.textDim, letterSpacing: 1.2)),
+        ] else
+          // "BASIC" over "BY DEANO", stacked to save width.
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  border: Border.all(color: EzColors.cyan),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Text(
+                  'BASIC',
+                  style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: EzColors.cyan, letterSpacing: 1.5),
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text('BY DEANO', style: TextStyle(fontSize: 8, color: context.ez.textDim, letterSpacing: 1.2)),
+            ],
+          ),
         const Spacer(),
         TextButton.icon(
           key: const Key('stage-view'),
@@ -175,29 +200,47 @@ class _MainMenu extends StatelessWidget {
             onChanged: s.setFadeOut,
           ),
         ),
+        if (s.canSync) ...[
+          const PopupMenuDivider(),
+          const PopupMenuItem(
+            enabled: false,
+            height: 28,
+            child: Text('SYNC PC ⇄ TABLET', style: TextStyle(fontSize: 11, letterSpacing: 1)),
+          ),
+          const PopupMenuItem(
+            key: Key('sync-save'),
+            value: 'sync-save',
+            child: Row(children: [Icon(Icons.upload_file, size: 18), SizedBox(width: 10), Text('Save sync file…')]),
+          ),
+          const PopupMenuItem(
+            key: Key('sync-load'),
+            value: 'sync-load',
+            child: Row(children: [Icon(Icons.download, size: 18), SizedBox(width: 10), Text('Load sync file…')]),
+          ),
+        ],
         const PopupMenuDivider(),
         if (isPro)
           PopupMenuItem(
-          key: const Key('menu-skin'),
-          value: 'skins',
-          child: Row(
-            children: [
-              const Icon(Icons.palette_outlined, size: 18),
-              const SizedBox(width: 10),
-              const Text('Skin'),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  EzSkin.byId(s.skin).name,
-                  textAlign: TextAlign.right,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, color: EzColors.cyan),
+            key: const Key('menu-skin'),
+            value: 'skins',
+            child: Row(
+              children: [
+                const Icon(Icons.palette_outlined, size: 18),
+                const SizedBox(width: 10),
+                const Text('Skin'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    EzSkin.byId(s.skin).name,
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: EzColors.cyan),
+                  ),
                 ),
-              ),
-              const Icon(Icons.chevron_right, size: 18),
-            ],
+                const Icon(Icons.chevron_right, size: 18),
+              ],
+            ),
           ),
-        ),
         if (EzSkin.byId(s.skin).hasLightScreen)
           _menuRow(
             menu,
@@ -236,6 +279,10 @@ class _MainMenu extends StatelessWidget {
           s.toggleAutocue();
         } else if (c == 'crossfade') {
           s.toggleCrossfade();
+        } else if (c == 'sync-save') {
+          saveSyncFile(context, s);
+        } else if (c == 'sync-load') {
+          loadSyncFile(context, s);
         } else if (c == 'two-decks') {
           s.setTwoDecks(!s.twoDecks);
         } else if (c.startsWith('scale:')) {
@@ -254,6 +301,46 @@ class _MainMenu extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Pro: saves the playlists and keys to EZtiger-sync.json, to load on the
+/// tablet (or the PC). It starts in the library folder, so a copy of the
+/// library takes it along.
+Future<void> saveSyncFile(BuildContext context, AppState s) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  try {
+    final json = await s.exportSync();
+    final uri = await FilePicker.saveFile(
+      dialogTitle: 'Save the sync file for the tablet or PC',
+      fileName: LibrarySync.fileName,
+      bytes: Uint8List.fromList(utf8.encode(json)),
+      mimeType: 'application/json',
+      initialDirectory: s.roots.firstOrNull?.path,
+    );
+    if (uri != null) {
+      messenger?.showSnackBar(const SnackBar(content: Text('Sync file saved. Load it on the other machine.')));
+    }
+  } catch (e) {
+    messenger?.showSnackBar(SnackBar(content: Text('Could not save the sync file: $e')));
+  }
+}
+
+/// Pro: loads a sync file saved on the other machine.
+Future<void> loadSyncFile(BuildContext context, AppState s) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  try {
+    final files = await FilePicker.pickFiles(
+      dialogTitle: 'Load a sync file from the tablet or PC',
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+      initialDirectory: s.roots.firstOrNull?.path,
+    );
+    if (files.isEmpty) return;
+    final result = await s.importSync(await files.first.xFile.readAsString());
+    messenger?.showSnackBar(SnackBar(content: Text(result.summary), duration: const Duration(seconds: 6)));
+  } catch (e) {
+    messenger?.showSnackBar(SnackBar(content: Text('Could not load the sync file: $e')));
   }
 }
 

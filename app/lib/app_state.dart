@@ -5,7 +5,9 @@ import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/foundation.dart';
 
 import 'edition.dart';
+import 'platform.dart';
 import 'player.dart';
+import 'sync.dart';
 import 'ui/common.dart' show SongDrag;
 
 enum PlayMode { single, autoplay }
@@ -273,6 +275,19 @@ class AppState extends ChangeNotifier {
       keyShifts[t.path] = semitones;
     }
     unawaited(db.setMeta('key_shifts', jsonEncode(keyShifts)).catchError((_) {}));
+  }
+
+  /// Sync with the tablet (or the PC): playlists and keys, as one file.
+  /// On in Pro, and on the tablet so it can swap with the PC.
+  bool get canSync => isPro || touchUi;
+
+  Future<String> exportSync() => LibrarySync(db).export(keyShifts: keyShifts);
+
+  Future<SyncResult> importSync(String json) async {
+    final r = await LibrarySync(db).import(json, keyShifts: keyShifts);
+    await db.setMeta('key_shifts', jsonEncode(keyShifts));
+    await _reloadPlaylists();
+    return r;
   }
 
   /// Key up or down a semitone for the song on the player (−3 to +3).

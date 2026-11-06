@@ -158,6 +158,49 @@ void main() {
     });
   });
 
+  test('sync: playlists and keys go from the PC to a tablet with the library somewhere else', () async {
+    await state.init(rescanLibrary: false);
+    await state.addRootFolder(lib.path);
+    final all = {for (final g in state.results) g.primary.fileName: g.primary};
+    final waterloo = all['Abba - Waterloo.mp3']!, prayer = all['Bon Jovi - Livin On A Prayer.mp3']!;
+    await state.createPlaylist('Friday', tracks: [prayer, waterloo]);
+    state.keyShifts[waterloo.path] = -2;
+    final json = await state.exportSync();
+
+    // The tablet: the same songs, in another folder, with "Pop" as its library.
+    final tab = Directory.systemTemp.createTempSync('eztiger_tablet');
+    addTearDown(() => tab.deleteSync(recursive: true));
+    for (final f in ['SD/Pop/Abba - Waterloo.mp3', 'SD/Pop/Abba - Waterloo.cdg', 'SD/Rock/Bon Jovi - Livin On A Prayer.mp3']) {
+      File('${tab.path}/$f')
+        ..parent.createSync(recursive: true)
+        ..writeAsBytesSync(List.filled(f.endsWith('.cdg') ? 24 * 300 : 10, 0));
+    }
+    final tdb = await EztigerDatabase.open(databaseFactoryFfiNoIsolate, inMemoryDatabasePath);
+    addTearDown(tdb.close);
+    final tablet = AppState(tdb, KaraokeEngine(FakeBackend(), scanEdges: scan));
+    await tablet.init(rescanLibrary: false);
+    await tablet.addRootFolder('${tab.path}/SD/Pop');
+    await tablet.addRootFolder('${tab.path}/SD/Rock');
+    final r = await tablet.importSync(json);
+    expect(r.playlists, 1);
+    expect(r.songs, 2);
+    expect(r.keys, 1);
+    expect(r.missing, isEmpty);
+    final pl = tablet.playlists.single;
+    expect(pl.name, 'Friday');
+    final songs = await tdb.playlists.tracks(pl.id);
+    expect(songs.map((t) => t.fileName), ['Bon Jovi - Livin On A Prayer.mp3', 'Abba - Waterloo.mp3']);
+    expect(tablet.keyShifts[songs[1].path], -2);
+    // Saved, so the tablet keeps the key after a restart.
+    expect(await tdb.getMeta('key_shifts'), contains('-2'));
+
+    // Loading it again replaces the playlist instead of doubling it.
+    await tablet.importSync(json);
+    expect(tablet.playlists.length, 1);
+    expect(tablet.playlists.single.trackCount, 2);
+    await expectLater(tablet.importSync('{"x": 1}'), throwsFormatException);
+  });
+
   testWidgets('EZTiger Basic has no Pro sound controls, skins or second deck', (tester) async {
     isPro = false;
     await tester.runAsync(() => db.setMeta('key_shifts', '{"x": 2}'));
@@ -783,9 +826,8 @@ void main() {
     expect(state.engine.playing, isTrue);
 
     // The time and the seek bar follow the song as it plays.
-    Slider stageSeek() => tester.widget<Slider>(
-      find.descendant(of: find.byType(StageView), matching: find.byType(Slider)).first,
-    );
+    Slider stageSeek() =>
+        tester.widget<Slider>(find.descendant(of: find.byType(StageView), matching: find.byType(Slider)).first);
     await tester.runAsync(() async {
       backend.at(const Duration(minutes: 1));
       await Future<void>.delayed(const Duration(milliseconds: 20));
