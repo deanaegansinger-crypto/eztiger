@@ -11,7 +11,10 @@ import 'pro_sound.dart';
 /// waiting to come in. Drop a song on either: on the live deck it plays
 /// now, on the other it becomes the next song.
 class TwinDecks extends StatelessWidget {
-  const TwinDecks({super.key});
+  const TwinDecks({super.key, this.stage = false});
+
+  /// The Stage view's larger decks, across the top of the whole screen.
+  final bool stage;
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +24,12 @@ class TwinDecks extends StatelessWidget {
       builder: (context, _) => Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final i in [0, 1]) ...[if (i == 1) const SizedBox(width: 8), Expanded(child: _DeckCard(index: i))],
+          for (final i in [0, 1]) ...[
+            if (i == 1) const SizedBox(width: 8),
+            Expanded(
+              child: _DeckCard(index: i, z: stage ? 1.7 : 1),
+            ),
+          ],
         ],
       ),
     );
@@ -29,8 +37,11 @@ class TwinDecks extends StatelessWidget {
 }
 
 class _DeckCard extends StatelessWidget {
-  const _DeckCard({required this.index});
+  const _DeckCard({required this.index, this.z = 1});
   final int index;
+
+  /// Size: 1 under the library, larger in the Stage view.
+  final double z;
 
   @override
   Widget build(BuildContext context) {
@@ -48,10 +59,10 @@ class _DeckCard extends StatelessWidget {
       key: Key('deck-$name'),
       onAcceptWithDetails: (d) => live ? s.dropOnPlayer(d.data) : s.loadNext(d.data.tracks, queueIds: d.data.queueIds),
       builder: (context, cand, _) => Container(
-        padding: const EdgeInsets.fromLTRB(8, 5, 6, 4),
+        padding: EdgeInsets.fromLTRB(8 * z, 5 * z, 6 * z, 4 * z),
         decoration: BoxDecoration(
           color: EzColors.vfdBg,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(6 * z),
           border: Border.all(
             color: cand.isNotEmpty ? EzColors.cyan : (live ? EzColors.brass : const Color(0xFF0E2A2A)),
             width: cand.isNotEmpty || live ? 2 : 1,
@@ -65,25 +76,30 @@ class _DeckCard extends StatelessWidget {
               children: [
                 Text(
                   'DECK $name',
-                  style: TextStyle(fontFamily: vfdFont, fontSize: 9, fontWeight: FontWeight.w800, color: EzColors.cyan),
+                  style: TextStyle(
+                    fontFamily: vfdFont,
+                    fontSize: 9 * z,
+                    fontWeight: FontWeight.w800,
+                    color: EzColors.cyan,
+                  ),
                 ),
                 const SizedBox(width: 6),
                 Text(
                   cand.isNotEmpty ? (live ? 'DROP TO PLAY NOW' : 'DROP FOR NEXT') : status,
                   style: TextStyle(
                     fontFamily: vfdFont,
-                    fontSize: 9,
+                    fontSize: 9 * z,
                     letterSpacing: 1.5,
                     color: live && e.playing ? EzColors.red : EzColors.vfdSub,
                   ),
                 ),
                 const SizedBox(width: 6),
-                KeyWarning(engine: e, fontSize: 9),
+                KeyWarning(engine: e, fontSize: 9 * z),
                 const Spacer(),
                 if (t != null && e.duration > Duration.zero)
                   Text(
                     '-${fmt(left.isNegative ? Duration.zero : left)}',
-                    style: TextStyle(fontFamily: vfdFont, fontSize: 11, color: EzColors.vfdSub),
+                    style: TextStyle(fontFamily: vfdFont, fontSize: 11 * z * (z > 1 ? 1.2 : 1), color: Colors.white),
                   ),
               ],
             ),
@@ -93,7 +109,7 @@ class _DeckCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontFamily: vfdFont,
-                fontSize: 13,
+                fontSize: 13 * z,
                 fontWeight: FontWeight.w700,
                 color: e.error != null ? EzColors.red : (t == null ? EzColors.vfdSub : EzColors.brass),
               ),
@@ -105,21 +121,23 @@ class _DeckCard extends StatelessWidget {
                     [if (t?.artist != null) t!.artist!, if (e.singer != null) '🎤 ${e.singer}'].join(' · '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontFamily: vfdFont, fontSize: 10, color: EzColors.cyan),
+                    style: TextStyle(fontFamily: vfdFont, fontSize: 10 * z, color: EzColors.cyan),
                   ),
                 ),
                 if (live) ...[
-                  _Mini(icon: Icons.skip_previous, tooltip: 'Back to the start', onTap: s.previous),
+                  _Mini(z: z, icon: Icons.skip_previous, tooltip: 'Back to the start', onTap: s.previous),
                   _Mini(
+                    z: z,
                     key: Key('deck-$name-play'),
                     icon: e.playing ? Icons.pause : Icons.play_arrow,
                     tooltip: e.playing ? 'Pause' : 'Play',
                     primary: true,
                     onTap: s.playPause,
                   ),
-                  _Mini(icon: Icons.skip_next, tooltip: 'Next singer', onTap: s.next),
+                  _Mini(z: z, icon: Icons.skip_next, tooltip: 'Next singer', onTap: s.next),
                 ] else if (waiting)
                   _Mini(
+                    z: z,
                     key: Key('deck-$name-mix'),
                     icon: Icons.swap_horiz,
                     tooltip: 'Mix into this song now',
@@ -128,8 +146,8 @@ class _DeckCard extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 3),
-            _DeckProgress(engine: e),
+            SizedBox(height: 3 * z),
+            _DeckProgress(engine: e, z: z),
           ],
         ),
       ),
@@ -139,8 +157,9 @@ class _DeckCard extends StatelessWidget {
 
 /// A thin progress bar; click or drag it on the live deck to skip.
 class _DeckProgress extends StatelessWidget {
-  const _DeckProgress({required this.engine});
+  const _DeckProgress({required this.engine, this.z = 1});
   final KaraokeEngine engine;
+  final double z;
 
   @override
   Widget build(BuildContext context) {
@@ -153,13 +172,13 @@ class _DeckProgress extends StatelessWidget {
             ? null
             : (d) => engine.seek(Duration(milliseconds: (total * d.localPosition.dx / c.maxWidth).round())),
         child: SizedBox(
-          height: 8,
+          height: 8 * z,
           child: Center(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(2),
               child: LinearProgressIndicator(
                 value: at,
-                minHeight: 4,
+                minHeight: 4 * z,
                 color: EzColors.cyan,
                 backgroundColor: const Color(0xFF0E2A2A),
               ),
@@ -172,7 +191,15 @@ class _DeckProgress extends StatelessWidget {
 }
 
 class _Mini extends StatelessWidget {
-  const _Mini({super.key, required this.icon, required this.tooltip, required this.onTap, this.primary = false});
+  const _Mini({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.primary = false,
+    this.z = 1,
+  });
+  final double z;
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
@@ -180,7 +207,7 @@ class _Mini extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(left: 3),
+    padding: EdgeInsets.only(left: 3 * z),
     child: Tooltip(
       message: tooltip,
       child: Material(
@@ -190,9 +217,9 @@ class _Mini extends StatelessWidget {
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(
-            width: primary ? 30 : 26,
-            height: primary ? 30 : 26,
-            child: Icon(icon, size: primary ? 20 : 16, color: primary ? EzColors.onBrass : context.ez.text),
+            width: (primary ? 30 : 26) * z,
+            height: (primary ? 30 : 26) * z,
+            child: Icon(icon, size: (primary ? 20 : 16) * z, color: primary ? EzColors.onBrass : context.ez.text),
           ),
         ),
       ),

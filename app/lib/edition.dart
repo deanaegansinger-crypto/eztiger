@@ -3,7 +3,11 @@
 /// features. Build Pro with `--dart-define=EZ_EDITION=pro`.
 const bool _builtAsPro = String.fromEnvironment('EZ_EDITION') == 'pro';
 
-/// True in EZTiger Pro. (Tests switch it on to try the Pro features.)
+/// This is the Pro build (the trial, or licensed).
+bool get builtAsPro => _builtAsPro;
+
+/// True while the Pro features are on: the Pro build on its trial or with a
+/// licence key. (Tests switch it on to try the Pro features.)
 bool isPro = _builtAsPro;
 
 /// The app's name, as shown in the title bar and the Read me.

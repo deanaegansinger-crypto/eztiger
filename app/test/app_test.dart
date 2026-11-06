@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:eztiger/app_state.dart';
 import 'package:eztiger/edition.dart';
+import 'package:eztiger/licence.dart';
 import 'package:eztiger/ui/pro_sound.dart';
 import 'package:eztiger/platform.dart';
 import 'package:eztiger/player.dart';
@@ -504,6 +505,62 @@ void main() {
     expect(state.decks.every((d) => !d.smoothFades), isTrue);
   });
 
+  testWidgets('Pro 2 decks, Stage view: both decks across the top, the transport on them', (tester) async {
+    state = AppState(
+      db,
+      KaraokeEngine(backend, scanEdges: scan),
+      deckB: KaraokeEngine(FakeBackend(), scanEdges: scan),
+    );
+    await pumpApp(tester);
+    await tester.runAsync(() async {
+      for (final g in state.results) {
+        await state.enqueue(g.primary);
+      }
+    });
+    await tester.pump();
+    await tester.runAsync(() => state.setTwoDecks(true));
+    await tester.pump();
+    state.setStageView(true);
+    await tester.pump();
+    final a = tester.getRect(find.byKey(const Key('deck-A')));
+    final b = tester.getRect(find.byKey(const Key('deck-B')));
+    expect(a.top, b.top);
+    expect(a.top, lessThan(20), reason: 'at the top of the screen');
+    expect(b.right - a.left, greaterThan(1300), reason: 'across the whole width');
+    expect(a.height, lessThan(170), reason: 'about half the old player block');
+    expect(find.byKey(const Key('stage-play')), findsNothing, reason: 'the transport is on the deck');
+    expect(find.byKey(const Key('stage-lyrics')), findsOneWidget);
+    expect(tester.getRect(find.byKey(const Key('stage-lyrics'))).top, greaterThan(a.bottom));
+    expect(find.byKey(const Key('deck-A-play')), findsOneWidget);
+    expect(find.byKey(const Key('deck-B-mix')), findsOneWidget);
+  });
+
+  testWidgets('Pro trial: days left by the PRO badge, and a licence key in the menu', (tester) async {
+    addTearDown(() => licence = null);
+    final shop = FakeShop();
+    final l = licence = Licence(db, server: shop);
+    await tester.runAsync(l.load);
+    await pumpApp(tester);
+    expect(find.text('TRIAL 14d'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('licence-chip')));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.byKey(const Key('licence-dialog')), findsOneWidget);
+    expect(find.textContaining('14 more days'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('licence-key')), 'GOOD-KEY');
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('licence-activate')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.byKey(const Key('licence-dialog')), findsNothing);
+    expect(l.licensed, isTrue);
+    expect(find.byKey(const Key('licence-chip')), findsNothing, reason: 'licensed: no trial chip');
+  });
+
   testWidgets('the seek bar skips through the song', (tester) async {
     await pumpApp(tester);
     await tester.runAsync(() => state.playNow(state.results.first.primary));
@@ -999,7 +1056,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('EZTiger Pro · Read me'), findsOneWidget);
     expect(find.textContaining('Autocue loads the next song'), findsOneWidget);
-    expect(find.textContaining('THANKS for using my first ever Claude created App'), findsOneWidget);
+    expect(find.textContaining('Claude created'), findsNothing);
     // The last line is reachable by scrolling.
     await tester.dragUntilVisible(
       find.textContaining('remembers your settings'),

@@ -1,3 +1,6 @@
+import '../licence.dart';
+import 'licence_dialog.dart';
+
 import 'dart:convert';
 
 import 'package:eztiger_core/eztiger_core.dart';
@@ -98,7 +101,14 @@ class _BrandRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          Text('BY DEANO', style: TextStyle(fontSize: 8, color: context.ez.textDim, letterSpacing: 1.2)),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('BY DEANO', style: TextStyle(fontSize: 8, color: context.ez.textDim, letterSpacing: 1.2)),
+              if (licence != null) const _LicenceChip(),
+            ],
+          ),
         ] else
           // "BASIC" over "BY DEANO", stacked to save width.
           Column(
@@ -118,6 +128,7 @@ class _BrandRow extends StatelessWidget {
               ),
               const SizedBox(height: 1),
               Text('BY DEANO', style: TextStyle(fontSize: 8, color: context.ez.textDim, letterSpacing: 1.2)),
+              if (licence != null) const _LicenceChip(),
             ],
           ),
         const Spacer(),
@@ -222,6 +233,26 @@ class _MainMenu extends StatelessWidget {
             child: Row(children: [Icon(Icons.download, size: 18), SizedBox(width: 10), Text('Load sync file…')]),
           ),
         ],
+        if (licence case final l?) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem(
+            key: const Key('menu-licence'),
+            value: 'licence',
+            child: Row(
+              children: [
+                const Icon(Icons.key, size: 18),
+                const SizedBox(width: 10),
+                Text(l.licensed ? 'Pro licence' : 'Enter licence key…'),
+                const SizedBox(width: 12),
+                if (!l.licensed)
+                  Text(
+                    l.onTrial ? '${l.trialDaysLeft} days left' : 'trial ended',
+                    style: TextStyle(fontSize: 12, color: EzColors.cyan),
+                  ),
+              ],
+            ),
+          ),
+        ],
         const PopupMenuDivider(),
         if (isPro)
           PopupMenuItem(
@@ -287,6 +318,8 @@ class _MainMenu extends StatelessWidget {
           saveSyncFile(context, s);
         } else if (c == 'sync-load') {
           loadSyncFile(context, s);
+        } else if (c == 'licence') {
+          showLicenceDialog(context, licence!);
         } else if (c == 'two-decks') {
           s.setTwoDecks(!s.twoDecks);
         } else if (c.startsWith('scale:')) {
@@ -302,6 +335,55 @@ class _MainMenu extends StatelessWidget {
             SizedBox(width: 4),
             Text('Menu', style: TextStyle(fontSize: 11, color: EzColors.cyan)),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The Pro trial's days left (or "Trial ended · Enter key" in Basic); click
+/// for the licence key box. Also says so once when the trial has ended.
+class _LicenceChip extends StatefulWidget {
+  const _LicenceChip();
+
+  @override
+  State<_LicenceChip> createState() => _LicenceChipState();
+}
+
+class _LicenceChipState extends State<_LicenceChip> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && licence != null) showTrialEndedOnce(context, licence!);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      ListenableBuilder(listenable: licence!, builder: (context, _) => _build(context));
+
+  Widget _build(BuildContext context) {
+    final l = licence!;
+    if (l.licensed) return const SizedBox.shrink();
+    final color = l.onTrial ? EzColors.cyan : EzColors.brass;
+    return Tooltip(
+      message: l.onTrial
+          ? '${l.summary}. Every Pro feature is on during the trial. Click to enter a licence key.'
+          : '${l.summary}. Click to enter a licence key.',
+      child: InkWell(
+        key: const Key('licence-chip'),
+        onTap: () => showLicenceDialog(context, l),
+        child: Text(
+          l.onTrial ? 'TRIAL ${l.trialDaysLeft}d' : 'GET PRO',
+          style: TextStyle(
+            fontSize: 8,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1,
+            color: color,
+            decoration: TextDecoration.underline,
+            decorationColor: color,
+          ),
         ),
       ),
     );

@@ -7,6 +7,7 @@ import '../app_state.dart';
 import '../edition.dart';
 import 'pro_sound.dart';
 import 'output_panel.dart';
+import 'twin_decks.dart';
 
 /// The view for performing, with the tablet on the mic stand: the lyrics or
 /// video large on the left; on the right the song and time left in big
@@ -29,10 +30,14 @@ class StageView extends StatelessWidget {
           builder: (context, c) {
             // A narrow window puts the controls under the lyrics instead.
             final side = c.maxWidth >= 900;
+            // Pro, 2 decks: both decks across the top of the whole screen,
+            // with the transport on them, so the controls beside the
+            // lyrics are just the volume and what is next.
+            final twin = isPro && s.twoDecks;
             final lyrics = _Lyrics(onFullScreen: onFullScreen);
-            const controls = _Controls();
-            final sides = [Expanded(flex: 11, child: lyrics), const Expanded(flex: 9, child: controls)];
-            return side
+            final controls = _Controls(compact: twin);
+            final sides = [Expanded(flex: 11, child: lyrics), Expanded(flex: 9, child: controls)];
+            final body = side
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -46,9 +51,18 @@ class StageView extends StatelessWidget {
                     children: [
                       Expanded(flex: 5, child: lyrics),
                       const SizedBox(height: 10),
-                      const Expanded(flex: 6, child: controls),
+                      Expanded(flex: 6, child: controls),
                     ],
                   );
+            if (!twin) return body;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const TwinDecks(stage: true),
+                const SizedBox(height: 10),
+                Expanded(child: body),
+              ],
+            );
           },
         ),
       ),
@@ -68,7 +82,10 @@ class _Lyrics extends StatelessWidget {
 }
 
 class _Controls extends StatelessWidget {
-  const _Controls();
+  const _Controls({this.compact = false});
+
+  /// Pro, 2 decks: the song, time and transport are on the decks above.
+  final bool compact;
 
   // This widget is const, so the stage view's own rebuild skips it: listen
   // to the player here, or the time and seek bar stand still while playing.
@@ -116,55 +133,57 @@ class _Controls extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          e.error ?? t?.title ?? 'Pick a song to begin',
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 30,
-            height: 1.1,
-            fontWeight: FontWeight.w800,
-            color: e.error != null ? EzColors.red : EzColors.brass,
-          ),
-        ),
-        if (sub.isNotEmpty)
+        if (!compact) ...[
+          const SizedBox(height: 6),
           Text(
-            sub,
-            maxLines: 1,
+            e.error ?? t?.title ?? 'Pick a song to begin',
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 20, color: EzColors.cyan),
+            style: TextStyle(
+              fontSize: 30,
+              height: 1.1,
+              fontWeight: FontWeight.w800,
+              color: e.error != null ? EzColors.red : EzColors.brass,
+            ),
           ),
-        const SizedBox(height: 8),
-        if (t != null && total > Duration.zero) ...[
+          if (sub.isNotEmpty)
+            Text(
+              sub,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 20, color: EzColors.cyan),
+            ),
+          const SizedBox(height: 8),
+          if (t != null && total > Duration.zero) ...[
+            Row(
+              children: [
+                Text(fmt(e.position), style: const TextStyle(fontSize: 20, color: Colors.white70)),
+                const Spacer(),
+                Text(
+                  '-${fmt(left.isNegative ? Duration.zero : left)}',
+                  key: const Key('stage-time-left'),
+                  style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: Colors.white),
+                ),
+              ],
+            ),
+            _StageSeek(position: e.position, total: total, onSeek: e.seek),
+          ],
+          const SizedBox(height: 8),
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              Text(fmt(e.position), style: const TextStyle(fontSize: 20, color: Colors.white70)),
-              const Spacer(),
-              Text(
-                '-${fmt(left.isNegative ? Duration.zero : left)}',
-                key: const Key('stage-time-left'),
-                style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: Colors.white),
+              _RoundButton(key: const Key('stage-restart'), icon: Icons.skip_previous, size: 72, onTap: s.previous),
+              _RoundButton(
+                key: const Key('stage-play'),
+                icon: e.playing ? Icons.pause : Icons.play_arrow,
+                size: 104,
+                primary: true,
+                onTap: s.playPause,
               ),
+              _RoundButton(key: const Key('stage-next'), icon: Icons.skip_next, size: 72, onTap: s.next),
             ],
           ),
-          _StageSeek(position: e.position, total: total, onSeek: e.seek),
         ],
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _RoundButton(key: const Key('stage-restart'), icon: Icons.skip_previous, size: 72, onTap: s.previous),
-            _RoundButton(
-              key: const Key('stage-play'),
-              icon: e.playing ? Icons.pause : Icons.play_arrow,
-              size: 104,
-              primary: true,
-              onTap: s.playPause,
-            ),
-            _RoundButton(key: const Key('stage-next'), icon: Icons.skip_next, size: 72, onTap: s.next),
-          ],
-        ),
         const SizedBox(height: 8),
         Row(
           children: [
