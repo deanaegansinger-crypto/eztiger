@@ -210,6 +210,8 @@ void main() {
     await tester.runAsync(() => db.setMeta('key_shifts', '{"x": 2}'));
     await pumpApp(tester);
     expect(find.byType(ProSoundRow), findsNothing);
+    expect(find.textContaining('QUEUE · '), findsOneWidget, reason: 'Basic keeps the word queue');
+    expect(find.textContaining("Tonight's playlist"), findsNothing);
     await tester.runAsync(() => state.playNow(state.results.first.primary, autostart: false));
     await tester.pump();
     expect(state.engine.keyShift, 0);
@@ -239,7 +241,7 @@ void main() {
 
     await tester.runAsync(() => state.enqueue(state.results.first.primary));
     await tester.pump();
-    expect(find.textContaining('QUEUE · 1 TO SING'), findsOneWidget);
+    expect(find.textContaining("TONIGHT'S PLAYLIST · 1 TO SING"), findsOneWidget);
     // Autocue loads the first song paused.
     expect(state.engine.current?.title, 'Livin On A Prayer');
     expect(backend.calls, contains('pause'));
@@ -412,7 +414,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('save-queue')));
     await settle();
-    await tester.tap(find.text('★ New playlist from the queue (2 songs)…'));
+    await tester.tap(find.text("★ New playlist from Tonight's playlist (2 songs)…"));
     await settle();
     await tester.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)), 'Saturday');
     await tester.tap(find.text('OK'));
@@ -427,7 +429,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const Key('save-queue')));
     await settle();
-    await tester.tap(find.text('★ Add the queue to Saturday'));
+    await tester.tap(find.text("★ Add Tonight's playlist to Saturday"));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await settle();
     expect(state.playlists.singleWhere((p) => p.name == 'Saturday').trackCount, 5);
@@ -446,6 +448,11 @@ void main() {
     await tester.runAsync(() => state.loadPlaylistIntoQueue(id));
     await settle();
     expect(state.queuePlaylist?.name, 'Friday');
+    expect(
+      find.textContaining("TONIGHT'S PLAYLIST · "),
+      findsOneWidget,
+      reason: 'Pro calls the queue Tonight\'s playlist',
+    );
     // Live changes: drop the first song, add the third.
     await tester.runAsync(() async {
       await state.removeFromQueue(state.queue.first);
@@ -1018,8 +1025,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('➕ Add to queue'), findsOneWidget);
-    await tester.tap(find.text('➕ Add to queue'));
+    expect(find.text("➕ Add to Tonight's playlist"), findsOneWidget);
+    await tester.tap(find.text("➕ Add to Tonight's playlist"));
     await tester.pump(const Duration(milliseconds: 500));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
     await tester.pump(const Duration(milliseconds: 500));
@@ -1043,7 +1050,7 @@ void main() {
     });
     await tester.pump(const Duration(milliseconds: 500));
     expect(state.queue.length, 2);
-    expect(find.text('➕ Add to queue'), findsNothing); // no menu after a real drag
+    expect(find.text("➕ Add to Tonight's playlist"), findsNothing); // no menu after a real drag
   });
 
   testWidgets('tablet: holding a queued song still opens its menu', (tester) async {

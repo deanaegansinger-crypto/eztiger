@@ -1050,7 +1050,7 @@ class AppState extends ChangeNotifier {
   Future<void> loadPlaylistIntoQueue(int playlistId) async {
     final p = playlists.where((p) => p.id == playlistId).firstOrNull;
     if (p == null) return;
-    status = 'Added "${p.name}" to the queue';
+    status = 'Added "${p.name}" to $theQueue';
     await enqueueAll(await db.playlists.tracks(playlistId));
     queuePlaylistId = playlistId;
     notifyListeners();
@@ -1063,7 +1063,7 @@ class AppState extends ChangeNotifier {
     if (old.isNotEmpty) await db.playlists.removePositions(playlistId, List.generate(old.length, (i) => i));
     await db.playlists.addAll(playlistId, queue.map((e) => e.track.id));
     final p = playlists.where((p) => p.id == playlistId).firstOrNull;
-    status = 'Saved the queue to "${p?.name ?? 'the playlist'}"';
+    status = 'Saved $theQueue to "${p?.name ?? 'the playlist'}"';
     await _reloadPlaylists();
     if (view == ResultsView.playlist && selectedPlaylistId == playlistId) await refreshResults();
   }

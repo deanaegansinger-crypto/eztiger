@@ -42,7 +42,7 @@ class QueuePanel extends StatelessWidget {
                   Expanded(
                     flex: 2,
                     child: HeadText(
-                      'Queue · ${s.queue.length - s.playedCount} to sing'
+                      '$queueTitle · ${s.queue.length - s.playedCount} to sing'
                       '${s.playedCount > 0 ? ' · ${s.playedCount} played' : ''}',
                       color: EzColors.brass,
                     ),
@@ -134,7 +134,7 @@ class _LoadPlaylistButton extends StatelessWidget {
     final s = AppScope.of(context);
     return PopupMenuButton<int>(
       key: const Key('load-playlist'),
-      tooltip: 'Add a saved playlist to the queue',
+      tooltip: 'Add a saved playlist to $theQueue',
       itemBuilder: (_) => [
         if (s.playlists.isEmpty)
           const PopupMenuItem(enabled: false, child: Text('No playlists yet: use "★ Save as playlist" first'))
@@ -166,7 +166,7 @@ class _SaveQueueButton extends StatelessWidget {
     final n = tracks.length == 1 ? '1 song' : '${tracks.length} songs';
     final button = PopupMenuButton<String>(
       key: const Key('save-queue'),
-      tooltip: 'Save the queue as a playlist',
+      tooltip: isPro ? "Save Tonight's playlist as a playlist of its own" : 'Save the queue as a playlist',
       itemBuilder: (_) => [
         if (isPro && s.queuePlaylist != null)
           PopupMenuItem(
@@ -174,16 +174,16 @@ class _SaveQueueButton extends StatelessWidget {
             value: 'replace:${s.queuePlaylist!.id}',
             child: Text('💾 Save changes to ${s.queuePlaylist!.name}'),
           ),
-        PopupMenuItem(value: 'new', child: Text('★ New playlist from the queue ($n)…')),
+        PopupMenuItem(value: 'new', child: Text('★ New playlist from $theQueue ($n)…')),
         if (isPro)
           for (final p in s.playlists)
             if (p.id != s.queuePlaylistId)
-              PopupMenuItem(value: 'replace:${p.id}', child: Text('💾 Replace ${p.name} with the queue')),
-        for (final p in s.playlists) PopupMenuItem(value: 'pl:${p.id}', child: Text('★ Add the queue to ${p.name}')),
+              PopupMenuItem(value: 'replace:${p.id}', child: Text('💾 Replace ${p.name} with $theQueue')),
+        for (final p in s.playlists) PopupMenuItem(value: 'pl:${p.id}', child: Text('★ Add $theQueue to ${p.name}')),
       ],
       onSelected: (c) async {
         if (c == 'new') {
-          final name = await askText(context, title: 'New playlist from the queue ($n)', label: 'Name');
+          final name = await askText(context, title: 'New playlist from $theQueue ($n)', label: 'Name');
           if (name != null) await s.createPlaylist(name, tracks: tracks);
         } else if (c.startsWith('replace:')) {
           await s.replacePlaylistWithQueue(int.parse(c.substring(8)));

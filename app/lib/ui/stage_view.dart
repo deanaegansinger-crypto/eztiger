@@ -286,7 +286,7 @@ class _UpNext extends StatelessWidget {
                         _QueueButton(
                           key: ValueKey('stage-remove-${q.id}'),
                           icon: Icons.close,
-                          tip: 'Take out of the queue',
+                          tip: 'Take out of $theQueue',
                           onTap: () => s.removeFromQueue(q),
                         ),
                       ],

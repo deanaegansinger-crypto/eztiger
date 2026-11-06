@@ -953,8 +953,10 @@ class PlaylistsPanel extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(6),
             child: Text(
-              'Drag songs from the list or the queue onto "+ Create" to make a playlist, '
-              'or press "★ Save as playlist" on the queue.',
+              queueWords(
+                'Drag songs from the list or the queue onto "+ Create" to make a playlist, '
+                'or press "★ Save as playlist" on the queue.',
+              ),
               style: TextStyle(fontSize: 11, color: context.ez.textDim),
             ),
           ),
@@ -971,8 +973,8 @@ class PlaylistsPanel extends StatelessWidget {
                       s.copied.isEmpty ? '📋 Paste songs or a song list' : '📋 Paste ${s.copied.length} copied songs',
                     ),
                   ),
-                  const PopupMenuItem(value: 'queue', child: Text('Save the queue into this playlist')),
-                  const PopupMenuItem(value: 'toqueue', child: Text('➕ Add the whole playlist to the queue')),
+                  PopupMenuItem(value: 'queue', child: Text('Save $theQueue into this playlist')),
+                  PopupMenuItem(value: 'toqueue', child: Text('➕ Add the whole playlist to $theQueue')),
                   const PopupMenuItem(value: 'delete', child: Text('Delete playlist')),
                 ]);
                 switch (c) {
@@ -1409,8 +1411,8 @@ Future<void> trackMenu(BuildContext context, Offset at, SearchGroup group, {requ
   final n = '${tracks.length} songs';
   final inPlaylist = s.view == ResultsView.playlist;
   final choice = await showMenuAt<String>(context, at, [
-    PopupMenuItem(value: 'queue', child: Text(many ? '➕ Add $n to the queue' : '➕ Add to queue')),
-    if (!many) const PopupMenuItem(value: 'singer', child: Text('🎤 Add to queue with singer…')),
+    PopupMenuItem(value: 'queue', child: Text(many ? '➕ Add $n to $theQueue' : queueWords('➕ Add to queue'))),
+    if (!many) PopupMenuItem(value: 'singer', child: Text(queueWords('🎤 Add to queue with singer…'))),
     if (!many) const PopupMenuItem(value: 'play', child: Text('▶ Play now')),
     if (!many && group.versions.length > 1) const PopupMenuItem(value: 'versions', child: Text('🎚 Other versions…')),
     const PopupMenuDivider(),

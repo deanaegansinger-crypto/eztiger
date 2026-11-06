@@ -39,7 +39,7 @@ Future<void> showReadMe(BuildContext context) => showDialog<void>(
                       : [if (isPro) _pro, ..._sections]) ...[
                 Padding(
                   padding: const EdgeInsets.only(top: 10, bottom: 4),
-                  child: HeadText(head, color: EzColors.brass),
+                  child: HeadText(queueWords(head), color: EzColors.brass),
                 ),
                 for (final l in lines)
                   Padding(
@@ -48,7 +48,7 @@ Future<void> showReadMe(BuildContext context) => showDialog<void>(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text('•  ', style: TextStyle(fontSize: 13)),
-                        Expanded(child: Text(l, style: const TextStyle(fontSize: 13, height: 1.3))),
+                        Expanded(child: Text(queueWords(l), style: const TextStyle(fontSize: 13, height: 1.3))),
                       ],
                     ),
                   ),
@@ -68,10 +68,10 @@ const _pro = (
     'KEY, under the volume: − and + move the song down or up a semitone, as far as 3 either way. The 0 in the middle puts it back. EZTiger remembers the key for each song, and when a song loads in a changed key, "KEY +2" (or −) flashes red on the player and the Stage view.',
     'Level, under the volume: evens out the loudness, so quiet and loud MP3s and videos play at about the same level. It takes a moment to settle at the start of a song.',
     'Vocal cut, under the volume: takes out the lead vocal on most stereo tracks (it cancels what sits in the middle, and keeps the bass). It works best on studio recordings; reverb and backing vocals can still come through.',
-    '2 decks (☰ Menu, under Playback): deck A and deck B sit side by side across the top and share the one queue. The deck marked ON AIR is playing; the other shows the song waiting to come in, ready to start straight away. Its ⇄ button mixes into it now.',
+    '2 decks (☰ Menu, under Playback): deck A and deck B sit side by side across the top and share Tonight\'s playlist. The deck marked ON AIR is playing; the other shows the song waiting to come in, ready to start straight away. Its ⇄ button mixes into it now.',
     'With 2 decks on, double-click a song (or drop it on the deck that is not playing) to make it the next song. Whatever was waiting moves back to second in the queue, where you can leave it or take it off. Drop a song on the ON AIR deck to play it now.',
     'X-fade, under the decks: the slider sets the crossfade from 0 (a straight cut) to 6 seconds. Overlap brings the next song in under the last one; In turn fades one out, then the next in. Smooth fades sound even all the way through; Linear is the plain fade.',
-    'Save changes to a playlist: after Load playlist, change the queue as you go (add, move or take songs off), then press 💾 Save to <playlist> above the queue. The Save menu can also replace any playlist with the queue.',
+    "Tonight's playlist is the list of songs to sing (Basic calls it the queue). Save changes to a playlist: after Load playlist, change Tonight's playlist as you go (add, move or take songs off), then press 💾 Save to <playlist> above it. The Save menu can also replace any playlist with Tonight's playlist.",
     'Skins (☰ Menu → Skin): six looks for the whole app.',
     'Sync PC ⇄ tablet (☰ Menu): Save sync file writes your playlists and song keys to EZtiger-sync.json. Copy it to the tablet (or put it in the library folder before you copy that), then Load sync file there. It works the other way round too. Songs are matched by where they sit in the library folder, or by file name.',
   ],
