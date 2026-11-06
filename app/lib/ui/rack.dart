@@ -117,6 +117,18 @@ class _MainMenu extends StatelessWidget {
           value: 'stage',
           child: Row(children: [Icon(Icons.mic_external_on, size: 18), SizedBox(width: 10), Text('Stage view')]),
         ),
+        CheckedPopupMenuItem(
+          key: const Key('stage-lyrics-left'),
+          value: 'lyricsLeft',
+          checked: !s.stageLyricsRight,
+          child: const Text('Stage: lyrics on the left'),
+        ),
+        CheckedPopupMenuItem(
+          key: const Key('stage-lyrics-right'),
+          value: 'lyricsRight',
+          checked: s.stageLyricsRight,
+          child: const Text('Stage: lyrics on the right'),
+        ),
         const PopupMenuDivider(),
         const PopupMenuItem(
           enabled: false,
@@ -144,6 +156,8 @@ class _MainMenu extends StatelessWidget {
           showReadMe(context);
         } else if (c == 'dark' || c == 'light') {
           if ((c == 'dark') != s.dark) s.toggleDark();
+        } else if (c == 'lyricsLeft' || c == 'lyricsRight') {
+          s.setStageLyricsRight(c == 'lyricsRight');
         } else if (c == 'stage') {
           s.setStageView(true);
         } else if (c.startsWith('scale:')) {

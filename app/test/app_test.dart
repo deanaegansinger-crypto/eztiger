@@ -603,6 +603,15 @@ void main() {
     expect(find.text(tracks[1].title), findsOneWidget);
     expect(tester.getSize(find.byKey(const Key('stage-play'))).width, greaterThanOrEqualTo(100));
 
+    // Lyrics on the left, buttons on the right; ⇄ swaps them.
+    double lyricsX() => tester.getCenter(find.byKey(const Key('stage-lyrics'))).dx;
+    double playX() => tester.getCenter(find.byKey(const Key('stage-play'))).dx;
+    expect(lyricsX(), lessThan(playX()));
+    await tester.tap(find.byKey(const Key('stage-swap')));
+    await tester.pump();
+    expect(state.stageLyricsRight, isTrue);
+    expect(lyricsX(), greaterThan(playX()));
+
     await tester.runAsync(() async {
       await tester.tap(find.byKey(const Key('stage-play')));
       await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -635,6 +644,7 @@ void main() {
       final again = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan));
       await again.init(rescanLibrary: false);
       expect(again.stageView, isTrue);
+      expect(again.stageLyricsRight, isTrue);
     });
 
     await tester.tap(find.byKey(const Key('stage-exit')));

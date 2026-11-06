@@ -28,13 +28,14 @@ class StageView extends StatelessWidget {
             final side = c.maxWidth >= 900;
             final lyrics = _Lyrics(onFullScreen: onFullScreen);
             const controls = _Controls();
+            final sides = [Expanded(flex: 11, child: lyrics), const Expanded(flex: 9, child: controls)];
             return side
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(flex: 11, child: lyrics),
+                      s.stageLyricsRight ? sides[1] : sides[0],
                       const SizedBox(width: 12),
-                      const Expanded(flex: 9, child: controls),
+                      s.stageLyricsRight ? sides[0] : sides[1],
                     ],
                   )
                 : Column(
@@ -84,6 +85,20 @@ class _Controls extends StatelessWidget {
               style: const TextStyle(fontFamily: vfdFont, fontSize: 14, color: EzColors.vfdSub, letterSpacing: 2),
             ),
             const Spacer(),
+            // Swap the lyrics and the buttons left and right.
+            IconButton(
+              key: const Key('stage-swap'),
+              tooltip: s.stageLyricsRight ? 'Lyrics on the left' : 'Lyrics on the right',
+              iconSize: 30,
+              style: IconButton.styleFrom(
+                minimumSize: const Size(52, 52),
+                side: const BorderSide(color: EzColors.cyan),
+                foregroundColor: EzColors.cyan,
+              ),
+              onPressed: () => s.setStageLyricsRight(!s.stageLyricsRight),
+              icon: const Icon(Icons.swap_horiz),
+            ),
+            const SizedBox(width: 10),
             _BigButton(
               key: const Key('stage-exit'),
               icon: Icons.library_music,

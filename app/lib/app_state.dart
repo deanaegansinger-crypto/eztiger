@@ -35,6 +35,10 @@ class AppState extends ChangeNotifier {
   /// The stage view, for performing: big lyrics, big buttons, what's next.
   /// It comes back on at start-up if it was on, ready for the gig.
   bool stageView = false;
+
+  /// In the stage view: the lyrics on the right and the buttons on the
+  /// left, instead of the other way round.
+  bool stageLyricsRight = false;
   static final textScaleChoices = {1.0: 'Normal', 1.25: 'Large', 1.5: 'Extra large'};
   bool autocue = true;
 
@@ -107,6 +111,7 @@ class AppState extends ChangeNotifier {
       mode = PlayMode.values.asNameMap()[m['mode']] ?? mode;
       crossfade = m['crossfade'] as bool? ?? crossfade;
       stageView = m['stage'] as bool? ?? stageView;
+      stageLyricsRight = m['stageLyricsRight'] as bool? ?? stageLyricsRight;
       final scale = (m['textScale'] as num?)?.toDouble();
       if (textScaleChoices.containsKey(scale)) textScale = scale!;
       autocue = m['autocue'] as bool? ?? autocue;
@@ -133,6 +138,7 @@ class AppState extends ChangeNotifier {
       'crossfade': crossfade,
       'textScale': textScale,
       'stage': stageView,
+      'stageLyricsRight': stageLyricsRight,
       'autocue': autocue,
       'fadeMs': fadeOutTime.inMilliseconds,
       'type': typeFilter?.name,
@@ -177,6 +183,11 @@ class AppState extends ChangeNotifier {
 
   void setStageView(bool v) {
     stageView = v;
+    notifyListeners();
+  }
+
+  void setStageLyricsRight(bool v) {
+    stageLyricsRight = v;
     notifyListeners();
   }
 
