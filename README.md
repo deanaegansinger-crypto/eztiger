@@ -7,6 +7,7 @@ MP3+CDG, video and backing tracks, with a singer queue, playlists and history.
 |---|---|
 | `packages/eztiger_core` | Library scanner, song database, search and CD+G decoder. Pure Dart, tested on Windows and Linux. |
 | `app` | The Windows app (Flutter), built from the UI mockup. *Coming next.* |
+| `tools/karaoke-maker` | Makes MP3+CDG karaoke tracks from songs with vocals: removes the vocals and times the lyrics to the singing. See its [README](tools/karaoke-maker/README.md). |
 
 Every push runs the core tests on Windows and Linux (see the Actions tab). Once the
 app is in, the same build will produce `EZtiger-Setup.exe` to download.

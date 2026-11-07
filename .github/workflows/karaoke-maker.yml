@@ -1,0 +1,25 @@
+name: Karaoke Maker tests
+
+on:
+  push:
+    paths: ['tools/karaoke-maker/**', '.github/workflows/karaoke-maker.yml']
+  pull_request:
+    paths: ['tools/karaoke-maker/**', '.github/workflows/karaoke-maker.yml']
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: tools/karaoke-maker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
