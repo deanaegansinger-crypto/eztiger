@@ -149,7 +149,13 @@ class Licence extends ChangeNotifier {
   }
 }
 
-/// The current build's licence, or null in Basic and in the tests.
+/// The trial and licence keys are built in but off: Dean gives EZTiger Pro
+/// away to friends, fully unlocked. Build with `--dart-define=EZ_TRIAL=true`
+/// to switch the 14-day trial and keys back on.
+const trialEnabled = bool.fromEnvironment('EZ_TRIAL');
+
+/// The current build's licence, or null in Basic, with the trial off, and in
+/// the tests.
 Licence? licence;
 
 class LicenceCheck {
