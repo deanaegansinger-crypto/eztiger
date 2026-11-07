@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show FocusNode;
 
 import 'edition.dart';
 import 'platform.dart';
@@ -94,6 +95,20 @@ class AppState extends ChangeNotifier {
   void setDoubleClickToQueue(bool v) {
     doubleClickToQueue = v;
     notifyListeners();
+  }
+
+  /// The search box, so a key can jump to it.
+  final searchFocus = FocusNode(debugLabel: 'search');
+
+  /// Pro: puts [tracks] in Tonight's playlist as the next songs to sing,
+  /// ahead of whatever was waiting.
+  Future<void> enqueueNext(List<Track> tracks) async {
+    if (tracks.isEmpty) return;
+    final up = upNext;
+    final at = up == null ? queue.length : queue.indexOf(up);
+    await db.queue.insertAll(tracks.map((t) => t.id), at: at < 0 ? queue.length : at);
+    await _reloadQueue();
+    if (standby != null && engine.playing) await _cueStandby();
   }
 
   /// Pro: the search box is in use, so the controls under the player fold

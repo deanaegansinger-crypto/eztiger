@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../platform.dart';
 import '../theme.dart';
 import 'common.dart';
+import 'keys.dart';
 import 'lock.dart';
 import 'output_panel.dart';
 import 'queue_panel.dart';
@@ -50,33 +51,36 @@ class _HomeScreenState extends State<HomeScreen> {
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop && !s.locked) _setFull(false);
         },
-        child: Focus(
-          autofocus: true,
-          child: Scaffold(
-            body: LockShield(
-              child: fullScreen
-                  ? GestureDetector(onDoubleTap: () => _setFull(false), child: const KaraokeScreen())
-                  : s.stageView
-                  ? SafeArea(child: StageView(onFullScreen: () => _setFull(true)))
-                  : SafeArea(
-                      child: LayoutBuilder(
-                        builder: (context, c) {
-                          final rackWidth = (c.maxWidth * 0.42).clamp(400.0, 620.0);
-                          return Row(
-                            children: [
-                              SizedBox(width: rackWidth, child: const Rack()),
-                              Expanded(
-                                child: _Stage(
-                                  queueHeight: queueHeight,
-                                  onResize: (h) => setState(() => queueHeight = h),
-                                  onFullScreen: () => _setFull(true),
+        child: ProKeys(
+          state: s,
+          child: Focus(
+            autofocus: true,
+            child: Scaffold(
+              body: LockShield(
+                child: fullScreen
+                    ? GestureDetector(onDoubleTap: () => _setFull(false), child: const KaraokeScreen())
+                    : s.stageView
+                    ? SafeArea(child: StageView(onFullScreen: () => _setFull(true)))
+                    : SafeArea(
+                        child: LayoutBuilder(
+                          builder: (context, c) {
+                            final rackWidth = (c.maxWidth * 0.42).clamp(400.0, 620.0);
+                            return Row(
+                              children: [
+                                SizedBox(width: rackWidth, child: const Rack()),
+                                Expanded(
+                                  child: _Stage(
+                                    queueHeight: queueHeight,
+                                    onResize: (h) => setState(() => queueHeight = h),
+                                    onFullScreen: () => _setFull(true),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          );
-                        },
+                              ],
+                            );
+                          },
+                        ),
                       ),
-                    ),
+              ),
             ),
           ),
         ),

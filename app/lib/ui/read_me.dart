@@ -79,15 +79,19 @@ const _pro = (
     'Drag a whole folder: click a folder in the Library box to highlight it, then drag it into Tonight\'s playlist, a playlist or the player. All its songs, as listed, go in.',
     'Double-click (☰ Menu): Player loads a double-clicked song into the player (or the next deck); Tonight adds it to the end of Tonight\'s playlist instead.',
     'When nothing is playing (cued, paused or stopped) the lyrics screen, the Stage view and the second screen show the spinning logo and what is up next, instead of frozen lyrics.',
+    'Keyboard shortcuts (Windows), single keys you can reach with one hand. They wait while you type in the search box, and while the screen is locked:',
+    'Keys · playing: Space play/pause · R back to the start · N next song · X mix into the next deck now (2 decks) · Z back 5 seconds · C forward 5 seconds',
+    'Keys · sound: U volume up · D volume down · M mute on/off · K key up · L key down · 0 back to the song\'s own key',
+    'Keys · songs: Q add the selected songs to Tonight\'s playlist · Shift+Q make them the next song · / jump to the search box',
+    'Keys · screen: S Stage view on/off · B lock the screen (🔒) · F1 this Read me',
     'Skins (☰ Menu → Skin): six looks for the whole app.',
     'Sync PC ⇄ tablet (☰ Menu): Save sync file writes your playlists and song keys to EZtiger-sync.json. Copy it to the tablet (or put it in the library folder before you copy that), then Load sync file there. It works the other way round too. Songs are matched by where they sit in the library folder, or by file name.',
   ],
 );
 
-/// The Pro lines that apply on the tablet: one deck, and no Level or Vocal
-/// cut (the tablet's sound engine doesn't have them).
-bool _onTablet(String line) =>
-    !['Level', 'Vocal cut', '2 decks', 'Stage view with 2 decks', 'Each deck', 'With 2 decks'].any(line.startsWith);
+/// The Pro lines that apply on the tablet: no Level or Vocal cut (the
+/// tablet's sound engine doesn't have them) and no keyboard shortcuts.
+bool _onTablet(String line) => !['Level', 'Vocal cut', 'Keyboard', 'Keys'].any(line.startsWith);
 
 const _sections = <(String, List<String>)>[
   (
