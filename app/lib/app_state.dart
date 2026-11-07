@@ -16,7 +16,7 @@ enum ResultsView { search, playlist, history }
 
 /// Everything the screens show, and every action they can take.
 class AppState extends ChangeNotifier {
-  /// [deckB] is the second player for the 2-deck mode (Windows only).
+  /// [deckB] is the second player for Pro's 2-deck mode.
   AppState(this.db, KaraokeEngine deckA, {KaraokeEngine? deckB}) : decks = [deckA, ?deckB] {
     for (final d in decks) {
       d.onFinished = () {

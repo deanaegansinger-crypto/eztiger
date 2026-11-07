@@ -94,9 +94,15 @@ Future<void> runOnTablet() async {
   await Directory(dir.path).create(recursive: true);
   final db = await EztigerDatabase.open(databaseFactoryFfi, p.join(dir.path, 'eztiger.db'));
 
-  final backend = MediaKitBackend();
-  final engine = KaraokeEngine(backend, tempDir: (await getTemporaryDirectory()).path);
-  final state = AppState(db, engine);
+  // Pro has a second player for the 2-deck mode; it waits idle otherwise.
+  final temp = (await getTemporaryDirectory()).path;
+  final backends = <KaraokeEngine, MediaKitBackend>{};
+  for (var i = 0; i < (builtAsPro ? 2 : 1); i++) {
+    final backend = MediaKitBackend();
+    backends[KaraokeEngine(backend, tempDir: temp)] = backend;
+  }
+  final decks = backends.keys.toList();
+  final state = AppState(db, decks[0], deckB: decks.length > 1 ? decks[1] : null);
   // Only rescan once the app is allowed to read the SD card, or the library
   // would look empty.
   final canRead = await hasStorageAccess();
@@ -105,7 +111,8 @@ Future<void> runOnTablet() async {
   runApp(
     EztigerApp(
       state: state,
-      videoBuilder: (_, _) => Video(controller: backend.video, controls: NoVideoControls, fill: Colors.black),
+      videoBuilder: (_, e) =>
+          Video(key: ObjectKey(e), controller: backends[e]!.video, controls: NoVideoControls, fill: Colors.black),
       setFullScreen: (full) =>
           SystemChrome.setEnabledSystemUIMode(full ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge),
     ),
