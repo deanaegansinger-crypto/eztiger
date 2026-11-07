@@ -13,6 +13,8 @@ import 'package:eztiger/ui/common.dart';
 import 'package:eztiger/ui/queue_panel.dart';
 import 'package:eztiger/ui/rack.dart';
 import 'package:eztiger/ui/stage_view.dart';
+import 'package:eztiger/ui/logo.dart';
+import 'package:eztiger/ui/twin_decks.dart';
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -373,6 +375,103 @@ void main() {
     // The block stays selected after a drag.
     expect(state.selection, {0, 1, 2});
     await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('Pro: the highlighted folder drags whole into Tonight\'s playlist', (tester) async {
+    await pumpApp(tester);
+    final root = state.roots.first;
+    await tester.runAsync(() => state.selectFolder(root.id));
+    await tester.pump();
+    final songs = state.results.length;
+    expect(songs, greaterThan(1));
+
+    final g = await tester.startGesture(tester.getCenter(find.byKey(Key('folder-drag-${root.id}'))));
+    await tester.pump();
+    await g.moveBy(const Offset(400, -100));
+    await tester.pump();
+    await g.moveTo(tester.getCenter(find.byType(QueuePanel)));
+    await tester.pump();
+    await tester.runAsync(() async {
+      await g.up();
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pump();
+    expect(state.queue.length, songs);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('Pro: double-click can add to Tonight\'s playlist instead of the player', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('Tonight'));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(state.doubleClickToQueue, isTrue);
+
+    final row = find.byType(ResultRow).first;
+    await tester.tap(row);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(row);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump();
+    expect(state.queue.length, 1);
+    expect(await tester.runAsync(() => db.getMeta('settings')), contains('"doubleClickToQueue":true'));
+  });
+
+  testWidgets('Pro: searching folds away everything under the player, and ✕ brings it back', (tester) async {
+    await pumpApp(tester);
+    expect(find.byType(CrossfadeRow), findsOneWidget);
+    expect(find.byType(LibraryTabs), findsOneWidget);
+    await tester.tap(find.byKey(const Key('search')));
+    await tester.pump();
+    expect(find.byType(CrossfadeRow), findsNothing);
+    expect(find.byType(ProSoundRow), findsNothing);
+    expect(find.byType(LibraryTabs), findsNothing);
+    await tester.enterText(find.byKey(const Key('search')), 'prayer');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump();
+    // Still folded after leaving the box while there is a search in it.
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    expect(find.byType(LibraryTabs), findsNothing);
+    await tester.tap(find.descendant(of: find.byKey(const Key('search')), matching: find.byIcon(Icons.close)));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump();
+    expect(find.byType(CrossfadeRow), findsOneWidget);
+    expect(find.byType(LibraryTabs), findsOneWidget);
+  });
+
+  testWidgets('Pro: when nothing is playing the output shows the logo, not the lyrics', (tester) async {
+    await pumpApp(tester);
+    final waterloo = state.results.map((g) => g.primary).firstWhere((t) => t.title == 'Waterloo');
+    await tester.runAsync(() async {
+      await state.playNow(waterloo, autostart: false);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(state.engine.hasCdg, isTrue);
+    final out = find.byType(KaraokeScreen);
+    expect(find.descendant(of: out, matching: find.byType(EzLogo)), findsOneWidget);
+    expect(
+      find.descendant(of: out, matching: find.byType(AspectRatio)),
+      findsNothing,
+      reason: 'no lyric screen',
+    );
+
+    await tester.runAsync(() async {
+      await state.engine.play();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    expect(find.descendant(of: out, matching: find.byType(EzLogo)), findsNothing);
+
+    await tester.runAsync(() => state.engine.playPause());
+    await tester.pump();
+    expect(find.descendant(of: out, matching: find.byType(EzLogo)), findsOneWidget);
   });
 
   testWidgets('a block becomes a new playlist, and copy and paste fills another', (tester) async {
@@ -1132,6 +1231,9 @@ void main() {
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
+    // The menu has grown: scroll down to the text sizes.
+    await tester.ensureVisible(find.byKey(const Key('text-size-Extra large')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('text-size-Extra large')));
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 100));

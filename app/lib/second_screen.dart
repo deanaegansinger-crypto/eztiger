@@ -14,6 +14,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'player.dart';
 import 'theme.dart';
+import 'edition.dart';
 import 'ui/logo.dart';
 
 /// The arguments the output window is opened with.
@@ -170,6 +171,9 @@ class _OutputModel extends ChangeNotifier {
   String? title, artist, singer;
   ui.Image? cdg;
   bool fullScreen = false;
+
+  /// The main window's player is playing (Pro shows the logo otherwise).
+  bool playing = false;
   Player? _player;
   VideoController? video;
 
@@ -208,10 +212,14 @@ class _OutputModel extends ChangeNotifier {
           notifyListeners();
         }
       case 'clock':
-        final p = _player;
-        if (p == null || video == null) return null;
         final a = Map<String, dynamic>.from(call.arguments as Map);
         final playing = a['playing'] as bool;
+        if (playing != this.playing) {
+          this.playing = playing;
+          notifyListeners();
+        }
+        final p = _player;
+        if (p == null || video == null) return null;
         final at = Duration(milliseconds: a['ms'] as int);
         if (playing != p.state.playing) playing ? await p.play() : await p.pause();
         if ((p.state.position - at).abs() > const Duration(milliseconds: 400)) await p.seek(at);
@@ -249,9 +257,10 @@ class _OutputView extends StatelessWidget {
             listenable: model,
             builder: (context, _) {
               final v = model.video;
-              if (v != null) return Video(controller: v, controls: NoVideoControls, fill: Colors.black);
+              final idle = isPro && !model.playing;
+              if (v != null && !idle) return Video(controller: v, controls: NoVideoControls, fill: Colors.black);
               final img = model.cdg;
-              if (img != null) {
+              if (img != null && !idle) {
                 return Center(
                   child: AspectRatio(
                     aspectRatio: 300 / 216,
