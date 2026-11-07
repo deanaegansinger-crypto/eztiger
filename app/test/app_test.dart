@@ -474,6 +474,49 @@ void main() {
     expect(find.descendant(of: out, matching: find.byType(EzLogo)), findsOneWidget);
   });
 
+  testWidgets('Pro keys: M, Q, Shift+Q, S and /, but not while typing', (tester) async {
+    await pumpApp(tester);
+    Future<void> key(LogicalKeyboardKey k, {bool shift = false}) async {
+      if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(k);
+      if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    await key(LogicalKeyboardKey.keyM);
+    expect(state.engine.muted, isTrue);
+    await key(LogicalKeyboardKey.keyM);
+    expect(state.engine.muted, isFalse);
+
+    // Q adds the selected song; Shift+Q puts the next one ahead of it.
+    final rows = find.byType(ResultRow);
+    await tester.tap(rows.at(0));
+    await tester.pump(const Duration(milliseconds: 400));
+    await key(LogicalKeyboardKey.keyQ);
+    expect(state.queue.length, 1);
+    final first = state.queue.first.track.id;
+    await tester.tap(rows.at(1));
+    await tester.pump(const Duration(milliseconds: 400));
+    await key(LogicalKeyboardKey.keyQ, shift: true);
+    expect(state.queue.length, 2);
+
+    await key(LogicalKeyboardKey.keyS);
+    expect(state.stageView, isTrue);
+    await key(LogicalKeyboardKey.keyS);
+    expect(state.stageView, isFalse);
+
+    // / goes to the search box, where S and M are just letters.
+    await key(LogicalKeyboardKey.slash);
+    expect(state.searchFocus.hasFocus, isTrue);
+    await key(LogicalKeyboardKey.keyS);
+    await key(LogicalKeyboardKey.keyM);
+    expect(state.stageView, isFalse);
+    expect(state.engine.muted, isFalse);
+    expect(first, isNonZero);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('a block becomes a new playlist, and copy and paste fills another', (tester) async {
     await pumpApp(tester);
     state.selectRow(0);

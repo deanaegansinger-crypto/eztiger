@@ -1159,11 +1159,12 @@ class SearchBox extends StatefulWidget {
 
 class _SearchBoxState extends State<SearchBox> {
   final _c = TextEditingController();
-  final _focus = FocusNode();
+  late final FocusNode _focus = AppScope.of(context).searchFocus;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _focus.removeListener(_update);
     _focus.addListener(_update);
   }
 
@@ -1173,7 +1174,7 @@ class _SearchBoxState extends State<SearchBox> {
 
   @override
   void dispose() {
-    _focus.dispose();
+    _focus.removeListener(_update);
     _c.dispose();
     super.dispose();
   }

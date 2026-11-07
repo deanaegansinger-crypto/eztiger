@@ -79,6 +79,7 @@ const _pro = (
     'Drag a whole folder: click a folder in the Library box to highlight it, then drag it into Tonight\'s playlist, a playlist or the player. All its songs, as listed, go in.',
     'Double-click (☰ Menu): Player loads a double-clicked song into the player (or the next deck); Tonight adds it to the end of Tonight\'s playlist instead.',
     'When nothing is playing (cued, paused or stopped) the lyrics screen, the Stage view and the second screen show the spinning logo and what is up next, instead of frozen lyrics.',
+    'Keys: Space play/pause · M mute · Q add the selected song to Tonight\'s playlist · Shift+Q make it the next song · S Stage view on/off · / search · F1 this Read me. They wait while you type in the search box.',
     'Skins (☰ Menu → Skin): six looks for the whole app.',
     'Sync PC ⇄ tablet (☰ Menu): Save sync file writes your playlists and song keys to EZtiger-sync.json. Copy it to the tablet (or put it in the library folder before you copy that), then Load sync file there. It works the other way round too. Songs are matched by where they sit in the library folder, or by file name.',
   ],
