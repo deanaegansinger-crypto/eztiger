@@ -1334,6 +1334,14 @@ void main() {
     expect(find.text('EZTiger Pro · Read me'), findsOneWidget);
     expect(find.textContaining('Autocue loads the next song'), findsOneWidget);
     expect(find.textContaining('Claude created'), findsNothing);
+    // The keyboard shortcuts sit folded at the top and open on a click.
+    expect(find.text('⌨  Keyboard shortcuts'), findsOneWidget);
+    expect(find.text('Volume up'), findsNothing);
+    await tester.tap(find.text('⌨  Keyboard shortcuts'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Volume up'), findsOneWidget);
+    expect(find.text('Key down a semitone'), findsOneWidget);
     // The last line is reachable by scrolling.
     await tester.dragUntilVisible(
       find.textContaining('remembers your settings'),
@@ -1342,6 +1350,7 @@ void main() {
     );
     expect(find.textContaining('remembers your settings'), findsOneWidget);
     await tester.tap(find.text('Close'));
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('EZTiger Pro · Read me'), findsNothing);
   });

@@ -28,6 +28,7 @@ Future<void> showReadMe(BuildContext context) => showDialog<void>(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (isPro && !touchUi) const _ShortcutsMenu(),
               for (final (head, lines)
                   in touchUi
                       ? [
@@ -61,6 +62,99 @@ Future<void> showReadMe(BuildContext context) => showDialog<void>(
   ),
 );
 
+/// Every keyboard shortcut, folded away at the top of the Read me (Windows Pro).
+const _shortcuts = <(String, List<(String, String)>)>[
+  (
+    'Playing',
+    [
+      ('Space', 'Play / pause'),
+      ('R', 'Back to the start of the song'),
+      ('N  or  Ctrl+→', 'Next song'),
+      ('X', 'Mix into the next deck now (2 decks)'),
+      ('Z', 'Back 5 seconds'),
+      ('C', 'Forward 5 seconds'),
+    ],
+  ),
+  (
+    'Sound',
+    [
+      ('U', 'Volume up'),
+      ('D', 'Volume down'),
+      ('M', 'Mute on / off'),
+      ('K', 'Key up a semitone'),
+      ('L', 'Key down a semitone'),
+      ('0', "Back to the song's own key"),
+    ],
+  ),
+  (
+    'Songs',
+    [
+      ('/', 'Jump to the search box'),
+      ('Q  or  Enter', "Add the selected songs to Tonight's playlist"),
+      ('Shift+Q', 'Make the selected song the next one'),
+      ('Ctrl+A', 'Select all songs in the list'),
+      ('Ctrl+C', 'Copy the selected songs as a text list'),
+      ('Ctrl+V', 'Paste a song list into the open playlist'),
+      ('Delete', 'Take the selected songs off the open playlist'),
+      ('Esc', 'Clear the selection'),
+    ],
+  ),
+  (
+    'Screen',
+    [
+      ('S', 'Stage view on / off'),
+      ('F11', 'Full screen on / off (Esc leaves it)'),
+      ('B', 'Lock the screen 🔒 (press and hold the lock to unlock)'),
+      ('F1', 'This Read me'),
+    ],
+  ),
+];
+
+class _ShortcutsMenu extends StatelessWidget {
+  const _ShortcutsMenu();
+
+  @override
+  Widget build(BuildContext context) => Theme(
+    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+    child: ExpansionTile(
+      key: const Key('read-me-shortcuts'),
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.only(left: 4, bottom: 6),
+      expandedCrossAxisAlignment: CrossAxisAlignment.start,
+      title: Text(
+        '⌨  Keyboard shortcuts',
+        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: EzColors.brass),
+      ),
+      subtitle: const Text(
+        'Single keys, one hand. They wait while you type in the search box, and while the screen is locked.',
+        style: TextStyle(fontSize: 12),
+      ),
+      children: [
+        for (final (group, keys) in _shortcuts) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 2),
+            child: Text(group, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+          ),
+          for (final (key, what) in keys)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 120,
+                    child: Text(key, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  ),
+                  Expanded(child: Text(queueWords(what), style: const TextStyle(fontSize: 13, height: 1.3))),
+                ],
+              ),
+            ),
+        ],
+      ],
+    ),
+  );
+}
+
 const _pro = (
   'EZTiger Pro',
   [
@@ -79,19 +173,14 @@ const _pro = (
     'Drag a whole folder: click a folder in the Library box to highlight it, then drag it into Tonight\'s playlist, a playlist or the player. All its songs, as listed, go in.',
     'Double-click (☰ Menu): Player loads a double-clicked song into the player (or the next deck); Tonight adds it to the end of Tonight\'s playlist instead.',
     'When nothing is playing (cued, paused or stopped) the lyrics screen, the Stage view and the second screen show the spinning logo and what is up next, instead of frozen lyrics.',
-    'Keyboard shortcuts (Windows), single keys you can reach with one hand. They wait while you type in the search box, and while the screen is locked:',
-    'Keys · playing: Space play/pause · R back to the start · N next song · X mix into the next deck now (2 decks) · Z back 5 seconds · C forward 5 seconds',
-    'Keys · sound: U volume up · D volume down · M mute on/off · K key up · L key down · 0 back to the song\'s own key',
-    'Keys · songs: Q add the selected songs to Tonight\'s playlist · Shift+Q make them the next song · / jump to the search box',
-    'Keys · screen: S Stage view on/off · B lock the screen (🔒) · F1 this Read me',
     'Skins (☰ Menu → Skin): six looks for the whole app.',
     'Sync PC ⇄ tablet (☰ Menu): Save sync file writes your playlists and song keys to EZtiger-sync.json. Copy it to the tablet (or put it in the library folder before you copy that), then Load sync file there. It works the other way round too. Songs are matched by where they sit in the library folder, or by file name.',
   ],
 );
 
 /// The Pro lines that apply on the tablet: no Level or Vocal cut (the
-/// tablet's sound engine doesn't have them) and no keyboard shortcuts.
-bool _onTablet(String line) => !['Level', 'Vocal cut', 'Keyboard', 'Keys'].any(line.startsWith);
+/// tablet's sound engine doesn't have them).
+bool _onTablet(String line) => !['Level', 'Vocal cut'].any(line.startsWith);
 
 const _sections = <(String, List<String>)>[
   (
