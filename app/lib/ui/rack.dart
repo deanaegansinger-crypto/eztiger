@@ -31,7 +31,9 @@ class Rack extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Pro with 2 decks: deck A and deck B side by side, slimmer.
-    final twin = isPro && AppScope.of(context).twoDecks;
+    final s = AppScope.of(context);
+    final twin = isPro && s.twoDecks;
+    final folded = isPro && s.searching;
     return Container(
       color: context.ez.panel,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
@@ -41,12 +43,16 @@ class Rack extends StatelessWidget {
           const _BrandRow(),
           const SizedBox(height: 8),
           if (twin) const TwinDecks() else ...[const PlayerStrip(), const SizedBox(height: 6), const SeekBar()],
-          if (isPro) const CrossfadeRow(),
-          const _VolumeRow(),
-          if (isPro) const ProSoundRow(),
-          if (!twin) const _DeckLine(),
-          const SizedBox(height: 8),
-          const ListText(child: LibraryTabs()),
+          // Pro: while searching, everything under the player folds away so
+          // the results get the room.
+          if (!folded) ...[
+            if (isPro) const CrossfadeRow(),
+            const _VolumeRow(),
+            if (isPro) const ProSoundRow(),
+            if (!twin) const _DeckLine(),
+            const SizedBox(height: 8),
+            const ListText(child: LibraryTabs()),
+          ],
           const SizedBox(height: 8),
           const ListText(child: SearchBox()),
           const SizedBox(height: 6),
@@ -183,6 +189,17 @@ class _MainMenu extends StatelessWidget {
             onChanged: s.setStageLyricsRight,
           ),
         ),
+        if (isPro)
+          _menuRow(
+            menu,
+            'Double-click',
+            Segmented<bool>(
+              key: const Key('menu-double-click'),
+              options: const {false: 'Player', true: 'Tonight'},
+              value: s.doubleClickToQueue,
+              onChanged: s.setDoubleClickToQueue,
+            ),
+          ),
         if (isPro)
           CheckedPopupMenuItem(
             key: const Key('menu-lock-enabled'),
@@ -912,39 +929,46 @@ class _FolderTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     final f = folder;
-    return MenuArea(
-      onMenu: (at) async {
-        final choice = await showMenuAt<String>(context, at, [
-          if (f.included)
-            const PopupMenuItem(value: 'exclude', child: Text('✓ In searchable library — remove'))
-          else
-            const PopupMenuItem(value: 'include', child: Text('➕ Add to searchable library')),
-          if (f.isRoot) const PopupMenuItem(value: 'rescan', child: Text('🔄 Rescan')),
-          if (f.isRoot) const PopupMenuItem(value: 'forget', child: Text('🗑 Forget this folder')),
-        ]);
-        switch (choice) {
-          case 'include':
-            await s.setFolderIncluded(f, true);
-          case 'exclude':
-            await s.setFolderIncluded(f, false);
-          case 'rescan':
-            await s.rescan();
-          case 'forget':
-            await s.removeRootFolder(f);
-        }
-      },
-      child: _FolderRow(
-        label: f.name,
-        depth: depth,
-        count: f.totalCount,
-        included: f.included,
-        expandable: f.hasChildren,
-        expanded: s.expanded.contains(f.id),
-        selected: s.selectedFolderId == f.id,
-        onTap: () => s.selectFolder(f.id),
-        onToggle: () => s.toggleExpanded(f),
-      ),
+    Future<void> menu(Offset at) async {
+      final choice = await showMenuAt<String>(context, at, [
+        if (f.included)
+          const PopupMenuItem(value: 'exclude', child: Text('✓ In searchable library — remove'))
+        else
+          const PopupMenuItem(value: 'include', child: Text('➕ Add to searchable library')),
+        if (f.isRoot) const PopupMenuItem(value: 'rescan', child: Text('🔄 Rescan')),
+        if (f.isRoot) const PopupMenuItem(value: 'forget', child: Text('🗑 Forget this folder')),
+      ]);
+      switch (choice) {
+        case 'include':
+          await s.setFolderIncluded(f, true);
+        case 'exclude':
+          await s.setFolderIncluded(f, false);
+        case 'rescan':
+          await s.rescan();
+        case 'forget':
+          await s.removeRootFolder(f);
+      }
+    }
+
+    final selected = s.selectedFolderId == f.id;
+    final row = _FolderRow(
+      label: f.name,
+      depth: depth,
+      count: f.totalCount,
+      included: f.included,
+      expandable: f.hasChildren,
+      expanded: s.expanded.contains(f.id),
+      selected: selected,
+      onTap: () => s.selectFolder(f.id),
+      onToggle: () => s.toggleExpanded(f),
     );
+    // Pro: the highlighted folder drags as a whole, all its songs (as listed
+    // below), into Tonight's playlist, a playlist or the player.
+    final songs = isPro && selected && s.view == ResultsView.search ? s.results.map((g) => g.primary).toList() : null;
+    if (songs != null && songs.isNotEmpty) {
+      return SongDraggable(key: Key('folder-drag-${f.id}'), data: SongDrag(songs), onMenu: menu, child: row);
+    }
+    return MenuArea(onMenu: menu, child: row);
   }
 }
 
@@ -1135,8 +1159,21 @@ class SearchBox extends StatefulWidget {
 
 class _SearchBoxState extends State<SearchBox> {
   final _c = TextEditingController();
+  final _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(_update);
+  }
+
+  /// Pro folds the controls away while the box has the focus or a search in
+  /// it; ✕ (or emptying the box and leaving it) brings them back.
+  void _update() => AppScope.of(context).setSearching(_focus.hasFocus || _c.text.isNotEmpty);
+
   @override
   void dispose() {
+    _focus.dispose();
     _c.dispose();
     super.dispose();
   }
@@ -1145,8 +1182,13 @@ class _SearchBoxState extends State<SearchBox> {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     return TextField(
+      key: const Key('search'),
       controller: _c,
-      onChanged: s.setQuery,
+      focusNode: _focus,
+      onChanged: (q) {
+        s.setQuery(q);
+        _update();
+      },
       // Clicking elsewhere leaves the box, so Space goes back to play/pause.
       onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
       style: const TextStyle(fontSize: 13),
@@ -1165,6 +1207,8 @@ class _SearchBoxState extends State<SearchBox> {
                 onPressed: () {
                   _c.clear();
                   s.setQuery('');
+                  _focus.unfocus();
+                  _update();
                 },
               ),
         filled: true,
@@ -1406,7 +1450,11 @@ class _ResultRowState extends State<ResultRow> {
     final row = InkWell(
       // Loads it, paused, like dropping it on the player. With 2 decks and a
       // song playing, it goes on the other deck as the next song.
-      onDoubleTap: () => isPro && s.twoDecks ? s.loadNext([t]) : s.playNow(t, autostart: false),
+      onDoubleTap: () => isPro && s.doubleClickToQueue
+          ? s.enqueue(t)
+          : isPro && s.twoDecks
+          ? s.loadNext([t])
+          : s.playNow(t, autostart: false),
       child: Container(
         color: selected
             ? EzColors.brass.withValues(alpha: 0.28)

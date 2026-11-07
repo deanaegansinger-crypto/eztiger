@@ -87,6 +87,25 @@ class AppState extends ChangeNotifier {
   /// The Library / Playlists box is folded away, for more room for the songs.
   bool libraryCollapsed = false;
 
+  /// Pro: a double-click on a song in the list adds it to Tonight's
+  /// playlist, instead of loading it into the player.
+  bool doubleClickToQueue = false;
+
+  void setDoubleClickToQueue(bool v) {
+    doubleClickToQueue = v;
+    notifyListeners();
+  }
+
+  /// Pro: the search box is in use, so the controls under the player fold
+  /// away to give the results more room. Not saved.
+  bool searching = false;
+
+  void setSearching(bool v) {
+    if (searching == v) return;
+    searching = v;
+    notifyListeners();
+  }
+
   /// Pro: the 🔒 screen lock is offered (☰ Menu → Screen lock button).
   bool lockEnabled = true;
 
@@ -214,6 +233,7 @@ class AppState extends ChangeNotifier {
       stageLyricsRight = m['stageLyricsRight'] as bool? ?? stageLyricsRight;
       libraryCollapsed = m['libraryCollapsed'] as bool? ?? libraryCollapsed;
       lockEnabled = m['lockEnabled'] as bool? ?? lockEnabled;
+      doubleClickToQueue = m['doubleClickToQueue'] as bool? ?? doubleClickToQueue;
       twoDecks = canTwoDecks && (m['twoDecks'] as bool? ?? twoDecks);
       final scale = (m['textScale'] as num?)?.toDouble();
       if (textScaleChoices.containsKey(scale)) textScale = scale!;
@@ -259,6 +279,7 @@ class AppState extends ChangeNotifier {
       'stageLyricsRight': stageLyricsRight,
       'libraryCollapsed': libraryCollapsed,
       'lockEnabled': lockEnabled,
+      'doubleClickToQueue': doubleClickToQueue,
       'twoDecks': twoDecks,
       'autocue': autocue,
       'fadeMs': fadeOutTime.inMilliseconds,
