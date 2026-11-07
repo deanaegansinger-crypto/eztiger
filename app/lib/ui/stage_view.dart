@@ -5,6 +5,7 @@ import '../theme.dart';
 import 'common.dart';
 import '../app_state.dart';
 import '../edition.dart';
+import 'lock.dart';
 import 'pro_sound.dart';
 import 'output_panel.dart';
 import 'twin_decks.dart';
@@ -111,6 +112,7 @@ class _Controls extends StatelessWidget {
             ),
             if (isPro) ...[const SizedBox(width: 10), KeyWarning(engine: e, fontSize: 16)],
             const Spacer(),
+            if (isPro && s.lockEnabled) ...[const LockButton(big: true), const SizedBox(width: 10)],
             // Swap the lyrics and the buttons left and right.
             IconButton(
               key: const Key('stage-swap'),

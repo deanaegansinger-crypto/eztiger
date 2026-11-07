@@ -13,7 +13,7 @@ final _scroll = ScrollController();
 Future<void> showReadMe(BuildContext context) => showDialog<void>(
   context: context,
   builder: (context) => AlertDialog(
-    title: Text(touchUi ? 'EZTiger for Android · Read me' : '$editionName · Read me'),
+    title: Text(touchUi ? '$editionName for Android · Read me' : '$editionName · Read me'),
     content: SizedBox(
       width: 600,
       // Tall enough to show it all on most screens, and scrolls (with a
@@ -30,7 +30,11 @@ Future<void> showReadMe(BuildContext context) => showDialog<void>(
             children: [
               for (final (head, lines)
                   in touchUi
-                      ? [_tablet, ..._sections.where((x) => x != _secondScreen)]
+                      ? [
+                          _tablet,
+                          if (isPro) (_pro.$1, _pro.$2.where(_onTablet).toList()),
+                          ..._sections.where((x) => x != _secondScreen),
+                        ]
                       : [if (isPro) _pro, ..._sections]) ...[
                 Padding(
                   padding: const EdgeInsets.only(top: 10, bottom: 4),
@@ -70,10 +74,16 @@ const _pro = (
     'X-fade, under the decks: the slider sets the crossfade from 0 (a straight cut) to 6 seconds. Overlap brings the next song in under the last one; In turn fades one out, then the next in. Smooth fades sound even all the way through; Linear is the plain fade.',
     "Tonight's playlist is the list of songs to sing (Basic calls it the queue). Save changes to a playlist: after Load playlist, change Tonight's playlist as you go (add, move or take songs off), then press 💾 Save to <playlist> above it. The Save menu can also replace any playlist with Tonight's playlist.",
     if (trialEnabled) 'Trial: the Pro installer gives every Pro feature for 14 days (the days left show by the PRO badge). After that EZTiger carries on as Basic, with everything kept, until a licence key is entered in ☰ Menu → Enter licence key. The key is checked online once; after that it works without the internet.',
+    'Screen lock: press 🔒 (top bar, or by Library in the Stage view) and every tap is ignored, so a bump on the mic stand can\'t stop or skip a song; the song plays on. Press and hold the lock at the top for a moment to unlock. ☰ Menu → Screen lock button switches the 🔒 off if you don\'t want it.',
     'Skins (☰ Menu → Skin): six looks for the whole app.',
     'Sync PC ⇄ tablet (☰ Menu): Save sync file writes your playlists and song keys to EZtiger-sync.json. Copy it to the tablet (or put it in the library folder before you copy that), then Load sync file there. It works the other way round too. Songs are matched by where they sit in the library folder, or by file name.',
   ],
 );
+
+/// The Pro lines that apply on the tablet: one deck, and no Level or Vocal
+/// cut (the tablet's sound engine doesn't have them).
+bool _onTablet(String line) =>
+    !['Level', 'Vocal cut', '2 decks', 'Stage view with 2 decks', 'Each deck', 'With 2 decks'].any(line.startsWith);
 
 const _sections = <(String, List<String>)>[
   (

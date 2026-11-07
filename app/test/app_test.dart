@@ -936,6 +936,73 @@ void main() {
     expect(find.byKey(const Key('loading-banner')), findsNothing);
   });
 
+  testWidgets('Pro screen lock: taps are ignored until the lock is held, and it can be switched off', (tester) async {
+    await pumpApp(tester);
+    final tracks = state.results.map((g) => g.primary).toList();
+    await tester.runAsync(() => state.enqueue(tracks[0]));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('stage-view')));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('lock-screen')));
+    await tester.pump();
+    expect(state.locked, isTrue);
+    expect(find.text('LOCKED'), findsOneWidget);
+
+    // A tap on Play or Library does nothing, and says how to unlock.
+    await tester.tap(find.byKey(const Key('stage-play')), warnIfMissed: false);
+    await tester.tap(find.byKey(const Key('stage-exit')), warnIfMissed: false);
+    await tester.pump();
+    expect(state.engine.playing, isFalse);
+    expect(state.stageView, isTrue);
+    expect(find.text('LOCKED · press and hold the lock to unlock'), findsOneWidget);
+
+    // A quick tap on the lock doesn't unlock; holding it does.
+    await tester.tap(find.byKey(const Key('lock-unlock')));
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(state.locked, isTrue);
+    final g = await tester.startGesture(tester.getCenter(find.byKey(const Key('lock-unlock'))));
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    await g.up();
+    await tester.pump();
+    expect(state.locked, isFalse);
+    expect(find.text('LOCKED'), findsNothing);
+
+    // ☰ Menu → Screen lock button takes the 🔒 away, and is remembered.
+    await tester.tap(find.byKey(const Key('stage-exit')));
+    await tester.pump();
+    expect(find.byKey(const Key('lock-screen')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.byKey(const Key('menu-lock-enabled')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(state.lockEnabled, isFalse);
+    expect(find.byKey(const Key('lock-screen')), findsNothing);
+    expect(await tester.runAsync(() => db.getMeta('settings')), contains('"lockEnabled":false'));
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('Pro on the tablet: the key change, without Level, Vocal cut or the 2-deck mode', (tester) async {
+    touchUi = true;
+    audioFilters = false;
+    addTearDown(() {
+      touchUi = false;
+      audioFilters = true;
+    });
+    await pumpApp(tester);
+    expect(find.byKey(const Key('key-up')), findsOneWidget);
+    expect(find.byKey(const Key('level-loudness')), findsNothing);
+    expect(find.byKey(const Key('vocal-cut')), findsNothing);
+    expect(find.byKey(const Key('lock-screen')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byKey(const Key('menu-two-decks')), findsNothing);
+    expect(find.byKey(const Key('menu-lock-enabled')), findsOneWidget);
+  });
+
   testWidgets('stage view: big buttons, what is next, and back to the library', (tester) async {
     await pumpApp(tester);
     final tracks = state.results.map((g) => g.primary).toList();
