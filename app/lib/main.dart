@@ -45,8 +45,9 @@ Future<void> main(List<String> args) async {
   await Directory(dir.path).create(recursive: true);
   final db = await EztigerDatabase.open(databaseFactoryFfi, p.join(dir.path, 'eztiger.db'));
 
-  // Pro: the 14-day trial, or a licence key. Without either, Basic.
-  if (builtAsPro) {
+  // Pro: the 14-day trial, or a licence key. Without either, Basic. (Off
+  // unless built with EZ_TRIAL=true: then Pro is simply fully unlocked.)
+  if (builtAsPro && trialEnabled) {
     final l = licence = Licence(db);
     await l.load();
     isPro = l.proActive;
