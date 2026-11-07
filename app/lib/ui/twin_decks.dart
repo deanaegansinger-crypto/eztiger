@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../platform.dart';
+
 import '../app_state.dart';
 import '../player.dart';
 import '../theme.dart';
@@ -298,73 +300,92 @@ class CrossfadeRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     final secs = s.fadeOutTime.inMilliseconds / 1000;
+    // The Overlap / In turn and Smooth / Linear choices.
+    final choices = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (s.twoDecks) ...[
+          Tooltip(
+            message:
+                'Overlap: the next song comes in under the last one.\nIn turn: one fades out, then the next fades in.',
+            child: Segmented<bool>(
+              key: const Key('xfade-style'),
+              options: const {true: 'Overlap', false: 'In turn'},
+              value: s.fadeOverlap,
+              onChanged: s.setFadeOverlap,
+            ),
+          ),
+          const SizedBox(width: 6),
+        ],
+        Segmented<bool>(
+          key: const Key('xfade-curve'),
+          options: const {true: 'Smooth', false: 'Linear'},
+          value: s.smoothFades,
+          onChanged: s.setSmoothFades,
+        ),
+      ],
+    );
+    final slider = Row(
+      children: [
+        Tooltip(
+          message: 'Crossfade into the next song at the end of each one',
+          child: EzSwitch(
+            key: const Key('xfade-on'),
+            label: 'X-fade',
+            value: s.crossfade,
+            onChanged: s.toggleCrossfade,
+          ),
+        ),
+        Expanded(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 3,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+            ),
+            child: Slider(
+              key: const Key('xfade-time'),
+              value: secs.clamp(0, AppState.maxFade.inSeconds.toDouble()),
+              max: AppState.maxFade.inSeconds.toDouble(),
+              divisions: AppState.maxFade.inSeconds * 2,
+              activeColor: EzColors.cyan,
+              label: secs == 0 ? 'Cut' : '${secs.toStringAsFixed(1)} s',
+              onChanged: (v) => s.setFadeOut(Duration(milliseconds: (v * 1000).round())),
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 34,
+          child: Text(
+            secs == 0 ? 'Cut' : '${secs.toStringAsFixed(1)}s',
+            key: const Key('xfade-label'),
+            style: TextStyle(fontSize: 11, color: context.ez.textDim),
+          ),
+        ),
+      ],
+    );
+    // On the tablet the choices go under the slider, so the slider keeps
+    // room for a finger.
+    if (touchUi) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            slider,
+            FittedBox(fit: BoxFit.scaleDown, child: choices),
+          ],
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(top: 2),
       child: Row(
         children: [
-          Tooltip(
-            message: 'Crossfade into the next song at the end of each one',
-            child: EzSwitch(
-              key: const Key('xfade-on'),
-              label: 'X-fade',
-              value: s.crossfade,
-              onChanged: s.toggleCrossfade,
-            ),
-          ),
-          Expanded(
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 3,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-              ),
-              child: Slider(
-                key: const Key('xfade-time'),
-                value: secs.clamp(0, AppState.maxFade.inSeconds.toDouble()),
-                max: AppState.maxFade.inSeconds.toDouble(),
-                divisions: AppState.maxFade.inSeconds * 2,
-                activeColor: EzColors.cyan,
-                label: secs == 0 ? 'Cut' : '${secs.toStringAsFixed(1)} s',
-                onChanged: (v) => s.setFadeOut(Duration(milliseconds: (v * 1000).round())),
-              ),
-            ),
-          ),
-          SizedBox(
-            width: 34,
-            child: Text(
-              secs == 0 ? 'Cut' : '${secs.toStringAsFixed(1)}s',
-              key: const Key('xfade-label'),
-              style: TextStyle(fontSize: 11, color: context.ez.textDim),
-            ),
-          ),
+          Expanded(child: slider),
           Flexible(
             flex: 0,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (s.twoDecks) ...[
-                    Tooltip(
-                      message: 'Overlap: the next song comes in under the last one.\nIn turn: one fades out, then the next fades in.',
-                      child: Segmented<bool>(
-                        key: const Key('xfade-style'),
-                        options: const {true: 'Overlap', false: 'In turn'},
-                        value: s.fadeOverlap,
-                        onChanged: s.setFadeOverlap,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  Segmented<bool>(
-                    key: const Key('xfade-curve'),
-                    options: const {true: 'Smooth', false: 'Linear'},
-                    value: s.smoothFades,
-                    onChanged: s.setSmoothFades,
-                  ),
-                ],
-              ),
-            ),
+            child: FittedBox(fit: BoxFit.scaleDown, child: choices),
           ),
         ],
       ),

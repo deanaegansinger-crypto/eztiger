@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../platform.dart';
 import '../player.dart';
 import '../theme.dart';
 import 'common.dart';
@@ -60,25 +61,27 @@ class ProSoundRow extends StatelessWidget {
             onTap: loaded && e.keyShift < KaraokeEngine.maxKey ? s.keyUp : null,
           ),
           const Spacer(),
-          Tooltip(
-            message: 'Even out the loudness, so quiet and loud tracks play at about the same level',
-            child: EzSwitch(
-              key: const Key('level-loudness'),
-              label: 'Level',
-              value: e.levelLoudness,
-              onChanged: () => s.setLevelLoudness(!e.levelLoudness),
+          if (audioFilters) ...[
+            Tooltip(
+              message: 'Even out the loudness, so quiet and loud tracks play at about the same level',
+              child: EzSwitch(
+                key: const Key('level-loudness'),
+                label: 'Level',
+                value: e.levelLoudness,
+                onChanged: () => s.setLevelLoudness(!e.levelLoudness),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Tooltip(
-            message: 'Cut the lead vocal (works best on stereo tracks with the singer in the middle)',
-            child: EzSwitch(
-              key: const Key('vocal-cut'),
-              label: 'Vocal cut',
-              value: e.vocalCut,
-              onChanged: () => s.setVocalCut(!e.vocalCut),
+            const SizedBox(width: 12),
+            Tooltip(
+              message: 'Cut the lead vocal (works best on stereo tracks with the singer in the middle)',
+              child: EzSwitch(
+                key: const Key('vocal-cut'),
+                label: 'Vocal cut',
+                value: e.vocalCut,
+                onChanged: () => s.setVocalCut(!e.vocalCut),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

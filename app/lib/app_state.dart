@@ -16,7 +16,7 @@ enum ResultsView { search, playlist, history }
 
 /// Everything the screens show, and every action they can take.
 class AppState extends ChangeNotifier {
-  /// [deckB] is the second player for the 2-deck mode (Windows only).
+  /// [deckB] is the second player for Pro's 2-deck mode.
   AppState(this.db, KaraokeEngine deckA, {KaraokeEngine? deckB}) : decks = [deckA, ?deckB] {
     for (final d in decks) {
       d.onFinished = () {
@@ -86,6 +86,26 @@ class AppState extends ChangeNotifier {
 
   /// The Library / Playlists box is folded away, for more room for the songs.
   bool libraryCollapsed = false;
+
+  /// Pro: the 🔒 screen lock is offered (☰ Menu → Screen lock button).
+  bool lockEnabled = true;
+
+  /// Pro: the screen is locked, so a bump on the mic stand can't stop or
+  /// skip a song. Press and hold the lock to unlock. Not saved: EZTiger
+  /// always starts unlocked.
+  bool locked = false;
+
+  void setLockEnabled(bool v) {
+    lockEnabled = v;
+    if (!v) locked = false;
+    notifyListeners();
+  }
+
+  void setLocked(bool v) {
+    locked = v && lockEnabled && isPro;
+    notifyListeners();
+  }
+
   static final textScaleChoices = {1.0: 'Normal', 1.25: 'Large', 1.5: 'Extra large'};
   bool autocue = true;
 
@@ -193,6 +213,7 @@ class AppState extends ChangeNotifier {
       stageView = m['stage'] as bool? ?? stageView;
       stageLyricsRight = m['stageLyricsRight'] as bool? ?? stageLyricsRight;
       libraryCollapsed = m['libraryCollapsed'] as bool? ?? libraryCollapsed;
+      lockEnabled = m['lockEnabled'] as bool? ?? lockEnabled;
       twoDecks = canTwoDecks && (m['twoDecks'] as bool? ?? twoDecks);
       final scale = (m['textScale'] as num?)?.toDouble();
       if (textScaleChoices.containsKey(scale)) textScale = scale!;
@@ -210,7 +231,7 @@ class AppState extends ChangeNotifier {
       sort = SearchSort.values.asNameMap()[m['sort']] ?? sort;
       engine.volume = (m['volume'] as num?)?.toDouble() ?? engine.volume;
       engine.muted = m['muted'] as bool? ?? engine.muted;
-      if (isPro) {
+      if (isPro && audioFilters) {
         final level = m['levelLoudness'] as bool? ?? false, cut = m['vocalCut'] as bool? ?? false;
         for (final d in decks) {
           d.levelLoudness = level;
@@ -237,6 +258,7 @@ class AppState extends ChangeNotifier {
       'stage': stageView,
       'stageLyricsRight': stageLyricsRight,
       'libraryCollapsed': libraryCollapsed,
+      'lockEnabled': lockEnabled,
       'twoDecks': twoDecks,
       'autocue': autocue,
       'fadeMs': fadeOutTime.inMilliseconds,

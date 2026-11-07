@@ -936,6 +936,98 @@ void main() {
     expect(find.byKey(const Key('loading-banner')), findsNothing);
   });
 
+  testWidgets('Pro screen lock: taps are ignored until the lock is held, and it can be switched off', (tester) async {
+    await pumpApp(tester);
+    final tracks = state.results.map((g) => g.primary).toList();
+    await tester.runAsync(() => state.enqueue(tracks[0]));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('stage-view')));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('lock-screen')));
+    await tester.pump();
+    expect(state.locked, isTrue);
+    expect(find.text('LOCKED'), findsOneWidget);
+
+    // A tap on Play or Library does nothing, and says how to unlock.
+    await tester.tap(find.byKey(const Key('stage-play')), warnIfMissed: false);
+    await tester.tap(find.byKey(const Key('stage-exit')), warnIfMissed: false);
+    await tester.pump();
+    expect(state.engine.playing, isFalse);
+    expect(state.stageView, isTrue);
+    expect(find.text('LOCKED · press and hold the lock to unlock'), findsOneWidget);
+
+    // A quick tap on the lock doesn't unlock; holding it does.
+    await tester.tap(find.byKey(const Key('lock-unlock')));
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(state.locked, isTrue);
+    final g = await tester.startGesture(tester.getCenter(find.byKey(const Key('lock-unlock'))));
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    await g.up();
+    await tester.pump();
+    expect(state.locked, isFalse);
+    expect(find.text('LOCKED'), findsNothing);
+
+    // ☰ Menu → Screen lock button takes the 🔒 away, and is remembered.
+    await tester.tap(find.byKey(const Key('stage-exit')));
+    await tester.pump();
+    expect(find.byKey(const Key('lock-screen')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.byKey(const Key('menu-lock-enabled')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(state.lockEnabled, isFalse);
+    expect(find.byKey(const Key('lock-screen')), findsNothing);
+    expect(await tester.runAsync(() => db.getMeta('settings')), contains('"lockEnabled":false'));
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  for (final size in const [Size(1280, 800)]) {
+    testWidgets('Pro on a ${size.width.round()}-wide tablet: key, 2 decks, no Level or Vocal cut', (tester) async {
+      touchUi = true;
+      audioFilters = false;
+      addTearDown(() {
+        touchUi = false;
+        audioFilters = true;
+      });
+      state = AppState(
+        db,
+        KaraokeEngine(backend, scanEdges: scan),
+        deckB: KaraokeEngine(FakeBackend(), scanEdges: scan),
+      );
+      await pumpApp(tester);
+      tester.view.physicalSize = size;
+      await tester.pump();
+      expect(find.byKey(const Key('key-up')), findsOneWidget);
+      expect(find.byKey(const Key('level-loudness')), findsNothing);
+      expect(find.byKey(const Key('vocal-cut')), findsNothing);
+      expect(find.byKey(const Key('lock-screen')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('main-menu')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const Key('menu-lock-enabled')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('menu-two-decks')));
+      for (var i = 0; i < 5; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      expect(state.twoDecks, isTrue);
+      expect(find.byKey(const Key('deck-A')), findsOneWidget);
+      expect(find.byKey(const Key('deck-B')), findsOneWidget);
+
+      // And across the top of the Stage view.
+      await tester.tap(find.byKey(const Key('stage-view')));
+      await tester.pump();
+      expect(find.byKey(const Key('deck-A')), findsOneWidget);
+      expect(find.byKey(const Key('deck-B')), findsOneWidget);
+      expect(find.byKey(const Key('lock-screen')), findsOneWidget);
+    });
+  }
+
   testWidgets('stage view: big buttons, what is next, and back to the library', (tester) async {
     await pumpApp(tester);
     final tracks = state.results.map((g) => g.primary).toList();

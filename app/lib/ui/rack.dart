@@ -16,6 +16,7 @@ import '../sync.dart';
 import 'android_folders.dart';
 import '../theme.dart';
 import 'common.dart';
+import 'lock.dart';
 import 'dialogs.dart';
 import 'logo.dart';
 import 'pro_sound.dart';
@@ -69,15 +70,22 @@ class _BrandRow extends StatelessWidget {
       children: [
         const EzLogo(size: 30),
         const SizedBox(width: 8),
-        Text(
-          'EZTIGER',
-          style: TextStyle(
-            fontFamily: brandFont,
-            fontWeight: FontWeight.w900,
-            fontSize: 18,
-            color: EzColors.brass,
-            letterSpacing: 2,
-            shadows: [if (EzColors.glow case final g?) Shadow(color: g.withValues(alpha: 0.7), blurRadius: 8)],
+        // Shrinks a little rather than overflow when the top bar is full.
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'EZTIGER',
+              style: TextStyle(
+                fontFamily: brandFont,
+                fontWeight: FontWeight.w900,
+                fontSize: 18,
+                color: EzColors.brass,
+                letterSpacing: 2,
+                shadows: [if (EzColors.glow case final g?) Shadow(color: g.withValues(alpha: 0.7), blurRadius: 8)],
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 6),
@@ -132,6 +140,7 @@ class _BrandRow extends StatelessWidget {
             ],
           ),
         const Spacer(),
+        if (isPro && s.lockEnabled) const LockButton(),
         TextButton.icon(
           key: const Key('stage-view'),
           style: TextButton.styleFrom(visualDensity: tapDensity, foregroundColor: EzColors.brass),
@@ -174,6 +183,13 @@ class _MainMenu extends StatelessWidget {
             onChanged: s.setStageLyricsRight,
           ),
         ),
+        if (isPro)
+          CheckedPopupMenuItem(
+            key: const Key('menu-lock-enabled'),
+            value: 'lock-enabled',
+            checked: s.lockEnabled,
+            child: const Text('Screen lock button 🔒'),
+          ),
         const PopupMenuDivider(),
         const PopupMenuItem(
           enabled: false,
@@ -192,13 +208,13 @@ class _MainMenu extends StatelessWidget {
           checked: s.crossfade,
           child: const Text('Crossfade'),
         ),
-        // Windows only for now: a trial of two players fed by one queue.
-        if (s.canTwoDecks && !touchUi)
+        // Pro: two players fed by Tonight's playlist.
+        if (s.canTwoDecks)
           CheckedPopupMenuItem(
             key: const Key('menu-two-decks'),
             value: 'two-decks',
             checked: s.twoDecks,
-            child: const Text('2 decks (trial)'),
+            child: const Text('2 decks'),
           ),
         // Pro sets the time with the crossfade slider under the player.
         if (!isPro)
@@ -320,6 +336,8 @@ class _MainMenu extends StatelessWidget {
           loadSyncFile(context, s);
         } else if (c == 'licence') {
           showLicenceDialog(context, licence!);
+        } else if (c == 'lock-enabled') {
+          s.setLockEnabled(!s.lockEnabled);
         } else if (c == 'two-decks') {
           s.setTwoDecks(!s.twoDecks);
         } else if (c.startsWith('scale:')) {
@@ -766,7 +784,10 @@ class _LibraryTabsState extends State<LibraryTabs> {
                     _TabButton(label: '★ Playlists', selected: tab == 1 && !collapsed, onTap: () => _show(s, 1)),
               ),
               const Spacer(),
-              if (tab == 0 && !collapsed) const _AddFolderButton(),
+              if (tab == 0 && !collapsed)
+                const Flexible(
+                  child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: _AddFolderButton()),
+                ),
               IconButton(
                 key: const Key('library-fold'),
                 tooltip: collapsed ? 'Show folders and playlists' : 'Fold away, for more room for songs',
