@@ -474,7 +474,7 @@ void main() {
     expect(find.descendant(of: out, matching: find.byType(EzLogo)), findsOneWidget);
   });
 
-  testWidgets('Pro keys: M, Q, Shift+Q, S and /, but not while typing', (tester) async {
+  testWidgets('Pro keys: M, Q, S, /, U/D, K/L/0 and B, but not while typing', (tester) async {
     await pumpApp(tester);
     Future<void> key(LogicalKeyboardKey k, {bool shift = false}) async {
       if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
@@ -514,7 +514,34 @@ void main() {
     expect(state.stageView, isFalse);
     expect(state.engine.muted, isFalse);
     expect(first, isNonZero);
-    await tester.pump(const Duration(seconds: 1));
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+
+    // U / D volume, K / L key on the song in the player, 0 back, B locks.
+    await tester.runAsync(() async {
+      await state.playNow(state.queue.first.track, autostart: false);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    final vol = state.engine.volume;
+    await key(LogicalKeyboardKey.keyU);
+    expect(state.engine.volume, vol + 5 > 100 ? 100 : vol + 5);
+    await key(LogicalKeyboardKey.keyD);
+    await key(LogicalKeyboardKey.keyD);
+    expect(state.engine.volume, (vol + 5 > 100 ? 100 : vol + 5) - 10);
+    await key(LogicalKeyboardKey.keyK);
+    await key(LogicalKeyboardKey.keyK);
+    expect(state.engine.keyShift, 2);
+    await key(LogicalKeyboardKey.keyL);
+    expect(state.engine.keyShift, 1);
+    await key(LogicalKeyboardKey.digit0);
+    expect(state.engine.keyShift, 0);
+    await key(LogicalKeyboardKey.keyB);
+    expect(state.locked, isTrue);
+    await key(LogicalKeyboardKey.keyU);
+    expect(state.engine.volume, (vol + 5 > 100 ? 100 : vol + 5) - 10, reason: 'keys wait while locked');
+    state.setLocked(false);
+    await tester.pump(const Duration(seconds: 3));
   });
 
   testWidgets('a block becomes a new playlist, and copy and paste fills another', (tester) async {
