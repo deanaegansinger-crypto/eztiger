@@ -8,8 +8,8 @@ echo This downloads the AI tools, about 3 GB, and can take 10-20 minutes.
 echo.
 
 set "PY="
-for %%V in (3.12 3.11 3.10) do if not defined PY py -%%V -c "pass" >nul 2>nul && set "PY=py -%%V"
-if not defined PY python -c "import sys; sys.exit(not (3,10) <= sys.version_info[:2] <= (3,12))" >nul 2>nul && set "PY=python"
+for %%V in (3.12 3.13 3.11 3.10) do if not defined PY py -%%V -c "pass" >nul 2>nul && set "PY=py -%%V"
+if not defined PY python -c "import sys; sys.exit(not (3,10) <= sys.version_info[:2] <= (3,13))" >nul 2>nul && set "PY=python"
 if not defined PY goto nopython
 
 if not exist ".venv\Scripts\python.exe" %PY% -m venv .venv || goto failed
