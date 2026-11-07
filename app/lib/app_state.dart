@@ -331,9 +331,14 @@ class AppState extends ChangeNotifier {
   }
 
   /// Key up or down a semitone for the song on the player (−3 to +3).
-  Future<void> keyUp() => engine.setKeyShift(engine.keyShift + 1);
-  Future<void> keyDown() => engine.setKeyShift(engine.keyShift - 1);
+  Future<void> keyUp() => keyUpOn(engine);
+  Future<void> keyDown() => keyDownOn(engine);
   Future<void> keyReset() => engine.setKeyShift(0);
+
+  /// Pro, 2 decks: the key of the song on either deck, so the song waiting
+  /// on the other deck can be set before it plays. It is remembered too.
+  Future<void> keyUpOn(KaraokeEngine deck) => deck.setKeyShift(deck.keyShift + 1);
+  Future<void> keyDownOn(KaraokeEngine deck) => deck.setKeyShift(deck.keyShift - 1);
 
   Future<void> setLevelLoudness(bool on) async {
     for (final d in decks) {

@@ -533,6 +533,19 @@ void main() {
     expect(tester.getRect(find.byKey(const Key('stage-lyrics'))).top, greaterThan(a.bottom));
     expect(find.byKey(const Key('deck-A-play')), findsOneWidget);
     expect(find.byKey(const Key('deck-B-mix')), findsOneWidget);
+
+    // The key of the song waiting on deck B is set before it plays, and kept.
+    final waiting = state.standby!;
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('deck-B-key-up')));
+      await tester.tap(find.byKey(const Key('deck-B-key-up')));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+    expect(waiting.keyShift, 2);
+    expect(state.engine.keyShift, 0, reason: 'the song on air keeps its key');
+    expect(tester.widget<Text>(find.byKey(const Key('deck-B-key'))).data, 'KEY +2');
+    expect(state.keyShifts[waiting.current!.path], 2, reason: 'remembered for the song');
   });
 
   testWidgets('Pro trial: days left by the PRO badge, and a licence key in the menu', (tester) async {

@@ -124,6 +124,7 @@ class _DeckCard extends StatelessWidget {
                     style: TextStyle(fontFamily: vfdFont, fontSize: 10 * z, color: EzColors.cyan),
                   ),
                 ),
+                if (t != null) _DeckKey(engine: e, name: name, z: z),
                 if (live) ...[
                   _Mini(z: z, icon: Icons.skip_previous, tooltip: 'Back to the start', onTap: s.previous),
                   _Mini(
@@ -150,6 +151,67 @@ class _DeckCard extends StatelessWidget {
             _DeckProgress(engine: e, z: z),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The key of this deck's song: − KEY +2 +. On the deck that isn't
+/// playing it sets the key before the song comes in.
+class _DeckKey extends StatelessWidget {
+  const _DeckKey({required this.engine, required this.name, this.z = 1});
+  final KaraokeEngine engine;
+  final String name;
+  final double z;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final k = engine.keyShift;
+    Widget step(IconData icon, String key, String tip, VoidCallback? onTap) => Tooltip(
+      message: tip,
+      child: InkWell(
+        key: Key(key),
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.all(3 * z),
+          child: Icon(icon, size: 14 * z, color: onTap == null ? Colors.white24 : EzColors.cyan),
+        ),
+      ),
+    );
+    return Padding(
+      padding: EdgeInsets.only(right: 4 * z),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          step(
+            Icons.remove,
+            'deck-$name-key-down',
+            'Key down a semitone',
+            k <= KaraokeEngine.minKey ? null : () => s.keyDownOn(engine),
+          ),
+          SizedBox(
+            width: 44 * z,
+            child: Text(
+              k == 0 ? 'KEY 0' : 'KEY ${k > 0 ? '+' : '−'}${k.abs()}',
+              key: Key('deck-$name-key'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: vfdFont,
+                fontSize: 10 * z,
+                fontWeight: FontWeight.w700,
+                color: k == 0 ? EzColors.vfdSub : EzColors.red,
+              ),
+            ),
+          ),
+          step(
+            Icons.add,
+            'deck-$name-key-up',
+            'Key up a semitone',
+            k >= KaraokeEngine.maxKey ? null : () => s.keyUpOn(engine),
+          ),
+        ],
       ),
     );
   }
