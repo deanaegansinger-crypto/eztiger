@@ -36,11 +36,6 @@ class Rack extends StatelessWidget {
     final s = AppScope.of(context);
     final twin = isPro && s.twoDecks;
     final folded = isPro && s.searching;
-    // On the tablet the on-screen keyboard takes the bottom of the screen, so
-    // while typing a search the player folds away too, to leave room for the
-    // results. Touching a song (to pick it, or drag it to the player or the
-    // queue) leaves the search box, and the player opens again.
-    final keyboardUp = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Container(
       color: context.ez.panel,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
@@ -49,40 +44,84 @@ class Rack extends StatelessWidget {
         children: [
           const _BrandRow(),
           const SizedBox(height: 8),
-          ListenableBuilder(
-            listenable: s.searchFocus,
-            builder: (context, _) => ClipRect(
-            child: AnimatedSize(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              alignment: Alignment.topCenter,
-              child: keyboardUp && s.searchFocus.hasFocus
-                  ? const SizedBox(key: Key('player-folded'), width: double.infinity)
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (twin) const TwinDecks() else ...[const PlayerStrip(), const SizedBox(height: 6), const SeekBar()],
-                        // Pro: while searching, everything under the player
-                        // folds away so the results get the room.
-                        if (!folded) ...[
-                          if (isPro) const CrossfadeRow(),
-                          const _VolumeRow(),
-                          if (isPro) const ProSoundRow(),
-                          if (!twin) const _DeckLine(),
-                        ],
-                      ],
-                    ),
-            ),
+          _PlayerFold(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (twin) const TwinDecks() else ...[const PlayerStrip(), const SizedBox(height: 6), const SeekBar()],
+                // Pro: while searching, everything under the player folds
+                // away so the results get the room.
+                if (!folded) ...[
+                  if (isPro) const CrossfadeRow(),
+                  const _VolumeRow(),
+                  if (isPro) const ProSoundRow(),
+                  if (!twin) const _DeckLine(),
+                ],
+              ],
             ),
           ),
           if (!folded) ...[const SizedBox(height: 8), const ListText(child: LibraryTabs())],
           const SizedBox(height: 8),
-          const ListText(child: SearchBox()),
+          // Keyed, so the box (and what is typed in it) stays put when the
+          // library tabs above fold away.
+          const ListText(key: Key('search-box'), child: SearchBox()),
           const SizedBox(height: 6),
           const Expanded(child: ListText(child: ResultsTable())),
           const _StatusLine(),
         ],
       ),
+    );
+  }
+}
+
+/// On the tablet the on-screen keyboard takes the bottom of the screen, so
+/// while typing a search the player folds away, to leave room for the
+/// results. Touching a song (to pick it, or drag it to the player or the
+/// queue) leaves the search box, and the player opens again; so does hiding
+/// the keyboard.
+class _PlayerFold extends StatefulWidget {
+  const _PlayerFold({required this.child});
+  final Widget child;
+  @override
+  State<_PlayerFold> createState() => _PlayerFoldState();
+}
+
+class _PlayerFoldState extends State<_PlayerFold> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // The Scaffold hides the keyboard from the MediaQuery below it, so watch
+  // the window itself.
+  @override
+  void didChangeMetrics() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) {
+    final focus = AppScope.of(context).searchFocus;
+    return ListenableBuilder(
+      listenable: focus,
+      builder: (context, _) {
+        final keyboardUp = View.of(context).viewInsets.bottom > 0;
+        return ClipRect(
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            alignment: Alignment.topCenter,
+            child: keyboardUp && focus.hasFocus
+                ? const SizedBox(key: Key('player-folded'), width: double.infinity)
+                : widget.child,
+          ),
+        );
+      },
     );
   }
 }
@@ -1396,17 +1435,22 @@ class _ResultsTableState extends State<ResultsTable> {
     return Focus(
       focusNode: focus,
       onKeyEvent: (_, e) => _onKey(s, e),
-      child: Column(
+      // Short on room with the tablet's keyboard up: the filter bar steps
+      // aside so the songs still show. (Rebuilt as the keyboard resizes it.)
+      child: LayoutBuilder(
+        builder: (context, c) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
             '$label · ${s.resultsTitle} · ${groups.length} ${groups.length == 1 ? 'match' : 'matches'}'
             '${n > 1 ? ' · $n selected (drag them, or Ctrl+C)' : ''}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 11, color: context.ez.textDim),
           ),
           const SizedBox(height: 4),
           if (s.scanning) const LoadingBanner(),
-          const _FilterBar(),
+          if (View.of(context).viewInsets.bottom == 0 || c.maxHeight >= listSize(context, 220)) const _FilterBar(),
           const _ResultsHeader(),
           Expanded(
             child: groups.isEmpty
@@ -1436,6 +1480,7 @@ class _ResultsTableState extends State<ResultsTable> {
                   ),
           ),
         ],
+      ),
       ),
     );
   }
