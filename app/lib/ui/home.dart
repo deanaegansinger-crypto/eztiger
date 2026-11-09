@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import '../platform.dart';
 import '../theme.dart';
 import 'common.dart';
+import 'keys.dart';
+import 'lock.dart';
 import 'output_panel.dart';
 import 'queue_panel.dart';
 import 'rack.dart';
@@ -32,44 +34,54 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
+    // While the screen is locked, the keys and Back do nothing either.
+    void unlessLocked(VoidCallback f) {
+      if (!s.locked) f();
+    }
+
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): () => _setFull(false),
-        const SingleActivator(LogicalKeyboardKey.f11): () => _setFull(!fullScreen),
-        const SingleActivator(LogicalKeyboardKey.arrowRight, control: true): s.next,
+        const SingleActivator(LogicalKeyboardKey.escape): () => unlessLocked(() => _setFull(false)),
+        const SingleActivator(LogicalKeyboardKey.f11): () => unlessLocked(() => _setFull(!fullScreen)),
+        const SingleActivator(LogicalKeyboardKey.arrowRight, control: true): () => unlessLocked(s.next),
       },
       child: PopScope(
         // The tablet's Back button leaves full screen first.
-        canPop: !fullScreen,
+        canPop: !fullScreen && !s.locked,
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) _setFull(false);
+          if (!didPop && !s.locked) _setFull(false);
         },
-        child: Focus(
-          autofocus: true,
-          child: Scaffold(
-            body: fullScreen
-                ? GestureDetector(onDoubleTap: () => _setFull(false), child: const KaraokeScreen())
-                : s.stageView
-                ? SafeArea(child: StageView(onFullScreen: () => _setFull(true)))
-                : SafeArea(
-                    child: LayoutBuilder(
-                      builder: (context, c) {
-                        final rackWidth = (c.maxWidth * 0.42).clamp(400.0, 620.0);
-                        return Row(
-                          children: [
-                            SizedBox(width: rackWidth, child: const Rack()),
-                            Expanded(
-                              child: _Stage(
-                                queueHeight: queueHeight,
-                                onResize: (h) => setState(() => queueHeight = h),
-                                onFullScreen: () => _setFull(true),
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
+        child: ProKeys(
+          state: s,
+          child: Focus(
+            autofocus: true,
+            child: Scaffold(
+              body: LockShield(
+                child: fullScreen
+                    ? GestureDetector(onDoubleTap: () => _setFull(false), child: const KaraokeScreen())
+                    : s.stageView
+                    ? SafeArea(child: StageView(onFullScreen: () => _setFull(true)))
+                    : SafeArea(
+                        child: LayoutBuilder(
+                          builder: (context, c) {
+                            final rackWidth = (c.maxWidth * 0.42).clamp(400.0, 620.0);
+                            return Row(
+                              children: [
+                                SizedBox(width: rackWidth, child: const Rack()),
+                                Expanded(
+                                  child: _Stage(
+                                    queueHeight: queueHeight,
+                                    onResize: (h) => setState(() => queueHeight = h),
+                                    onFullScreen: () => _setFull(true),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+              ),
+            ),
           ),
         ),
       ),

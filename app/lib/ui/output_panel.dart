@@ -1,5 +1,8 @@
+import '../edition.dart';
+
 import 'package:flutter/material.dart';
 
+import '../player.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'logo.dart';
@@ -17,8 +20,13 @@ class KaraokeScreen extends StatelessWidget {
     final e = s.engine;
     final video = AppScope.videoOf(context);
     Widget content;
-    if (e.isVideo && video != null) {
-      content = video(context);
+    // Pro: when nothing is playing (cued, paused or empty), the spinning
+    // logo and what is up next, rather than a frozen lyric screen.
+    final idle = isPro && !e.playing;
+    if (idle) {
+      content = _logoCard(e);
+    } else if (e.isVideo && video != null) {
+      content = video(context, e);
     } else if (e.hasCdg) {
       content = ValueListenableBuilder(
         valueListenable: e.cdgFrame,
@@ -32,30 +40,34 @@ class KaraokeScreen extends StatelessWidget {
               ),
       );
     } else {
-      final t = e.current;
-      content = Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const EzLogo(size: 160),
-            const SizedBox(height: 12),
-            const Text(
-              'EZTIGER',
-              style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: EzColors.brass, letterSpacing: 6),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              t == null ? 'Up next…' : t.title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, color: EzColors.cyan),
-            ),
-            if (t?.artist != null) Text(t!.artist!, style: const TextStyle(fontSize: 13, color: EzColors.vfdSub)),
-            if (e.singer != null) Text('🎤 ${e.singer}', style: const TextStyle(fontSize: 13, color: Colors.white70)),
-          ],
-        ),
-      );
+      content = _logoCard(e);
     }
     return ColoredBox(color: Colors.black, child: content);
+  }
+
+  Widget _logoCard(KaraokeEngine e) {
+    final t = e.current;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const EzLogo(size: 160),
+          const SizedBox(height: 12),
+          Text(
+            'EZTIGER',
+            style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: EzColors.brass, letterSpacing: 6),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            t == null ? 'Up next…' : t.title,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 18, color: EzColors.cyan),
+          ),
+          if (t?.artist != null) Text(t!.artist!, style: TextStyle(fontSize: 13, color: EzColors.vfdSub)),
+          if (e.singer != null) Text('🎤 ${e.singer}', style: const TextStyle(fontSize: 13, color: Colors.white70)),
+        ],
+      ),
+    );
   }
 }
 
@@ -102,7 +114,7 @@ class _OutputPanelState extends State<OutputPanel> {
                   color: context.ez.raised,
                   child: Row(
                     children: [
-                      const HeadText('Karaoke output', color: EzColors.brass),
+                      HeadText(isPro ? 'Lyrics output' : 'Karaoke output', color: EzColors.brass),
                       const Spacer(),
                       if (AppScope.secondScreenOf(context) case final second?)
                         Padding(

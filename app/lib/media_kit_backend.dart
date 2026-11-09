@@ -25,6 +25,38 @@ class MediaKitBackend implements MediaBackend {
   Future<void> seek(Duration to) => player.seek(to);
   @override
   Future<void> setVolume(double volume) => player.setVolume(volume);
+  String _filter = '';
+  double _pitch = 1;
+
+  @override
+  Future<void> setAudioFilter(String filter) async {
+    _filter = filter;
+    await _apply();
+  }
+
+  /// The key change, the way media_kit's own setPitch does it: mpv plays
+  /// faster (or slower) without pitch correction, which moves the pitch, and
+  /// scaletempo stretches the tempo back, so the song (and the CDG lyrics,
+  /// which follow its position) keep their time. scaletempo is built into
+  /// every libmpv, unlike ffmpeg's audio filters.
+  @override
+  Future<void> setPitch(double ratio) async {
+    _pitch = ratio;
+    await _apply();
+  }
+
+  Future<void> _apply() async {
+    final native = player.platform;
+    if (native is! NativePlayer) return;
+    final shifted = _pitch != 1;
+    await native.setProperty('audio-pitch-correction', shifted ? 'no' : 'yes');
+    await native.setProperty('speed', _pitch.toStringAsFixed(8));
+    await native.setProperty(
+      'af',
+      [if (shifted) 'scaletempo=scale=${(1 / _pitch).toStringAsFixed(8)}', if (_filter.isNotEmpty) _filter].join(','),
+    );
+  }
+
   @override
   Stream<Duration> get position => player.stream.position;
   @override

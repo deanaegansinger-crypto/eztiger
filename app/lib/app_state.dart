@@ -3,8 +3,12 @@ import 'dart:convert';
 
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show FocusNode;
 
+import 'edition.dart';
+import 'platform.dart';
 import 'player.dart';
+import 'sync.dart';
 import 'ui/common.dart' show SongDrag;
 
 enum PlayMode { single, autoplay }
@@ -13,18 +17,59 @@ enum ResultsView { search, playlist, history }
 
 /// Everything the screens show, and every action they can take.
 class AppState extends ChangeNotifier {
-  AppState(this.db, this.engine) {
-    engine.onFinished = _onTrackFinished;
-    engine.addListener(_watchForCrossfade);
-    engine.addListener(_rememberLoaded);
+  /// [deckB] is the second player for Pro's 2-deck mode.
+  AppState(this.db, KaraokeEngine deckA, {KaraokeEngine? deckB}) : decks = [deckA, ?deckB] {
+    for (final d in decks) {
+      d.onFinished = () {
+        if (identical(d, engine)) _onTrackFinished();
+      };
+      void onChange() {
+        if (!identical(d, engine)) return;
+        _watchForCrossfade();
+        _rememberLoaded();
+      }
+
+      _deckListeners.add(onChange);
+      d.keyShiftFor = (t) => isPro ? keyShifts[t.path] ?? 0 : 0;
+      d.onKeyShift = _rememberKey;
+      d.addListener(onChange);
+    }
   }
 
   final EztigerDatabase db;
-  final KaraokeEngine engine;
+
+  /// The players: one, or two for the 2-deck mode.
+  final List<KaraokeEngine> decks;
+  final List<VoidCallback> _deckListeners = [];
+  int _live = 0;
+
+  /// The player on the screen and in the speakers.
+  KaraokeEngine get engine => decks[_live];
+
+  /// 0 for deck A, 1 for deck B.
+  int get liveDeck => _live;
+
+  /// 2-deck mode: the queue feeds the two players in turn. While one plays,
+  /// the next song waits cued on the other, and a crossfade overlaps them.
+  bool twoDecks = false;
+  bool get canTwoDecks => decks.length > 1 && isPro;
+
+  /// In 2-deck mode, the deck that isn't playing, where the next song waits.
+  KaraokeEngine? get standby => twoDecks && canTwoDecks ? decks[1 - _live] : null;
+
+  /// The queue entry cued on [standby].
+  int? standbyQueueId;
+
+  /// Set while the last song fades out on the other deck.
+  bool _oldFading = false;
+  Future<void> _standbyChain = Future.value();
   late final LibraryScanner scanner = LibraryScanner(db);
 
   // Settings (top of the rack).
   bool dark = true;
+
+  /// The look of the app (an EzSkin id), picked in ☰ Menu → Skin.
+  String skin = 'classic';
   PlayMode mode = PlayMode.single;
   bool crossfade = false;
 
@@ -40,9 +85,6 @@ class AppState extends ChangeNotifier {
   /// left, instead of the other way round.
   bool stageLyricsRight = false;
 
-  /// The audience songbook: its heading, where it is online (for the QR
-  /// code), and a fingerprint of the song list last saved, to tell when the
-  /// library has changed since.
   /// Rescan the library each time EZtiger starts. Off: rescan by hand with
   /// 🔄 Rescan when songs have been added or renamed.
   bool rescanOnStart = false;
@@ -52,6 +94,9 @@ class AppState extends ChangeNotifier {
   Map<String, double> columnWeights = {};
   Set<String> hiddenColumns = {};
 
+  /// The audience songbook: its heading, where it is online (for the QR
+  /// code), and a fingerprint of the song list last saved, to tell when the
+  /// library has changed since.
   String songbookTitle = '';
   String songbookUrl = '';
   String songbookSaved = '';
@@ -59,6 +104,62 @@ class AppState extends ChangeNotifier {
   /// True when songs were added, removed or retitled since the songbook was
   /// last saved (false if it was never saved).
   bool songbookOutOfDate = false;
+
+  /// The Library / Playlists box is folded away, for more room for the songs.
+  bool libraryCollapsed = false;
+
+  /// Pro: a double-click on a song in the list adds it to Tonight's
+  /// playlist, instead of loading it into the player.
+  bool doubleClickToQueue = false;
+
+  void setDoubleClickToQueue(bool v) {
+    doubleClickToQueue = v;
+    notifyListeners();
+  }
+
+  /// The search box, so a key can jump to it.
+  final searchFocus = FocusNode(debugLabel: 'search');
+
+  /// Pro: puts [tracks] in Tonight's playlist as the next songs to sing,
+  /// ahead of whatever was waiting.
+  Future<void> enqueueNext(List<Track> tracks) async {
+    if (tracks.isEmpty) return;
+    final up = upNext;
+    final at = up == null ? queue.length : queue.indexOf(up);
+    await db.queue.insertAll(tracks.map((t) => t.id), at: at < 0 ? queue.length : at);
+    await _reloadQueue();
+    if (standby != null && engine.playing) await _cueStandby();
+  }
+
+  /// Pro: the search box is in use, so the controls under the player fold
+  /// away to give the results more room. Not saved.
+  bool searching = false;
+
+  void setSearching(bool v) {
+    if (searching == v) return;
+    searching = v;
+    notifyListeners();
+  }
+
+  /// Pro: the 🔒 screen lock is offered (☰ Menu → Screen lock button).
+  bool lockEnabled = true;
+
+  /// Pro: the screen is locked, so a bump on the mic stand can't stop or
+  /// skip a song. Press and hold the lock to unlock. Not saved: EZTiger
+  /// always starts unlocked.
+  bool locked = false;
+
+  void setLockEnabled(bool v) {
+    lockEnabled = v;
+    if (!v) locked = false;
+    notifyListeners();
+  }
+
+  void setLocked(bool v) {
+    locked = v && lockEnabled && isPro;
+    notifyListeners();
+  }
+
   static final textScaleChoices = {1.0: 'Normal', 1.25: 'Large', 1.5: 'Extra large'};
   bool autocue = true;
 
@@ -110,10 +211,31 @@ class AppState extends ChangeNotifier {
   static const fadeLevel = 1 / 3;
   static const fadeInTime = Duration(seconds: 2);
 
+  /// Pro: the crossfade slider goes from 0 (a cut) to 6 seconds.
+  static const maxFade = Duration(seconds: 6);
+
+  /// Pro, 2 decks: the next song comes in while this one fades (overlap),
+  /// or after it has faded out (back to back).
+  bool fadeOverlap = true;
+
+  /// Pro: equal-power fades (smooth) or straight-line ones.
+  bool smoothFades = true;
+
+  /// How long the next song takes to come in. Pro mixes over the slider's
+  /// time (overlapping), or up to 2 s after a fade out; Basic always 2 s.
+  Duration? get fadeInLength {
+    if (!isPro) return fadeInTime;
+    if (fadeOutTime < const Duration(milliseconds: 300)) return null;
+    if (standby != null && fadeOverlap) return fadeOutTime;
+    return fadeOutTime < fadeInTime ? fadeOutTime : fadeInTime;
+  }
+
   /// Loads everything saved. [rescanLibrary] is false on Android until the
   /// app is allowed to read the SD card (it rescans once it is).
   Future<void> init({bool rescanLibrary = true}) async {
     await _loadSettings();
+    await _loadKeys();
+    _applyFadeShape();
     await _reloadFolders();
     await _reloadQueue();
     await _reloadPlaylists();
@@ -125,6 +247,17 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Pro was switched on by a licence key: bring back the Pro settings
+  /// (skin, 2 decks, fades, Level and Vocal cut) and the song keys.
+  Future<void> editionChanged() async {
+    if (isPro) {
+      await _loadSettings();
+      await _loadKeys();
+    }
+    _applyFadeShape();
+    notifyListeners();
+  }
+
   // ------------------------------------------------------------ settings
 
   /// Settings, the volume and the browser filter come back as they were.
@@ -132,6 +265,7 @@ class AppState extends ChangeNotifier {
     try {
       final m = jsonDecode(await db.getMeta('settings') ?? '{}') as Map<String, dynamic>;
       dark = m['dark'] as bool? ?? dark;
+      if (isPro) skin = m['skin'] as String? ?? skin;
       mode = PlayMode.values.asNameMap()[m['mode']] ?? mode;
       crossfade = m['crossfade'] as bool? ?? crossfade;
       stageView = m['stage'] as bool? ?? stageView;
@@ -145,15 +279,33 @@ class AppState extends ChangeNotifier {
       songbookTitle = m['songbookTitle'] as String? ?? songbookTitle;
       songbookUrl = m['songbookUrl'] as String? ?? songbookUrl;
       songbookSaved = m['songbookSaved'] as String? ?? songbookSaved;
+      libraryCollapsed = m['libraryCollapsed'] as bool? ?? libraryCollapsed;
+      lockEnabled = m['lockEnabled'] as bool? ?? lockEnabled;
+      doubleClickToQueue = m['doubleClickToQueue'] as bool? ?? doubleClickToQueue;
+      twoDecks = canTwoDecks && (m['twoDecks'] as bool? ?? twoDecks);
       final scale = (m['textScale'] as num?)?.toDouble();
       if (textScaleChoices.containsKey(scale)) textScale = scale!;
       autocue = m['autocue'] as bool? ?? autocue;
       final fadeMs = m['fadeMs'] as int?;
       fadeOutTime = fadeOutChoices.where((d) => d.inMilliseconds == fadeMs).firstOrNull ?? fadeOutTime;
+      if (isPro && fadeMs != null && fadeMs >= 0 && fadeMs <= maxFade.inMilliseconds) {
+        fadeOutTime = Duration(milliseconds: fadeMs);
+      }
+      if (isPro) {
+        fadeOverlap = m['fadeOverlap'] as bool? ?? fadeOverlap;
+        smoothFades = m['smoothFades'] as bool? ?? smoothFades;
+      }
       typeFilter = TrackType.values.asNameMap()[m['type']];
       sort = SearchSort.values.asNameMap()[m['sort']] ?? sort;
       engine.volume = (m['volume'] as num?)?.toDouble() ?? engine.volume;
       engine.muted = m['muted'] as bool? ?? engine.muted;
+      if (isPro && audioFilters) {
+        final level = m['levelLoudness'] as bool? ?? false, cut = m['vocalCut'] as bool? ?? false;
+        for (final d in decks) {
+          d.levelLoudness = level;
+          d.vocalCut = cut;
+        }
+      }
     } catch (_) {
       // Unreadable settings: keep the defaults.
     }
@@ -167,6 +319,7 @@ class AppState extends ChangeNotifier {
     if (!_settingsLoaded) return;
     final json = jsonEncode({
       'dark': dark,
+      'skin': skin,
       'mode': mode.name,
       'crossfade': crossfade,
       'textScale': textScale,
@@ -178,12 +331,20 @@ class AppState extends ChangeNotifier {
       'songbookTitle': songbookTitle,
       'songbookUrl': songbookUrl,
       'songbookSaved': songbookSaved,
+      'libraryCollapsed': libraryCollapsed,
+      'lockEnabled': lockEnabled,
+      'doubleClickToQueue': doubleClickToQueue,
+      'twoDecks': twoDecks,
       'autocue': autocue,
       'fadeMs': fadeOutTime.inMilliseconds,
+      'fadeOverlap': fadeOverlap,
+      'smoothFades': smoothFades,
       'type': typeFilter?.name,
       'sort': sort.name,
       'volume': engine.volume,
       'muted': engine.muted,
+      'levelLoudness': engine.levelLoudness,
+      'vocalCut': engine.vocalCut,
     });
     if (json == _savedSettings) return;
     _savedSettings = json;
@@ -215,6 +376,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setSkin(String id) {
+    skin = id;
+    notifyListeners();
+  }
+
   void setMode(PlayMode m) {
     mode = m;
     notifyListeners();
@@ -225,8 +391,112 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ------------------------------------------------- Pro sound options
+
+  /// The key each song was last sung in, by file path (EZTiger Pro).
+  Map<String, int> keyShifts = {};
+
+  Future<void> _loadKeys() async {
+    try {
+      final m = jsonDecode(await db.getMeta('key_shifts') ?? '{}') as Map<String, dynamic>;
+      keyShifts = {for (final e in m.entries) e.key: (e.value as num).toInt()};
+    } catch (_) {
+      keyShifts = {};
+    }
+  }
+
+  void _rememberKey(Track t, int semitones) {
+    if (semitones == 0) {
+      keyShifts.remove(t.path);
+    } else {
+      keyShifts[t.path] = semitones;
+    }
+    unawaited(db.setMeta('key_shifts', jsonEncode(keyShifts)).catchError((_) {}));
+  }
+
+  /// Sync with the tablet (or the PC): playlists and keys, as one file.
+  /// On in Pro, and on the tablet so it can swap with the PC.
+  bool get canSync => isPro || touchUi;
+
+  Future<String> exportSync() => LibrarySync(db).export(keyShifts: keyShifts);
+
+  Future<SyncResult> importSync(String json) async {
+    final r = await LibrarySync(db).import(json, keyShifts: keyShifts);
+    await db.setMeta('key_shifts', jsonEncode(keyShifts));
+    await _reloadPlaylists();
+    return r;
+  }
+
+  /// Key up or down a semitone for the song on the player (−3 to +3).
+  Future<void> keyUp() => keyUpOn(engine);
+  Future<void> keyDown() => keyDownOn(engine);
+  Future<void> keyReset() => engine.setKeyShift(0);
+
+  /// Pro, 2 decks: the key of the song on either deck, so the song waiting
+  /// on the other deck can be set before it plays. It is remembered too.
+  Future<void> keyUpOn(KaraokeEngine deck) => deck.setKeyShift(deck.keyShift + 1);
+  Future<void> keyDownOn(KaraokeEngine deck) => deck.setKeyShift(deck.keyShift - 1);
+
+  Future<void> setLevelLoudness(bool on) async {
+    for (final d in decks) {
+      await d.setLevelLoudness(on);
+    }
+    notifyListeners();
+  }
+
+  Future<void> setVocalCut(bool on) async {
+    for (final d in decks) {
+      await d.setVocalCut(on);
+    }
+    notifyListeners();
+  }
+
   void setStageLyricsRight(bool v) {
     stageLyricsRight = v;
+    notifyListeners();
+  }
+
+  Future<void> setTwoDecks(bool v) async {
+    if (!canTwoDecks || v == twoDecks) return;
+    final other = decks[1 - _live];
+    twoDecks = v;
+    _applyFadeShape();
+    notifyListeners();
+    if (v) {
+      await _cueStandby();
+    } else {
+      standbyQueueId = null;
+      _oldFading = false;
+      await other.stop();
+    }
+  }
+
+  /// 2-deck mode: keeps the next song in the queue cued on the other deck.
+  Future<void> _cueStandby() {
+    if (standby == null) return Future.value();
+    _standbyChain = _standbyChain.then((_) => _doCueStandby()).catchError((_) {});
+    return _standbyChain;
+  }
+
+  Future<void> _doCueStandby() async {
+    final sb = standby;
+    if (sb == null || _oldFading) return;
+    final up = upNext;
+    if (up == null) {
+      standbyQueueId = null;
+      if (sb.current != null) await sb.stop();
+      notifyListeners();
+      return;
+    }
+    if (standbyQueueId == up.id && identical(sb.current, up.track)) return;
+    if (standbyQueueId == up.id && sb.current?.id == up.track.id) return;
+    standbyQueueId = up.id;
+    await sb.load(up.track, singer: up.singer, autostart: false, skipSilence: autocue || crossfade);
+    notifyListeners();
+  }
+
+  void setLibraryCollapsed(bool v) {
+    libraryCollapsed = v;
     notifyListeners();
   }
 
@@ -243,6 +513,53 @@ class AppState extends ChangeNotifier {
   void setFadeOut(Duration d) {
     fadeOutTime = d;
     notifyListeners();
+  }
+
+  void setFadeOverlap(bool v) {
+    fadeOverlap = v;
+    _applyFadeShape();
+    notifyListeners();
+  }
+
+  void setSmoothFades(bool v) {
+    smoothFades = v;
+    _applyFadeShape();
+    notifyListeners();
+  }
+
+  /// Pro: an overlapping mix brings the next song up from silence; a fade
+  /// that leaves a gap brings it up from a third, as Basic does.
+  void _applyFadeShape() {
+    for (final d in decks) {
+      d.smoothFades = isPro && smoothFades;
+      d.fadeInFrom = isPro && twoDecks && fadeOverlap ? 0 : 1 / 3;
+    }
+  }
+
+  /// Pro: mixes into the next song now, over the crossfade time.
+  Future<void> mixNow() async {
+    if (_fading || engine.current == null || upNext == null) return;
+    if (!engine.playing) return next(fadeIn: null);
+    _startCrossfade(fadeOutTime < const Duration(milliseconds: 200) ? const Duration(milliseconds: 200) : fadeOutTime);
+  }
+
+  /// Pro, 2 decks: double-click a song (or drop it on the deck that isn't
+  /// playing) to put it on that deck. It goes into the queue as the next
+  /// song, so whatever was waiting there moves back to second, where it can
+  /// stay or be taken off. With no song playing it loads on the live deck.
+  Future<void> loadNext(List<Track> tracks, {List<int> queueIds = const []}) async {
+    if (standby == null || !engine.playing) {
+      return dropOnPlayer(SongDrag(tracks, queueIds: queueIds));
+    }
+    final up = upNext;
+    final at = up == null ? queue.length : queue.indexOf(up);
+    if (queueIds.isNotEmpty) {
+      await db.queue.moveBlock(queueIds, at);
+    } else {
+      await db.queue.insertAll(tracks.map((t) => t.id), at: at);
+    }
+    await _reloadQueue();
+    await _cueStandby();
   }
 
   void toggleAutocue() {
@@ -487,6 +804,7 @@ class AppState extends ChangeNotifier {
     if (autocue && engine.current == null && !_fading && next != null) {
       await _cue(next, autostart: false);
     }
+    await _cueStandby();
   }
 
   /// The song that plays after the current one: the first in the queue not
@@ -514,6 +832,20 @@ class AppState extends ChangeNotifier {
   Future<void> moveInQueue(QueueEntry e, int newIndex) async {
     await db.queue.move(e.id, newIndex);
     await _reloadQueue();
+    await _cueStandby();
+  }
+
+  /// Moves a waiting song one place up (or down) among the songs still to
+  /// sing, for the stage view's arrows.
+  Future<void> nudgeInQueue(QueueEntry e, {required bool up}) async {
+    final waiting = [
+      for (final q in queue)
+        if (!q.played && q.id != nowPlayingQueueId) q,
+    ];
+    final i = waiting.indexWhere((q) => q.id == e.id);
+    final j = up ? i - 1 : i + 1;
+    if (i < 0 || j < 0 || j >= waiting.length) return;
+    await moveInQueue(e, queue.indexWhere((q) => q.id == waiting[j].id));
   }
 
   Future<void> setSinger(QueueEntry e, String singer) async {
@@ -523,9 +855,11 @@ class AppState extends ChangeNotifier {
 
   Future<void> clearQueue() async {
     await db.queue.clear();
+    queuePlaylistId = null;
     nowPlayingQueueId = null;
     await engine.stop();
     await _reloadQueue();
+    await _cueStandby();
   }
 
   Future<void> _reloadQueue() async {
@@ -570,7 +904,8 @@ class AppState extends ChangeNotifier {
   /// ⏮: back to the start of the song.
   Future<void> previous() => engine.restart();
 
-  Future<void> _cue(QueueEntry e, {required bool autostart, Duration? fadeIn}) async {
+  Future<void> _cue(QueueEntry e, {required bool autostart, Duration? fadeIn, Duration? fadeOutOld}) async {
+    if (standby != null) return _cueOnOtherDeck(e, autostart: autostart, fadeIn: fadeIn, fadeOutOld: fadeOutOld);
     nowPlayingQueueId = e.id;
     _endFade();
     // Autocue (and a crossfade) start the song at its first note.
@@ -582,6 +917,42 @@ class AppState extends ChangeNotifier {
       skipSilence: autocue || fadeIn != null,
     );
     notifyListeners();
+  }
+
+  /// 2-deck mode: the song (usually already waiting there) starts on the
+  /// other deck, which becomes the live one. The old deck stops, or fades
+  /// out over [fadeOutOld] while the new song comes in, and then takes the
+  /// next song in the queue.
+  Future<void> _cueOnOtherDeck(QueueEntry e, {required bool autostart, Duration? fadeIn, Duration? fadeOutOld}) async {
+    await _standbyChain;
+    final sb = standby!, old = engine;
+    if (standbyQueueId != e.id || sb.current == null || _oldFading) {
+      _oldFading = false;
+      standbyQueueId = e.id;
+      await sb.load(e.track, singer: e.singer, autostart: false, skipSilence: autocue || fadeIn != null);
+    }
+    _live = 1 - _live;
+    standbyQueueId = null;
+    nowPlayingQueueId = e.id;
+    _endFade();
+    await sb.matchLevel(old);
+    notifyListeners();
+    if (autostart) await sb.play(fadeIn: fadeIn);
+    final song = old.current;
+    if (song != null && fadeOutOld != null && old.playing) {
+      _oldFading = true;
+      unawaited(
+        old.fadeOut(over: fadeOutOld).then((_) async {
+          if (!_oldFading || identical(old, engine) || !identical(old.current, song)) return;
+          _oldFading = false;
+          await old.stop();
+          await _cueStandby();
+        }),
+      );
+      return;
+    }
+    if (song != null) await old.stop();
+    await _cueStandby();
   }
 
   Future<void> _finishCurrent() async {
@@ -605,7 +976,7 @@ class AppState extends ChangeNotifier {
       return;
     }
     if (mode == PlayMode.autoplay || crossfade) {
-      await _cue(next, autostart: true, fadeIn: crossfade ? fadeInTime : null);
+      await _cue(next, autostart: true, fadeIn: crossfade ? fadeInLength : null);
     } else if (autocue) {
       await _cue(next, autostart: false); // ready to go, paused
     } else {
@@ -624,15 +995,35 @@ class AppState extends ChangeNotifier {
     if (left > fadeOutTime) return;
     if (left < const Duration(milliseconds: 200)) left = const Duration(milliseconds: 200); // already in the silence
     if (identical(engine.current, _noFadeFor)) return;
+    _startCrossfade(left);
+  }
+
+  void _startCrossfade(Duration over) {
+    if (standby != null && fadeOverlap) {
+      // Two decks: the next song comes in on the other deck while this one
+      // fades out, overlapping.
+      _fading = true;
+      () async {
+        await _finishCurrent();
+        final up = upNext;
+        if (up == null) {
+          _fading = false;
+          return;
+        }
+        await _cue(up, autostart: true, fadeIn: fadeInLength, fadeOutOld: over);
+      }();
+      return;
+    }
     _fading = true;
     final token = ++_fadeToken;
     final song = engine.current;
-    engine.fadeOut(over: left, to: fadeLevel).then((done) async {
+    // Pro fades all the way out; Basic dips to a third.
+    engine.fadeOut(over: over, to: isPro ? 0 : fadeLevel).then((done) async {
       if (token != _fadeToken) return; // something else already moved on
       _fading = false;
       if (!identical(engine.current, song)) return;
       if (done) {
-        await next(fadeIn: fadeInTime);
+        await next(fadeIn: fadeInLength);
       } else {
         _noFadeFor = song; // paused or volume moved: let it play out
       }
@@ -752,6 +1143,7 @@ class AppState extends ChangeNotifier {
     if (d.queueIds.isNotEmpty) {
       await db.queue.moveBlock(d.queueIds, at);
       await _reloadQueue();
+      await _cueStandby();
       return;
     }
     await db.queue.insertAll(d.tracks.map((t) => t.id), at: at);
@@ -832,6 +1224,33 @@ class AppState extends ChangeNotifier {
     if (view == ResultsView.playlist && selectedPlaylistId == playlistId) await refreshResults();
   }
 
+  /// The playlist last loaded into the queue, so the changes made to the
+  /// set while singing can be saved back to it (EZTiger Pro).
+  int? queuePlaylistId;
+  Playlist? get queuePlaylist => playlists.where((p) => p.id == queuePlaylistId).firstOrNull;
+
+  /// Adds a saved playlist's songs to the queue, and remembers it.
+  Future<void> loadPlaylistIntoQueue(int playlistId) async {
+    final p = playlists.where((p) => p.id == playlistId).firstOrNull;
+    if (p == null) return;
+    status = 'Added "${p.name}" to $theQueue';
+    await enqueueAll(await db.playlists.tracks(playlistId));
+    queuePlaylistId = playlistId;
+    notifyListeners();
+  }
+
+  /// Pro: the playlist becomes the queue as it is now, sung songs and all,
+  /// in the order on screen.
+  Future<void> replacePlaylistWithQueue(int playlistId) async {
+    final old = await db.playlists.tracks(playlistId);
+    if (old.isNotEmpty) await db.playlists.removePositions(playlistId, List.generate(old.length, (i) => i));
+    await db.playlists.addAll(playlistId, queue.map((e) => e.track.id));
+    final p = playlists.where((p) => p.id == playlistId).firstOrNull;
+    status = 'Saved $theQueue to "${p?.name ?? 'the playlist'}"';
+    await _reloadPlaylists();
+    if (view == ResultsView.playlist && selectedPlaylistId == playlistId) await refreshResults();
+  }
+
   Future<void> saveQueueTo(int playlistId) async {
     await db.playlists.addQueue(playlistId);
     await _reloadPlaylists();
@@ -859,8 +1278,9 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _debounce?.cancel();
-    engine.removeListener(_watchForCrossfade);
-    engine.removeListener(_rememberLoaded);
+    for (final (i, d) in decks.indexed) {
+      d.removeListener(_deckListeners[i]);
+    }
     super.dispose();
   }
 }

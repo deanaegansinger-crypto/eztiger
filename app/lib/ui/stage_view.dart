@@ -3,8 +3,13 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 import 'common.dart';
+import '../app_state.dart';
+import '../edition.dart';
+import 'lock.dart';
+import 'pro_sound.dart';
 import 'output_panel.dart';
 import 'songbook_dialog.dart';
+import 'twin_decks.dart';
 
 /// The view for performing, with the tablet on the mic stand: the lyrics or
 /// video large on the left; on the right the song and time left in big
@@ -27,10 +32,14 @@ class StageView extends StatelessWidget {
           builder: (context, c) {
             // A narrow window puts the controls under the lyrics instead.
             final side = c.maxWidth >= 900;
+            // Pro, 2 decks: both decks across the top of the whole screen,
+            // with the transport on them, so the controls beside the
+            // lyrics are just the volume and what is next.
+            final twin = isPro && s.twoDecks;
             final lyrics = _Lyrics(onFullScreen: onFullScreen);
-            const controls = _Controls();
-            final sides = [Expanded(flex: 11, child: lyrics), const Expanded(flex: 9, child: controls)];
-            return side
+            final controls = _Controls(compact: twin);
+            final sides = [Expanded(flex: 11, child: lyrics), Expanded(flex: 9, child: controls)];
+            final body = side
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -44,9 +53,18 @@ class StageView extends StatelessWidget {
                     children: [
                       Expanded(flex: 5, child: lyrics),
                       const SizedBox(height: 10),
-                      const Expanded(flex: 6, child: controls),
+                      Expanded(flex: 6, child: controls),
                     ],
                   );
+            if (!twin) return body;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const TwinDecks(stage: true),
+                const SizedBox(height: 10),
+                Expanded(child: body),
+              ],
+            );
           },
         ),
       ),
@@ -66,10 +84,18 @@ class _Lyrics extends StatelessWidget {
 }
 
 class _Controls extends StatelessWidget {
-  const _Controls();
+  const _Controls({this.compact = false});
 
+  /// Pro, 2 decks: the song, time and transport are on the decks above.
+  final bool compact;
+
+  // This widget is const, so the stage view's own rebuild skips it: listen
+  // to the player here, or the time and seek bar stand still while playing.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ListenableBuilder(listenable: AppScope.of(context).engine, builder: (context, _) => _build(context));
+
+  Widget _build(BuildContext context) {
     final s = AppScope.of(context);
     final e = s.engine;
     final t = e.current;
@@ -83,8 +109,9 @@ class _Controls extends StatelessWidget {
           children: [
             Text(
               t == null ? 'READY' : (e.playing ? 'NOW PLAYING' : 'CUED · PRESS PLAY'),
-              style: const TextStyle(fontFamily: vfdFont, fontSize: 14, color: EzColors.vfdSub, letterSpacing: 2),
+              style: TextStyle(fontFamily: vfdFont, fontSize: 14, color: EzColors.vfdSub, letterSpacing: 2),
             ),
+            if (isPro) ...[const SizedBox(width: 10), KeyWarning(engine: e, fontSize: 16)],
             const Spacer(),
             // The songbook's QR code, for the audience to scan.
             if (s.songbookUrl.isNotEmpty) ...[
@@ -94,7 +121,7 @@ class _Controls extends StatelessWidget {
                 iconSize: 30,
                 style: IconButton.styleFrom(
                   minimumSize: const Size(52, 52),
-                  side: const BorderSide(color: EzColors.cyan),
+                  side: BorderSide(color: EzColors.cyan),
                   foregroundColor: EzColors.cyan,
                 ),
                 onPressed: () => showSongbookQr(context),
@@ -102,6 +129,7 @@ class _Controls extends StatelessWidget {
               ),
               const SizedBox(width: 10),
             ],
+            if (isPro && s.lockEnabled) ...[const LockButton(big: true), const SizedBox(width: 10)],
             // Swap the lyrics and the buttons left and right.
             IconButton(
               key: const Key('stage-swap'),
@@ -109,7 +137,7 @@ class _Controls extends StatelessWidget {
               iconSize: 30,
               style: IconButton.styleFrom(
                 minimumSize: const Size(52, 52),
-                side: const BorderSide(color: EzColors.cyan),
+                side: BorderSide(color: EzColors.cyan),
                 foregroundColor: EzColors.cyan,
               ),
               onPressed: () => s.setStageLyricsRight(!s.stageLyricsRight),
@@ -124,58 +152,62 @@ class _Controls extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          e.error ?? t?.title ?? 'Pick a song to begin',
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 30,
-            height: 1.1,
-            fontWeight: FontWeight.w800,
-            color: e.error != null ? EzColors.red : EzColors.brass,
-          ),
-        ),
-        if (sub.isNotEmpty)
+        if (!compact) ...[
+          const SizedBox(height: 6),
           Text(
-            sub,
-            maxLines: 1,
+            e.error ?? t?.title ?? 'Pick a song to begin',
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 20, color: EzColors.cyan),
+            style: TextStyle(
+              fontSize: 30,
+              height: 1.1,
+              fontWeight: FontWeight.w800,
+              color: e.error != null ? EzColors.red : EzColors.brass,
+            ),
           ),
-        const SizedBox(height: 8),
-        if (t != null && total > Duration.zero) ...[
+          if (sub.isNotEmpty)
+            Text(
+              sub,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 20, color: EzColors.cyan),
+            ),
+          const SizedBox(height: 8),
+          if (t != null && total > Duration.zero) ...[
+            Row(
+              children: [
+                Text(fmt(e.position), style: const TextStyle(fontSize: 20, color: Colors.white70)),
+                const Spacer(),
+                Text(
+                  '-${fmt(left.isNegative ? Duration.zero : left)}',
+                  key: const Key('stage-time-left'),
+                  style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: Colors.white),
+                ),
+              ],
+            ),
+            _StageSeek(position: e.position, total: total, onSeek: e.seek),
+          ],
+          const SizedBox(height: 8),
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              Text(fmt(e.position), style: const TextStyle(fontSize: 20, color: Colors.white70)),
-              const Spacer(),
-              Text(
-                '-${fmt(left.isNegative ? Duration.zero : left)}',
-                key: const Key('stage-time-left'),
-                style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: Colors.white),
+              _RoundButton(key: const Key('stage-restart'), icon: Icons.skip_previous, size: 72, onTap: s.previous),
+              _RoundButton(
+                key: const Key('stage-play'),
+                icon: e.playing ? Icons.pause : Icons.play_arrow,
+                size: 104,
+                primary: true,
+                onTap: s.playPause,
               ),
+              _RoundButton(key: const Key('stage-next'), icon: Icons.skip_next, size: 72, onTap: s.next),
             ],
           ),
-          _StageSeek(position: e.position, total: total, onSeek: e.seek),
         ],
         const SizedBox(height: 8),
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _RoundButton(key: const Key('stage-restart'), icon: Icons.skip_previous, size: 72, onTap: s.previous),
-            _RoundButton(
-              key: const Key('stage-play'),
-              icon: e.playing ? Icons.pause : Icons.play_arrow,
-              size: 104,
-              primary: true,
-              onTap: s.playPause,
-            ),
-            _RoundButton(key: const Key('stage-next'), icon: Icons.skip_next, size: 72, onTap: s.next),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
+            _StageMode(mode: s.mode, onChanged: s.setMode),
+            const SizedBox(width: 6),
             IconButton(
               iconSize: 34,
               onPressed: e.toggleMute,
@@ -239,39 +271,63 @@ class _UpNext extends StatelessWidget {
           children: [
             Text(
               waiting.isEmpty ? 'UP NEXT · NOTHING QUEUED' : 'UP NEXT · ${waiting.length}',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: EzColors.brass,
-                letterSpacing: 2,
-              ),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: EzColors.brass, letterSpacing: 2),
             ),
             const SizedBox(height: 4),
             Expanded(
               child: ListView(
                 children: [
                   for (final (i, q) in waiting.indexed)
-                    InkWell(
-                      key: ValueKey('stage-next-${q.id}'),
-                      onDoubleTap: () => s.playEntry(q),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(
-                              width: 34 * scale,
-                              child: Text(
-                                '${i + 1}',
-                                style: TextStyle(fontSize: 20 * scale, color: i == 0 ? EzColors.cyan : Colors.white38),
+                    Row(
+                      children: [
+                        // The buttons sit outside the double-tap area, so they
+                        // answer straight away.
+                        Expanded(
+                          child: InkWell(
+                            key: ValueKey('stage-next-${q.id}'),
+                            onDoubleTap: () => s.playEntry(q),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: 34 * scale,
+                                    child: Text(
+                                      '${i + 1}',
+                                      style: TextStyle(
+                                        fontSize: 20 * scale,
+                                        color: i == 0 ? EzColors.cyan : Colors.white38,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _QueuedSong(entry: q, first: i == 0, scale: scale),
+                                  ),
+                                ],
                               ),
                             ),
-                            Expanded(
-                              child: _QueuedSong(entry: q, first: i == 0, scale: scale),
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
+                        _QueueButton(
+                          key: ValueKey('stage-up-${q.id}'),
+                          icon: Icons.arrow_upward,
+                          tip: 'Move up',
+                          onTap: i == 0 ? null : () => s.nudgeInQueue(q, up: true),
+                        ),
+                        _QueueButton(
+                          key: ValueKey('stage-down-${q.id}'),
+                          icon: Icons.arrow_downward,
+                          tip: 'Move down',
+                          onTap: i == waiting.length - 1 ? null : () => s.nudgeInQueue(q, up: false),
+                        ),
+                        _QueueButton(
+                          key: ValueKey('stage-remove-${q.id}'),
+                          icon: Icons.close,
+                          tip: 'Take out of $theQueue',
+                          onTap: () => s.removeFromQueue(q),
+                        ),
+                      ],
                     ),
                 ],
               ),
@@ -390,10 +446,73 @@ class _BigButton extends StatelessWidget {
       minimumSize: const Size(0, 52),
       padding: const EdgeInsets.symmetric(horizontal: 18),
       foregroundColor: EzColors.cyan,
-      side: const BorderSide(color: EzColors.cyan),
+      side: BorderSide(color: EzColors.cyan),
     ),
     onPressed: onTap,
     icon: Icon(icon, size: 24),
     label: Text(label, style: const TextStyle(fontSize: 18)),
+  );
+}
+
+/// Up, down and remove buttons on a song waiting in the stage view's queue.
+class _QueueButton extends StatelessWidget {
+  const _QueueButton({super.key, required this.icon, required this.tip, required this.onTap});
+  final IconData icon;
+  final String tip;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tip,
+    iconSize: 28,
+    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+    color: Colors.white70,
+    disabledColor: Colors.white12,
+    onPressed: onTap,
+    icon: Icon(icon),
+  );
+}
+
+/// Single / Autoplay, big enough to hit on a stand.
+class _StageMode extends StatelessWidget {
+  const _StageMode({required this.mode, required this.onChanged});
+  final PlayMode mode;
+  final ValueChanged<PlayMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('stage-mode'),
+    padding: const EdgeInsets.all(3),
+    decoration: BoxDecoration(
+      color: const Color(0xFF15181C),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFF2A2F36)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final (m, label) in [(PlayMode.single, 'Single'), (PlayMode.autoplay, 'Autoplay')])
+          InkWell(
+            key: Key('stage-mode-${m.name}'),
+            borderRadius: BorderRadius.circular(9),
+            onTap: () => onChanged(m),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: m == mode ? EzColors.cyan.withValues(alpha: 0.22) : null,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: m == mode ? EzColors.cyan : Colors.white60,
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
   );
 }

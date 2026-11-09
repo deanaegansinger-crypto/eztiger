@@ -159,7 +159,7 @@ class _SongbookDialogState extends State<_SongbookDialog> {
                   ),
                 )
               else if (s.songbookSaved.isNotEmpty)
-                const Text('✓ The songbook matches your library.', style: TextStyle(color: EzColors.green)),
+                Text('✓ The songbook matches your library.', style: TextStyle(color: EzColors.green)),
               if (message != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(message!)),
             ],
           ),

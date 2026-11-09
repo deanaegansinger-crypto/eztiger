@@ -1,3 +1,8 @@
+import '../licence.dart';
+import 'licence_dialog.dart';
+
+import 'dart:convert';
+
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
@@ -5,48 +10,37 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_state.dart';
+import '../edition.dart';
 import '../platform.dart';
+import '../sync.dart';
 import 'android_folders.dart';
 import '../theme.dart';
 import 'columns.dart';
 import 'common.dart';
+import 'lock.dart';
 import 'dialogs.dart';
 import 'logo.dart';
+import 'pro_sound.dart';
+import 'twin_decks.dart';
 import 'read_me.dart';
 import 'songbook_dialog.dart';
 
 /// The left column of the mockup: player, settings, library, search and
 /// results.
-class Rack extends StatefulWidget {
+class Rack extends StatelessWidget {
   const Rack({super.key});
-  @override
-  State<Rack> createState() => _RackState();
-}
-
-class _RackState extends State<Rack> {
-  final _searchFocus = FocusNode(debugLabel: 'search');
-
-  @override
-  void initState() {
-    super.initState();
-    _searchFocus.addListener(_changed);
-  }
-
-  void _changed() => setState(() {});
-
-  @override
-  void dispose() {
-    _searchFocus.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
+    // Pro with 2 decks: deck A and deck B side by side, slimmer.
+    final s = AppScope.of(context);
+    final twin = isPro && s.twoDecks;
+    final folded = isPro && s.searching;
     // On the tablet the on-screen keyboard takes the bottom of the screen, so
-    // while typing a search the player folds away to leave room for the
+    // while typing a search the player folds away too, to leave room for the
     // results. Touching a song (to pick it, or drag it to the player or the
     // queue) leaves the search box, and the player opens again.
-    final typing = _searchFocus.hasFocus && MediaQuery.viewInsetsOf(context).bottom > 0;
+    final keyboardUp = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Container(
       color: context.ez.panel,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
@@ -55,30 +49,35 @@ class _RackState extends State<Rack> {
         children: [
           const _BrandRow(),
           const SizedBox(height: 8),
-          ClipRect(
+          ListenableBuilder(
+            listenable: s.searchFocus,
+            builder: (context, _) => ClipRect(
             child: AnimatedSize(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOut,
               alignment: Alignment.topCenter,
-              child: typing
+              child: keyboardUp && s.searchFocus.hasFocus
                   ? const SizedBox(key: Key('player-folded'), width: double.infinity)
-                  : const Column(
+                  : Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        PlayerStrip(),
-                        SizedBox(height: 6),
-                        SeekBar(),
-                        _VolumeRow(),
-                        SizedBox(height: 6),
-                        _TogglesRow(),
-                        SizedBox(height: 8),
+                        if (twin) const TwinDecks() else ...[const PlayerStrip(), const SizedBox(height: 6), const SeekBar()],
+                        // Pro: while searching, everything under the player
+                        // folds away so the results get the room.
+                        if (!folded) ...[
+                          if (isPro) const CrossfadeRow(),
+                          const _VolumeRow(),
+                          if (isPro) const ProSoundRow(),
+                          if (!twin) const _DeckLine(),
+                        ],
                       ],
                     ),
             ),
+            ),
           ),
-          const ListText(child: LibraryTabs()),
+          if (!folded) ...[const SizedBox(height: 8), const ListText(child: LibraryTabs())],
           const SizedBox(height: 8),
-          ListText(child: SearchBox(focusNode: _searchFocus)),
+          const ListText(child: SearchBox()),
           const SizedBox(height: 6),
           const Expanded(child: ListText(child: ResultsTable())),
           const _StatusLine(),
@@ -100,32 +99,77 @@ class _BrandRow extends StatelessWidget {
       children: [
         const EzLogo(size: 30),
         const SizedBox(width: 8),
-        const Text(
-          'EZTIGER',
-          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: EzColors.brass, letterSpacing: 2),
-        ),
-        const SizedBox(width: 6),
-        // "BASIC" over "BY DEANO", stacked to save width.
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              decoration: BoxDecoration(
-                border: Border.all(color: EzColors.cyan),
-                borderRadius: BorderRadius.circular(3),
-              ),
-              child: const Text(
-                'BASIC',
-                style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: EzColors.cyan, letterSpacing: 1.5),
+        // Shrinks a little rather than overflow when the top bar is full.
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'EZTIGER',
+              style: TextStyle(
+                fontFamily: brandFont,
+                fontWeight: FontWeight.w900,
+                fontSize: 18,
+                color: EzColors.brass,
+                letterSpacing: 2,
+                shadows: [if (EzColors.glow case final g?) Shadow(color: g.withValues(alpha: 0.7), blurRadius: 8)],
               ),
             ),
-            const SizedBox(height: 1),
-            Text('BY DEANO', style: TextStyle(fontSize: 8, color: context.ez.textDim, letterSpacing: 1.2)),
-          ],
+          ),
         ),
+        const SizedBox(width: 6),
+        // Pro: a big gold PRO badge.
+        if (isPro) ...[
+          Container(
+            key: const Key('pro-badge'),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFFFFDE78), Color(0xFFC48A1E)],
+              ),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: const Color(0xFF7A5410)),
+            ),
+            child: const Text(
+              'PRO',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF1A1206), letterSpacing: 2),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('BY DEANO', style: TextStyle(fontSize: 8, color: context.ez.textDim, letterSpacing: 1.2)),
+              if (licence != null) const _LicenceChip(),
+            ],
+          ),
+        ] else
+          // "BASIC" over "BY DEANO", stacked to save width.
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  border: Border.all(color: EzColors.cyan),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Text(
+                  'BASIC',
+                  style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: EzColors.cyan, letterSpacing: 1.5),
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text('BY DEANO', style: TextStyle(fontSize: 8, color: context.ez.textDim, letterSpacing: 1.2)),
+              if (licence != null) const _LicenceChip(),
+            ],
+          ),
         const Spacer(),
+        if (isPro && s.lockEnabled) const LockButton(),
         TextButton.icon(
           key: const Key('stage-view'),
           style: TextButton.styleFrom(visualDensity: tapDensity, foregroundColor: EzColors.brass),
@@ -148,7 +192,7 @@ class _MainMenu extends StatelessWidget {
     return PopupMenuButton<String>(
       key: const Key('main-menu'),
       tooltip: 'Menu',
-      itemBuilder: (_) => [
+      itemBuilder: (menu) => [
         const PopupMenuItem(
           key: Key('read-me'),
           value: 'readme',
@@ -158,18 +202,34 @@ class _MainMenu extends StatelessWidget {
           value: 'stage',
           child: Row(children: [Icon(Icons.mic_external_on, size: 18), SizedBox(width: 10), Text('Stage view')]),
         ),
-        CheckedPopupMenuItem(
-          key: const Key('stage-lyrics-left'),
-          value: 'lyricsLeft',
-          checked: !s.stageLyricsRight,
-          child: const Text('Stage: lyrics on the left'),
+        _menuRow(
+          menu,
+          'Stage lyrics',
+          Segmented<bool>(
+            key: const Key('menu-lyrics-side'),
+            options: const {false: 'Left', true: 'Right'},
+            value: s.stageLyricsRight,
+            onChanged: s.setStageLyricsRight,
+          ),
         ),
-        CheckedPopupMenuItem(
-          key: const Key('stage-lyrics-right'),
-          value: 'lyricsRight',
-          checked: s.stageLyricsRight,
-          child: const Text('Stage: lyrics on the right'),
-        ),
+        if (isPro)
+          _menuRow(
+            menu,
+            'Double-click',
+            Segmented<bool>(
+              key: const Key('menu-double-click'),
+              options: const {false: 'Player', true: 'Tonight'},
+              value: s.doubleClickToQueue,
+              onChanged: s.setDoubleClickToQueue,
+            ),
+          ),
+        if (isPro)
+          CheckedPopupMenuItem(
+            key: const Key('menu-lock-enabled'),
+            value: 'lock-enabled',
+            checked: s.lockEnabled,
+            child: const Text('Screen lock button 🔒'),
+          ),
         const PopupMenuDivider(),
         PopupMenuItem(
           key: const Key('menu-songbook'),
@@ -184,7 +244,7 @@ class _MainMenu extends StatelessWidget {
                     text: 'Songbook…',
                     children: [
                       if (s.songbookOutOfDate)
-                        const TextSpan(
+                        TextSpan(
                           text: '  needs updating',
                           style: TextStyle(fontSize: 12, color: EzColors.brass),
                         ),
@@ -217,10 +277,117 @@ class _MainMenu extends StatelessWidget {
         const PopupMenuItem(
           enabled: false,
           height: 28,
-          child: Text('SCREEN', style: TextStyle(fontSize: 11, letterSpacing: 1)),
+          child: Text('PLAYBACK', style: TextStyle(fontSize: 11, letterSpacing: 1)),
         ),
-        CheckedPopupMenuItem(value: 'dark', checked: s.dark, child: const Text('Dark')),
-        CheckedPopupMenuItem(value: 'light', checked: !s.dark, child: const Text('Light')),
+        CheckedPopupMenuItem(
+          key: const Key('menu-autocue'),
+          value: 'autocue',
+          checked: s.autocue,
+          child: const Text('Autocue'),
+        ),
+        CheckedPopupMenuItem(
+          key: const Key('menu-crossfade'),
+          value: 'crossfade',
+          checked: s.crossfade,
+          child: const Text('Crossfade'),
+        ),
+        // Pro: two players fed by Tonight's playlist.
+        if (s.canTwoDecks)
+          CheckedPopupMenuItem(
+            key: const Key('menu-two-decks'),
+            value: 'two-decks',
+            checked: s.twoDecks,
+            child: const Text('2 decks'),
+          ),
+        // Pro sets the time with the crossfade slider under the player.
+        if (!isPro)
+          _menuRow(
+            menu,
+            'Fade over',
+            Segmented<Duration>(
+              key: const Key('fade-length'),
+              options: {
+                for (final d in AppState.fadeOutChoices)
+                  d: d.inMilliseconds % 1000 == 0 ? '${d.inSeconds}s' : '${d.inMilliseconds / 1000}s',
+              },
+              value: s.fadeOutTime,
+              onChanged: s.setFadeOut,
+            ),
+          ),
+        if (s.canSync) ...[
+          const PopupMenuDivider(),
+          const PopupMenuItem(
+            enabled: false,
+            height: 28,
+            child: Text('SYNC PC ⇄ TABLET', style: TextStyle(fontSize: 11, letterSpacing: 1)),
+          ),
+          const PopupMenuItem(
+            key: Key('sync-save'),
+            value: 'sync-save',
+            child: Row(children: [Icon(Icons.upload_file, size: 18), SizedBox(width: 10), Text('Save sync file…')]),
+          ),
+          const PopupMenuItem(
+            key: Key('sync-load'),
+            value: 'sync-load',
+            child: Row(children: [Icon(Icons.download, size: 18), SizedBox(width: 10), Text('Load sync file…')]),
+          ),
+        ],
+        if (licence case final l?) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem(
+            key: const Key('menu-licence'),
+            value: 'licence',
+            child: Row(
+              children: [
+                const Icon(Icons.key, size: 18),
+                const SizedBox(width: 10),
+                Text(l.licensed ? 'Pro licence' : 'Enter licence key…'),
+                const SizedBox(width: 12),
+                if (!l.licensed)
+                  Text(
+                    l.onTrial ? '${l.trialDaysLeft} days left' : 'trial ended',
+                    style: TextStyle(fontSize: 12, color: EzColors.cyan),
+                  ),
+              ],
+            ),
+          ),
+        ],
+        const PopupMenuDivider(),
+        if (isPro)
+          PopupMenuItem(
+            key: const Key('menu-skin'),
+            value: 'skins',
+            child: Row(
+              children: [
+                const Icon(Icons.palette_outlined, size: 18),
+                const SizedBox(width: 10),
+                const Text('Skin'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    EzSkin.byId(s.skin).name,
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: EzColors.cyan),
+                  ),
+                ),
+                const Icon(Icons.chevron_right, size: 18),
+              ],
+            ),
+          ),
+        if (EzSkin.byId(s.skin).hasLightScreen)
+          _menuRow(
+            menu,
+            'Screen',
+            Segmented<bool>(
+              key: const Key('menu-theme'),
+              options: const {true: 'Dark', false: 'Light'},
+              value: s.dark,
+              onChanged: (dark) {
+                if (dark != s.dark) s.toggleDark();
+              },
+            ),
+          ),
         const PopupMenuDivider(),
         const PopupMenuItem(
           enabled: false,
@@ -236,7 +403,9 @@ class _MainMenu extends StatelessWidget {
           ),
       ],
       onSelected: (c) {
-        if (c == 'readme') {
+        if (c == 'skins') {
+          _pickSkin(context, s);
+        } else if (c == 'readme') {
           showReadMe(context);
         } else if (c == 'songbook') {
           showSongbook(context);
@@ -244,12 +413,22 @@ class _MainMenu extends StatelessWidget {
           s.rescan();
         } else if (c == 'rescanOnStart') {
           s.setRescanOnStart(!s.rescanOnStart);
-        } else if (c == 'dark' || c == 'light') {
-          if ((c == 'dark') != s.dark) s.toggleDark();
-        } else if (c == 'lyricsLeft' || c == 'lyricsRight') {
-          s.setStageLyricsRight(c == 'lyricsRight');
         } else if (c == 'stage') {
           s.setStageView(true);
+        } else if (c == 'autocue') {
+          s.toggleAutocue();
+        } else if (c == 'crossfade') {
+          s.toggleCrossfade();
+        } else if (c == 'sync-save') {
+          saveSyncFile(context, s);
+        } else if (c == 'sync-load') {
+          loadSyncFile(context, s);
+        } else if (c == 'licence') {
+          showLicenceDialog(context, licence!);
+        } else if (c == 'lock-enabled') {
+          s.setLockEnabled(!s.lockEnabled);
+        } else if (c == 'two-decks') {
+          s.setTwoDecks(!s.twoDecks);
         } else if (c.startsWith('scale:')) {
           s.setTextScale(double.parse(c.substring(6)));
         }
@@ -268,6 +447,161 @@ class _MainMenu extends StatelessWidget {
     );
   }
 }
+
+/// The Pro trial's days left (or "Trial ended · Enter key" in Basic); click
+/// for the licence key box. Also says so once when the trial has ended.
+class _LicenceChip extends StatefulWidget {
+  const _LicenceChip();
+
+  @override
+  State<_LicenceChip> createState() => _LicenceChipState();
+}
+
+class _LicenceChipState extends State<_LicenceChip> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && licence != null) showTrialEndedOnce(context, licence!);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      ListenableBuilder(listenable: licence!, builder: (context, _) => _build(context));
+
+  Widget _build(BuildContext context) {
+    final l = licence!;
+    if (l.licensed) return const SizedBox.shrink();
+    final color = l.onTrial ? EzColors.cyan : EzColors.brass;
+    return Tooltip(
+      message: l.onTrial
+          ? '${l.summary}. Every Pro feature is on during the trial. Click to enter a licence key.'
+          : '${l.summary}. Click to enter a licence key.',
+      child: InkWell(
+        key: const Key('licence-chip'),
+        onTap: () => showLicenceDialog(context, l),
+        child: Text(
+          l.onTrial ? 'TRIAL ${l.trialDaysLeft}d' : 'GET PRO',
+          style: TextStyle(
+            fontSize: 8,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1,
+            color: color,
+            decoration: TextDecoration.underline,
+            decorationColor: color,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Pro: saves the playlists and keys to EZtiger-sync.json, to load on the
+/// tablet (or the PC). It starts in the library folder, so a copy of the
+/// library takes it along.
+Future<void> saveSyncFile(BuildContext context, AppState s) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  try {
+    final json = await s.exportSync();
+    final uri = await FilePicker.saveFile(
+      dialogTitle: 'Save the sync file for the tablet or PC',
+      fileName: LibrarySync.fileName,
+      bytes: Uint8List.fromList(utf8.encode(json)),
+      mimeType: 'application/json',
+      initialDirectory: s.roots.firstOrNull?.path,
+    );
+    if (uri != null) {
+      messenger?.showSnackBar(const SnackBar(content: Text('Sync file saved. Load it on the other machine.')));
+    }
+  } catch (e) {
+    messenger?.showSnackBar(SnackBar(content: Text('Could not save the sync file: $e')));
+  }
+}
+
+/// Pro: loads a sync file saved on the other machine.
+Future<void> loadSyncFile(BuildContext context, AppState s) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  try {
+    final files = await FilePicker.pickFiles(
+      dialogTitle: 'Load a sync file from the tablet or PC',
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+      initialDirectory: s.roots.firstOrNull?.path,
+    );
+    if (files.isEmpty) return;
+    final result = await s.importSync(await files.first.xFile.readAsString());
+    messenger?.showSnackBar(SnackBar(content: Text(result.summary), duration: const Duration(seconds: 6)));
+  } catch (e) {
+    messenger?.showSnackBar(SnackBar(content: Text('Could not load the sync file: $e')));
+  }
+}
+
+/// The list of skins, opened from ☰ Menu → Skin, below the Menu button.
+Future<void> _pickSkin(BuildContext context, AppState s) async {
+  final box = context.findRenderObject() as RenderBox;
+  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+  final at = box.localToGlobal(box.size.bottomLeft(Offset.zero), ancestor: overlay);
+  final id = await showMenu<String>(
+    context: context,
+    position: RelativeRect.fromRect(at & const Size(1, 1), Offset.zero & overlay.size),
+    items: [
+      const PopupMenuItem(
+        enabled: false,
+        height: 28,
+        child: Text('SKIN', style: TextStyle(fontSize: 11, letterSpacing: 1)),
+      ),
+      for (final skin in EzSkin.all)
+        CheckedPopupMenuItem(
+          key: Key('skin-${skin.id}'),
+          value: skin.id,
+          checked: s.skin == skin.id,
+          child: Row(
+            children: [
+              _SkinSwatch(skin),
+              const SizedBox(width: 10),
+              Flexible(child: Text(skin.name, overflow: TextOverflow.ellipsis)),
+            ],
+          ),
+        ),
+    ],
+  );
+  if (id != null) s.setSkin(id);
+}
+
+/// Three little squares of a skin's colours, beside its name in the menu.
+class _SkinSwatch extends StatelessWidget {
+  const _SkinSwatch(this.skin);
+  final EzSkin skin;
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(3),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final c in [skin.colors.panel, skin.brass, skin.cyan]) Container(width: 10, height: 14, color: c),
+      ],
+    ),
+  );
+}
+
+/// A menu row with a label and a choice of buttons; picking one closes the menu.
+PopupMenuItem<String> _menuRow<T>(BuildContext menu, String label, Segmented<T> choice) => PopupMenuItem<String>(
+  child: Row(
+    children: [
+      Expanded(child: Text(label)),
+      Segmented<T>(
+        key: choice.key,
+        options: choice.options,
+        value: choice.value,
+        onChanged: (v) {
+          choice.onChanged(v);
+          Navigator.pop(menu);
+        },
+      ),
+    ],
+  ),
+);
 
 /// The green-screen "VFD" display plus the transport buttons.
 class PlayerStrip extends StatelessWidget {
@@ -294,9 +628,12 @@ class PlayerStrip extends StatelessWidget {
                 color: EzColors.vfdBg,
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: cand.isNotEmpty ? EzColors.cyan : const Color(0xFF0E2A2A),
+                  color: cand.isNotEmpty ? EzColors.cyan : EzColors.vfdEdge,
                   width: cand.isNotEmpty ? 2 : 1,
                 ),
+                boxShadow: [
+                  if (EzColors.glow case final g?) BoxShadow(color: g.withValues(alpha: 0.25), blurRadius: 10),
+                ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -308,18 +645,14 @@ class PlayerStrip extends StatelessWidget {
                         cand.isNotEmpty
                             ? 'DROP TO PLAY NOW'
                             : (t == null ? 'READY' : (e.playing ? 'NOW PLAYING' : 'CUED')),
-                        style: const TextStyle(
-                          fontFamily: vfdFont,
-                          fontSize: 9,
-                          color: EzColors.vfdSub,
-                          letterSpacing: 2,
-                        ),
+                        style: TextStyle(fontFamily: vfdFont, fontSize: 9, color: EzColors.vfdSub, letterSpacing: 2),
                       ),
+                      if (isPro) ...[const SizedBox(width: 8), KeyWarning(engine: e)],
                       const Spacer(),
                       if (t != null)
                         Text(
                           '${fmt(e.position)} / ${fmt(e.duration)}',
-                          style: const TextStyle(fontFamily: vfdFont, fontSize: 10, color: EzColors.vfdSub),
+                          style: TextStyle(fontFamily: vfdFont, fontSize: 10, color: EzColors.vfdSub),
                         ),
                     ],
                   ),
@@ -332,14 +665,14 @@ class PlayerStrip extends StatelessWidget {
                       fontFamily: vfdFont,
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: e.error != null ? EzColors.red : EzColors.brass,
+                      color: e.error != null ? EzColors.red : EzColors.vfdTitle,
                     ),
                   ),
                   Text(
                     sub,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontFamily: vfdFont, fontSize: 11, color: EzColors.cyan),
+                    style: TextStyle(fontFamily: vfdFont, fontSize: 11, color: EzColors.vfdText),
                   ),
                 ],
               ),
@@ -457,6 +790,7 @@ class _SeekBarState extends State<SeekBar> {
   }
 }
 
+/// Single / Autoplay, then a short volume bar.
 class _VolumeRow extends StatelessWidget {
   const _VolumeRow();
   @override
@@ -464,9 +798,17 @@ class _VolumeRow extends StatelessWidget {
       ListenableBuilder(listenable: AppScope.of(context).engine, builder: (context, _) => _build(context));
 
   Widget _build(BuildContext context) {
-    final e = AppScope.of(context).engine;
+    final s = AppScope.of(context);
+    final e = s.engine;
     return Row(
       children: [
+        Segmented<PlayMode>(
+          key: const Key('play-mode'),
+          options: const {PlayMode.single: 'Single', PlayMode.autoplay: 'Autoplay'},
+          value: s.mode,
+          onChanged: s.setMode,
+        ),
+        const SizedBox(width: 10),
         InkWell(
           onTap: e.toggleMute,
           child: Padding(
@@ -494,50 +836,6 @@ class _VolumeRow extends StatelessWidget {
   }
 }
 
-class _TogglesRow extends StatelessWidget {
-  const _TogglesRow();
-  @override
-  Widget build(BuildContext context) {
-    final s = AppScope.of(context);
-    return Wrap(
-      spacing: 14,
-      runSpacing: 6,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Mode', style: TextStyle(fontSize: 11)),
-            const SizedBox(width: 6),
-            Segmented<PlayMode>(
-              options: const {PlayMode.single: 'Single', PlayMode.autoplay: 'Autoplay'},
-              value: s.mode,
-              onChanged: s.setMode,
-            ),
-          ],
-        ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            EzSwitch(label: 'Crossfade', value: s.crossfade, onChanged: s.toggleCrossfade),
-            const SizedBox(width: 6),
-            Segmented<Duration>(
-              key: const Key('fade-length'),
-              options: {
-                for (final d in AppState.fadeOutChoices)
-                  d: d.inMilliseconds % 1000 == 0 ? '${d.inSeconds}s' : '${d.inMilliseconds / 1000}s',
-              },
-              value: s.fadeOutTime,
-              onChanged: s.setFadeOut,
-            ),
-          ],
-        ),
-        EzSwitch(label: 'Autocue', value: s.autocue, onChanged: s.toggleAutocue),
-      ],
-    );
-  }
-}
-
 /// "📁 Library" and "★ Playlists" tabs.
 class LibraryTabs extends StatefulWidget {
   const LibraryTabs({super.key});
@@ -548,46 +846,62 @@ class LibraryTabs extends StatefulWidget {
 class _LibraryTabsState extends State<LibraryTabs> {
   int tab = 0;
 
+  /// Picks a tab, and unfolds the box if it was folded away.
+  void _show(AppState s, int t) {
+    setState(() => tab = t);
+    if (s.libraryCollapsed) s.setLibraryCollapsed(false);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final collapsed = s.libraryCollapsed;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ListControls(
           child: Row(
             children: [
-              _TabButton(label: '📁 Library', selected: tab == 0, onTap: () => setState(() => tab = 0)),
+              _TabButton(label: '📁 Library', selected: tab == 0 && !collapsed, onTap: () => _show(s, 0)),
               const SizedBox(width: 6),
               DragTarget<SongDrag>(
                 onWillAcceptWithDetails: (_) {
-                  if (tab != 1) setState(() => tab = 1);
+                  if (tab != 1 || collapsed) _show(s, 1);
                   return false;
                 },
                 builder: (context, _, _) =>
-                    _TabButton(label: '★ Playlists', selected: tab == 1, onTap: () => setState(() => tab = 1)),
+                    _TabButton(label: '★ Playlists', selected: tab == 1 && !collapsed, onTap: () => _show(s, 1)),
               ),
+              const Spacer(),
               // Shrinks a little rather than spill over when space is tight.
-              if (tab == 0)
-                const Expanded(
+              if (tab == 0 && !collapsed)
+                const Flexible(
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerRight,
-                    child: Row(children: [_RescanButton(), _AddFolderButton()]),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [_RescanButton(), _AddFolderButton()]),
                   ),
-                )
-              else
-                const Spacer(),
+                ),
+              IconButton(
+                key: const Key('library-fold'),
+                tooltip: collapsed ? 'Show folders and playlists' : 'Fold away, for more room for songs',
+                visualDensity: tapDensity,
+                onPressed: () => s.setLibraryCollapsed(!collapsed),
+                icon: Icon(collapsed ? Icons.expand_more : Icons.expand_less, size: 20, color: context.ez.textDim),
+              ),
             ],
           ),
         ),
-        const SizedBox(height: 4),
-        ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: listSize(context, 150), minHeight: 60),
-          child: RaisedBox(
-            padding: const EdgeInsets.all(4),
-            child: tab == 0 ? const FolderTree() : const PlaylistsPanel(),
+        if (!collapsed) ...[
+          const SizedBox(height: 4),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: listSize(context, 150), minHeight: 60),
+            child: RaisedBox(
+              padding: const EdgeInsets.all(4),
+              child: tab == 0 ? const FolderTree() : const PlaylistsPanel(),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -708,39 +1022,46 @@ class _FolderTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     final f = folder;
-    return MenuArea(
-      onMenu: (at) async {
-        final choice = await showMenuAt<String>(context, at, [
-          if (f.included)
-            const PopupMenuItem(value: 'exclude', child: Text('✓ In searchable library — remove'))
-          else
-            const PopupMenuItem(value: 'include', child: Text('➕ Add to searchable library')),
-          if (f.isRoot) const PopupMenuItem(value: 'rescan', child: Text('🔄 Rescan')),
-          if (f.isRoot) const PopupMenuItem(value: 'forget', child: Text('🗑 Forget this folder')),
-        ]);
-        switch (choice) {
-          case 'include':
-            await s.setFolderIncluded(f, true);
-          case 'exclude':
-            await s.setFolderIncluded(f, false);
-          case 'rescan':
-            await s.rescan();
-          case 'forget':
-            await s.removeRootFolder(f);
-        }
-      },
-      child: _FolderRow(
-        label: f.name,
-        depth: depth,
-        count: f.totalCount,
-        included: f.included,
-        expandable: f.hasChildren,
-        expanded: s.expanded.contains(f.id),
-        selected: s.selectedFolderId == f.id,
-        onTap: () => s.selectFolder(f.id),
-        onToggle: () => s.toggleExpanded(f),
-      ),
+    Future<void> menu(Offset at) async {
+      final choice = await showMenuAt<String>(context, at, [
+        if (f.included)
+          const PopupMenuItem(value: 'exclude', child: Text('✓ In searchable library — remove'))
+        else
+          const PopupMenuItem(value: 'include', child: Text('➕ Add to searchable library')),
+        if (f.isRoot) const PopupMenuItem(value: 'rescan', child: Text('🔄 Rescan')),
+        if (f.isRoot) const PopupMenuItem(value: 'forget', child: Text('🗑 Forget this folder')),
+      ]);
+      switch (choice) {
+        case 'include':
+          await s.setFolderIncluded(f, true);
+        case 'exclude':
+          await s.setFolderIncluded(f, false);
+        case 'rescan':
+          await s.rescan();
+        case 'forget':
+          await s.removeRootFolder(f);
+      }
+    }
+
+    final selected = s.selectedFolderId == f.id;
+    final row = _FolderRow(
+      label: f.name,
+      depth: depth,
+      count: f.totalCount,
+      included: f.included,
+      expandable: f.hasChildren,
+      expanded: s.expanded.contains(f.id),
+      selected: selected,
+      onTap: () => s.selectFolder(f.id),
+      onToggle: () => s.toggleExpanded(f),
     );
+    // Pro: the highlighted folder drags as a whole, all its songs (as listed
+    // below), into Tonight's playlist, a playlist or the player.
+    final songs = isPro && selected && s.view == ResultsView.search ? s.results.map((g) => g.primary).toList() : null;
+    if (songs != null && songs.isNotEmpty) {
+      return SongDraggable(key: Key('folder-drag-${f.id}'), data: SongDrag(songs), onMenu: menu, child: row);
+    }
+    return MenuArea(onMenu: menu, child: row);
   }
 }
 
@@ -793,7 +1114,7 @@ class _FolderRow extends StatelessWidget {
           ),
           if (count != null) Text('$count', style: TextStyle(fontSize: 10, color: context.ez.textDim)),
           if (count != null && included)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(left: 4),
               child: Text('✓', style: TextStyle(fontSize: 10, color: EzColors.cyan)),
             ),
@@ -852,8 +1173,10 @@ class PlaylistsPanel extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(6),
             child: Text(
-              'Drag songs from the list or the queue onto "+ Create" to make a playlist, '
-              'or press "★ Save as playlist" on the queue.',
+              queueWords(
+                'Drag songs from the list or the queue onto "+ Create" to make a playlist, '
+                'or press "★ Save as playlist" on the queue.',
+              ),
               style: TextStyle(fontSize: 11, color: context.ez.textDim),
             ),
           ),
@@ -870,8 +1193,8 @@ class PlaylistsPanel extends StatelessWidget {
                       s.copied.isEmpty ? '📋 Paste songs or a song list' : '📋 Paste ${s.copied.length} copied songs',
                     ),
                   ),
-                  const PopupMenuItem(value: 'queue', child: Text('Save the queue into this playlist')),
-                  const PopupMenuItem(value: 'toqueue', child: Text('➕ Add the whole playlist to the queue')),
+                  PopupMenuItem(value: 'queue', child: Text('Save $theQueue into this playlist')),
+                  PopupMenuItem(value: 'toqueue', child: Text('➕ Add the whole playlist to $theQueue')),
                   const PopupMenuItem(value: 'delete', child: Text('Delete playlist')),
                 ]);
                 switch (c) {
@@ -898,7 +1221,7 @@ class PlaylistsPanel extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   child: Row(
                     children: [
-                      const Text('★ ', style: TextStyle(color: EzColors.brass, fontSize: 12)),
+                      Text('★ ', style: TextStyle(color: EzColors.brass, fontSize: 12)),
                       Expanded(
                         child: Text(p.name, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
                       ),
@@ -922,16 +1245,29 @@ Future<void> pasteInto(AppState s, int playlistId) async {
 }
 
 class SearchBox extends StatefulWidget {
-  const SearchBox({super.key, this.focusNode});
-  final FocusNode? focusNode;
+  const SearchBox({super.key});
   @override
   State<SearchBox> createState() => _SearchBoxState();
 }
 
 class _SearchBoxState extends State<SearchBox> {
   final _c = TextEditingController();
+  late final FocusNode _focus = AppScope.of(context).searchFocus;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _focus.removeListener(_update);
+    _focus.addListener(_update);
+  }
+
+  /// Pro folds the controls away while the box has the focus or a search in
+  /// it; ✕ (or emptying the box and leaving it) brings them back.
+  void _update() => AppScope.of(context).setSearching(_focus.hasFocus || _c.text.isNotEmpty);
+
   @override
   void dispose() {
+    _focus.removeListener(_update);
     _c.dispose();
     super.dispose();
   }
@@ -940,9 +1276,13 @@ class _SearchBoxState extends State<SearchBox> {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     return TextField(
+      key: const Key('search'),
       controller: _c,
-      focusNode: widget.focusNode,
-      onChanged: s.setQuery,
+      focusNode: _focus,
+      onChanged: (q) {
+        s.setQuery(q);
+        _update();
+      },
       // Clicking elsewhere leaves the box, so Space goes back to play/pause.
       onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
       style: const TextStyle(fontSize: 13),
@@ -961,6 +1301,8 @@ class _SearchBoxState extends State<SearchBox> {
                 onPressed: () {
                   _c.clear();
                   s.setQuery('');
+                  _focus.unfocus();
+                  _update();
                 },
               ),
         filled: true,
@@ -975,7 +1317,7 @@ class _SearchBoxState extends State<SearchBox> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: EzColors.brass),
+          borderSide: BorderSide(color: EzColors.brass),
         ),
       ),
     );
@@ -1160,7 +1502,7 @@ class _ResultsHeader extends StatelessWidget {
       child: Row(
         children: [
           Flexible(child: HeadText(text, color: s.sort == by ? EzColors.brass : null)),
-          if (s.sort == by) const Icon(Icons.arrow_downward, size: 11, color: EzColors.brass),
+          if (s.sort == by) Icon(Icons.arrow_downward, size: 11, color: EzColors.brass),
         ],
       ),
     );
@@ -1197,7 +1539,13 @@ class _ResultRowState extends State<ResultRow> {
     final t = group.primary;
     final selected = s.selection.contains(index);
     final row = InkWell(
-      onDoubleTap: () => s.playNow(t, autostart: false), // loads it, paused, like dropping it on the player
+      // Loads it, paused, like dropping it on the player. With 2 decks and a
+      // song playing, it goes on the other deck as the next song.
+      onDoubleTap: () => isPro && s.doubleClickToQueue
+          ? s.enqueue(t)
+          : isPro && s.twoDecks
+          ? s.loadNext([t])
+          : s.playNow(t, autostart: false),
       child: Container(
         color: selected
             ? EzColors.brass.withValues(alpha: 0.28)
@@ -1219,7 +1567,7 @@ class _ResultRowState extends State<ResultRow> {
                   if (group.versions.length > 1)
                     TextSpan(
                       text: '  ×${group.versions.length}',
-                      style: const TextStyle(color: EzColors.cyan, fontSize: 10),
+                      style: TextStyle(color: EzColors.cyan, fontSize: 10),
                     ),
                 ],
               ),
@@ -1295,8 +1643,8 @@ Future<void> trackMenu(BuildContext context, Offset at, SearchGroup group, {requ
   final n = '${tracks.length} songs';
   final inPlaylist = s.view == ResultsView.playlist;
   final choice = await showMenuAt<String>(context, at, [
-    PopupMenuItem(value: 'queue', child: Text(many ? '➕ Add $n to the queue' : '➕ Add to queue')),
-    if (!many) const PopupMenuItem(value: 'singer', child: Text('🎤 Add to queue with singer…')),
+    PopupMenuItem(value: 'queue', child: Text(many ? '➕ Add $n to $theQueue' : queueWords('➕ Add to queue'))),
+    if (!many) PopupMenuItem(value: 'singer', child: Text(queueWords('🎤 Add to queue with singer…'))),
     if (!many) const PopupMenuItem(value: 'play', child: Text('▶ Play now')),
     if (!many && group.versions.length > 1) const PopupMenuItem(value: 'versions', child: Text('🎚 Other versions…')),
     const PopupMenuDivider(),
@@ -1355,18 +1703,14 @@ class LoadingBanner extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2, color: EzColors.cyan),
-            ),
+            SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: EzColors.cyan)),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
+                  Text(
                     'Loading your song library… please wait',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: EzColors.cyan),
                   ),
@@ -1406,6 +1750,29 @@ class _StatusLine extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// In 2-deck mode: which deck is playing, and the song waiting on the other.
+class _DeckLine extends StatelessWidget {
+  const _DeckLine();
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final sb = s.standby;
+    if (sb == null) return const SizedBox.shrink();
+    final live = s.liveDeck == 0 ? 'A' : 'B', other = s.liveDeck == 0 ? 'B' : 'A';
+    final waiting = s.standbyQueueId != null ? sb.current?.title : null;
+    return Padding(
+      key: const Key('deck-line'),
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        'On deck $live  ·  deck $other: ${waiting == null ? 'nothing cued' : 'next ready, $waiting'}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 11, color: context.ez.textDim),
       ),
     );
   }
