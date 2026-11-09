@@ -8,6 +8,7 @@ import '../app_state.dart';
 import '../platform.dart';
 import 'android_folders.dart';
 import '../theme.dart';
+import 'columns.dart';
 import 'common.dart';
 import 'dialogs.dart';
 import 'logo.dart';
@@ -1127,13 +1128,10 @@ class _ResultsHeader extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: context.ez.border)),
       ),
-      child: Row(
-        children: [
-          Expanded(flex: 5, child: sortable('Title', SearchSort.title)),
-          Expanded(flex: 4, child: sortable('Artist', SearchSort.artist)),
-          SizedBox(width: listSize(context, 44), child: const HeadText('Type')),
-          const Expanded(flex: 3, child: HeadText('Location')),
-        ],
+      child: ColumnsHeader(
+        table: 'results',
+        columns: resultColumns,
+        headings: {'title': sortable('Title', SearchSort.title), 'artist': sortable('Artist', SearchSort.artist)},
       ),
     );
   }
@@ -1164,54 +1162,44 @@ class _ResultRowState extends State<ResultRow> {
             ? EzColors.brass.withValues(alpha: 0.28)
             : (index.isOdd ? context.ez.raised.withValues(alpha: 0.4) : null),
         padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 5,
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(text: t.title),
-                    if (t.version != null)
-                      TextSpan(
-                        text: '  ${t.version}',
-                        style: TextStyle(color: context.ez.textDim, fontSize: 10),
-                      ),
-                    if (group.versions.length > 1)
-                      TextSpan(
-                        text: '  ×${group.versions.length}',
-                        style: const TextStyle(color: EzColors.cyan, fontSize: 10),
-                      ),
-                  ],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12),
+        child: ColumnsRow(
+          table: 'results',
+          columns: resultColumns,
+          cells: {
+            'title': Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(text: t.title),
+                  if (t.version != null)
+                    TextSpan(
+                      text: '  ${t.version}',
+                      style: TextStyle(color: context.ez.textDim, fontSize: 10),
+                    ),
+                  if (group.versions.length > 1)
+                    TextSpan(
+                      text: '  ×${group.versions.length}',
+                      style: const TextStyle(color: EzColors.cyan, fontSize: 10),
+                    ),
+                ],
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12),
             ),
-            Expanded(
-              flex: 4,
-              child: Text(
-                t.artist ?? '—',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: context.ez.textDim),
-              ),
+            'artist': Text(
+              t.artist ?? '—',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: context.ez.textDim),
             ),
-            SizedBox(
-              width: listSize(context, 44),
-              child: Align(alignment: Alignment.centerLeft, child: TypeChip(t.type)),
+            'type': Align(alignment: Alignment.centerLeft, child: TypeChip(t.type)),
+            'location': Text(
+              locationOf(t),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 10, fontFamily: vfdFont, color: context.ez.textDim),
             ),
-            Expanded(
-              flex: 3,
-              child: Text(
-                locationOf(t),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 10, fontFamily: vfdFont, color: context.ez.textDim),
-              ),
-            ),
-          ],
+          },
         ),
       ),
     );

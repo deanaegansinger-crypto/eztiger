@@ -47,6 +47,11 @@ class AppState extends ChangeNotifier {
   /// 🔄 Rescan when songs have been added or renamed.
   bool rescanOnStart = false;
 
+  /// Song table columns: widths changed by dragging ("table.column" →
+  /// weight) and columns hidden.
+  Map<String, double> columnWeights = {};
+  Set<String> hiddenColumns = {};
+
   String songbookTitle = '';
   String songbookUrl = '';
   String songbookSaved = '';
@@ -132,6 +137,11 @@ class AppState extends ChangeNotifier {
       stageView = m['stage'] as bool? ?? stageView;
       stageLyricsRight = m['stageLyricsRight'] as bool? ?? stageLyricsRight;
       rescanOnStart = m['rescanOnStart'] as bool? ?? rescanOnStart;
+      columnWeights = {
+        for (final e in ((m['columnWeights'] as Map?) ?? const {}).entries)
+          if (e.value is num) e.key as String: (e.value as num).toDouble(),
+      };
+      hiddenColumns = {...((m['hiddenColumns'] as List?) ?? const []).whereType<String>()};
       songbookTitle = m['songbookTitle'] as String? ?? songbookTitle;
       songbookUrl = m['songbookUrl'] as String? ?? songbookUrl;
       songbookSaved = m['songbookSaved'] as String? ?? songbookSaved;
@@ -163,6 +173,8 @@ class AppState extends ChangeNotifier {
       'stage': stageView,
       'stageLyricsRight': stageLyricsRight,
       'rescanOnStart': rescanOnStart,
+      'columnWeights': columnWeights,
+      'hiddenColumns': hiddenColumns.toList()..sort(),
       'songbookTitle': songbookTitle,
       'songbookUrl': songbookUrl,
       'songbookSaved': songbookSaved,
@@ -294,6 +306,25 @@ class AppState extends ChangeNotifier {
   void songbookWasSaved(String fingerprint) {
     songbookSaved = fingerprint;
     songbookOutOfDate = false;
+    notifyListeners();
+  }
+
+  void setColumnWeights(String table, Map<String, double> weights) {
+    for (final e in weights.entries) {
+      columnWeights['$table.${e.key}'] = e.value;
+    }
+    notifyListeners();
+  }
+
+  /// Shows or hides a column ("table.column").
+  void toggleColumn(String key) {
+    if (!hiddenColumns.remove(key)) hiddenColumns.add(key);
+    notifyListeners();
+  }
+
+  void resetColumns(String table) {
+    columnWeights.removeWhere((k, _) => k.startsWith('$table.'));
+    hiddenColumns.removeWhere((k) => k.startsWith('$table.'));
     notifyListeners();
   }
 

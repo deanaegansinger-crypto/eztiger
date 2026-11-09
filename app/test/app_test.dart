@@ -719,6 +719,68 @@ void main() {
     });
   });
 
+  testWidgets('columns: hide one from the heading menu, drag to resize, remembered, reset', (tester) async {
+    await pumpApp(tester);
+    Future<void> settle() async {
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    final results = find.byType(ResultsTable);
+    Finder heading(String text) => find.descendant(of: results, matching: find.text(text.toUpperCase()));
+    expect(heading('Location'), findsOneWidget);
+    final originalArtistLeft = tester.getTopLeft(heading('Artist')).dx;
+
+    // Right-click a heading, untick Location.
+    await tester.tap(heading('Type'), buttons: kSecondaryButton);
+    await settle();
+    await tester.tap(find.byKey(const Key('col-results-location')));
+    await settle();
+    expect(heading('Location'), findsNothing);
+    expect(state.hiddenColumns, contains('results.location'));
+
+    // Drag the edge of Title to the right: Title gets wider, Artist narrower.
+    final titleWidth = tester.getSize(find.descendant(of: results, matching: find.text('Waterloo'))).width;
+    final artistLeft = tester.getTopLeft(heading('Artist')).dx;
+    await tester.drag(find.byKey(const Key('resize-results-title')), const Offset(80, 0));
+    await tester.pump();
+    expect(tester.getTopLeft(heading('Artist')).dx, greaterThan(artistLeft + 60));
+    expect(
+      tester.getSize(find.descendant(of: results, matching: find.text('Waterloo'))).width,
+      greaterThanOrEqualTo(titleWidth),
+    );
+
+    // Remembered for next time.
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final again = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan));
+      await again.init(rescanLibrary: false);
+      expect(again.hiddenColumns, contains('results.location'));
+      expect(again.columnWeights['results.title'], greaterThan(5));
+    });
+
+    // Reset puts it all back.
+    await tester.tap(heading('Type'), buttons: kSecondaryButton);
+    await settle();
+    await tester.tap(find.byKey(const Key('col-reset')));
+    await settle();
+    expect(heading('Location'), findsOneWidget);
+    expect(tester.getTopLeft(heading('Artist')).dx, closeTo(originalArtistLeft, 1));
+  });
+
+  testWidgets('the queue hides the Played column', (tester) async {
+    await pumpApp(tester);
+    await tester.runAsync(() => state.enqueue(state.results.first.primary));
+    await tester.pump();
+    final queue = find.byType(QueuePanel);
+    expect(find.descendant(of: queue, matching: find.text('PLAYED')), findsOneWidget);
+    state.toggleColumn('queue.played');
+    await tester.pump();
+    expect(find.descendant(of: queue, matching: find.text('PLAYED')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('the menu makes the song lists larger, but not the player', (tester) async {
     await pumpApp(tester);
     await tester.runAsync(() => state.enqueue(state.results.first.primary));

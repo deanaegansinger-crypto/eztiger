@@ -104,6 +104,13 @@ const _sections = <(String, List<String>)>[
   ),
   _secondScreen,
   (
+    'Columns',
+    [
+      'Drag the line at the right of a column heading to make that column wider or narrower (in the song list and the queue).',
+      'Right-click a column heading (press and hold on the tablet) to show or hide columns, or Reset columns to put them back.',
+    ],
+  ),
+  (
     'Audience songbook',
     [
       '☰ Menu → Songbook: a web page of your songs (titles and artists only) that people search on their phones by scanning a QR code.',
