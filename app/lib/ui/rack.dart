@@ -12,6 +12,7 @@ import 'common.dart';
 import 'dialogs.dart';
 import 'logo.dart';
 import 'read_me.dart';
+import 'songbook_dialog.dart';
 
 /// The left column of the mockup: player, settings, library, search and
 /// results.
@@ -130,6 +131,49 @@ class _MainMenu extends StatelessWidget {
           child: const Text('Stage: lyrics on the right'),
         ),
         const PopupMenuDivider(),
+        PopupMenuItem(
+          key: const Key('menu-songbook'),
+          value: 'songbook',
+          child: Row(
+            children: [
+              const Icon(Icons.qr_code_2, size: 18),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text.rich(
+                  TextSpan(
+                    text: 'Songbook…',
+                    children: [
+                      if (s.songbookOutOfDate)
+                        const TextSpan(
+                          text: '  needs updating',
+                          style: TextStyle(fontSize: 12, color: EzColors.brass),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          key: const Key('menu-rescan'),
+          value: 'rescan',
+          enabled: !s.scanning && s.roots.isNotEmpty,
+          child: const Row(
+            children: [
+              Icon(Icons.refresh, size: 18),
+              SizedBox(width: 10),
+              Flexible(child: Text('Rescan library')),
+            ],
+          ),
+        ),
+        CheckedPopupMenuItem(
+          key: const Key('menu-rescan-on-start'),
+          value: 'rescanOnStart',
+          checked: s.rescanOnStart,
+          child: const Text('Rescan at start-up'),
+        ),
+        const PopupMenuDivider(),
         const PopupMenuItem(
           enabled: false,
           height: 28,
@@ -154,6 +198,12 @@ class _MainMenu extends StatelessWidget {
       onSelected: (c) {
         if (c == 'readme') {
           showReadMe(context);
+        } else if (c == 'songbook') {
+          showSongbook(context);
+        } else if (c == 'rescan') {
+          s.rescan();
+        } else if (c == 'rescanOnStart') {
+          s.setRescanOnStart(!s.rescanOnStart);
         } else if (c == 'dark' || c == 'light') {
           if ((c == 'dark') != s.dark) s.toggleDark();
         } else if (c == 'lyricsLeft' || c == 'lyricsRight') {
@@ -476,8 +526,17 @@ class _LibraryTabsState extends State<LibraryTabs> {
                 builder: (context, _, _) =>
                     _TabButton(label: '★ Playlists', selected: tab == 1, onTap: () => setState(() => tab = 1)),
               ),
-              const Spacer(),
-              if (tab == 0) const _AddFolderButton(),
+              // Shrinks a little rather than spill over when space is tight.
+              if (tab == 0)
+                const Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Row(children: [_RescanButton(), _AddFolderButton()]),
+                  ),
+                )
+              else
+                const Spacer(),
             ],
           ),
         ),
@@ -537,6 +596,22 @@ class _AddFolderButton extends StatelessWidget {
                   : await FilePicker.getDirectoryPath(dialogTitle: 'Choose a karaoke folder');
               if (path != null) await s.addRootFolder(path);
             },
+    );
+  }
+}
+
+/// "🔄 Rescan": finds songs added, removed or renamed since the last scan.
+class _RescanButton extends StatelessWidget {
+  const _RescanButton();
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    return TextButton.icon(
+      key: const Key('rescan'),
+      style: TextButton.styleFrom(visualDensity: tapDensity, foregroundColor: EzColors.brass),
+      icon: const Icon(Icons.refresh, size: 16),
+      label: const Text('Rescan', style: TextStyle(fontSize: 11)),
+      onPressed: s.scanning || s.roots.isEmpty ? null : s.rescan,
     );
   }
 }

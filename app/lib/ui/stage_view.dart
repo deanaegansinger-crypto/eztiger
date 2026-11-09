@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'output_panel.dart';
+import 'songbook_dialog.dart';
 
 /// The view for performing, with the tablet on the mic stand: the lyrics or
 /// video large on the left; on the right the song and time left in big
@@ -85,6 +86,22 @@ class _Controls extends StatelessWidget {
               style: const TextStyle(fontFamily: vfdFont, fontSize: 14, color: EzColors.vfdSub, letterSpacing: 2),
             ),
             const Spacer(),
+            // The songbook's QR code, for the audience to scan.
+            if (s.songbookUrl.isNotEmpty) ...[
+              IconButton(
+                key: const Key('stage-qr'),
+                tooltip: 'Show the songbook QR code',
+                iconSize: 30,
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(52, 52),
+                  side: const BorderSide(color: EzColors.cyan),
+                  foregroundColor: EzColors.cyan,
+                ),
+                onPressed: () => showSongbookQr(context),
+                icon: const Icon(Icons.qr_code_2),
+              ),
+              const SizedBox(width: 10),
+            ],
             // Swap the lyrics and the buttons left and right.
             IconButton(
               key: const Key('stage-swap'),

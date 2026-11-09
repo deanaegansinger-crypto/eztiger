@@ -653,6 +653,72 @@ void main() {
     expect(find.byType(QueuePanel), findsOneWidget);
   });
 
+  testWidgets('songbook: QR code, and it knows when the library has changed', (tester) async {
+    await pumpApp(tester);
+    Future<void> settle() async {
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    // The page lists the library's songs.
+    final book = await tester.runAsync(state.buildSongbook);
+    expect(book!.count, 3);
+    expect(book.html, contains('Bohemian Rhapsody'));
+    state.songbookWasSaved(book.fingerprint);
+    expect(state.songbookOutOfDate, isFalse);
+
+    await tester.tap(find.byKey(const Key('main-menu')));
+    await settle();
+    await tester.tap(find.byKey(const Key('menu-songbook')));
+    await settle();
+    await tester.enterText(find.byKey(const Key('songbook-title')), "Deano's songs");
+    await tester.enterText(find.byKey(const Key('songbook-url')), 'deano.github.io/songbook/');
+    await tester.pump();
+    expect(state.songbookTitle, "Deano's songs");
+    expect(state.songbookUrl, 'https://deano.github.io/songbook/');
+    expect(find.text('✓ The songbook matches your library.'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('songbook-show-qr')));
+    await settle();
+    expect(find.byKey(const Key('songbook-qr')), findsOneWidget);
+    expect(find.text('Scan with your phone camera to see the songs'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('songbook-qr')));
+    await settle();
+    await tester.tap(find.text('Close'));
+    await settle();
+
+    // Correcting a title makes the songbook out of date.
+    final t = state.results.first.primary;
+    await tester.runAsync(() => state.editTags(t, title: 'Corrected Title', artist: t.artist ?? '', type: t.type));
+    await tester.pump();
+    expect(state.songbookOutOfDate, isTrue);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    await settle();
+    expect(find.textContaining('needs updating'), findsOneWidget);
+  });
+
+  testWidgets('rescan is by hand unless turned on for start-up, and finds new songs', (tester) async {
+    await pumpApp(tester);
+    expect(state.rescanOnStart, isFalse);
+    File('${lib.path}/Toto - Africa.mp3').writeAsStringSync('x');
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('rescan')));
+      for (var i = 0; i < 50 && (state.scanning || state.results.length < 4); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    });
+    await tester.pump();
+    expect(state.results.map((g) => g.primary.title), contains('Africa'));
+
+    state.setRescanOnStart(true);
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final again = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan));
+      await again.init(rescanLibrary: false);
+      expect(again.rescanOnStart, isTrue);
+    });
+  });
+
   testWidgets('the menu makes the song lists larger, but not the player', (tester) async {
     await pumpApp(tester);
     await tester.runAsync(() => state.enqueue(state.results.first.primary));

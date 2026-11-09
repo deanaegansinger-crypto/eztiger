@@ -63,7 +63,7 @@ const _sections = <(String, List<String>)>[
   (
     'Getting started',
     [
-      'Library tab: click Add folder and pick your karaoke folder. EZtiger scans it, and rescans it each time it starts.',
+      'Library tab: click Add folder and pick your karaoke folder. EZtiger scans it. When you add, remove or rename songs later, press 🔄 Rescan (next to Add folder, or in the ☰ Menu). To rescan every time EZtiger starts, tick "Rescan at start-up" in the Menu.',
       'Type in the search box to find songs by title or artist. Use the type filter (CDG, MP4…) and the A–Z sort above the list.',
     ],
   ),
@@ -103,6 +103,14 @@ const _sections = <(String, List<String>)>[
     ],
   ),
   _secondScreen,
+  (
+    'Audience songbook',
+    [
+      '☰ Menu → Songbook: a web page of your songs (titles and artists only) that people search on their phones by scanning a QR code.',
+      'Give it a heading, press Save songbook page and upload the file (index.html) to a free web page such as GitHub Pages. Put that web address in the box, then Show QR code puts the code on screen; it\'s also a button in the stage view.',
+      'After adding songs or correcting titles, the Menu says the songbook "needs updating": save it again and upload the new file over the old one.',
+    ],
+  ),
   (
     'Your settings',
     [

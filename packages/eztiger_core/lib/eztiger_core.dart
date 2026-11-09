@@ -12,4 +12,5 @@ export 'src/data/search.dart' show SearchDao, SearchSort, cleanListLine, compare
 export 'src/scanner/filename_parser.dart';
 export 'src/scanner/folder_walker.dart';
 export 'src/scanner/library_scanner.dart';
+export 'src/songbook.dart';
 export 'src/text.dart' show normalize;

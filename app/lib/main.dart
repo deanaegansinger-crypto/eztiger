@@ -89,7 +89,9 @@ Future<void> runOnTablet() async {
     ),
   );
   WidgetsBinding.instance.addPostFrameCallback((_) async {
-    if (!canRead && state.roots.isNotEmpty && await ensureStorageAccess()) await state.rescan();
+    if (!canRead && state.rescanOnStart && state.roots.isNotEmpty && await ensureStorageAccess()) {
+      await state.rescan();
+    }
     await state.startUp();
   });
 }

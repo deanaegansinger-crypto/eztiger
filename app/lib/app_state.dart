@@ -39,6 +39,21 @@ class AppState extends ChangeNotifier {
   /// In the stage view: the lyrics on the right and the buttons on the
   /// left, instead of the other way round.
   bool stageLyricsRight = false;
+
+  /// The audience songbook: its heading, where it is online (for the QR
+  /// code), and a fingerprint of the song list last saved, to tell when the
+  /// library has changed since.
+  /// Rescan the library each time EZtiger starts. Off: rescan by hand with
+  /// 🔄 Rescan when songs have been added or renamed.
+  bool rescanOnStart = false;
+
+  String songbookTitle = '';
+  String songbookUrl = '';
+  String songbookSaved = '';
+
+  /// True when songs were added, removed or retitled since the songbook was
+  /// last saved (false if it was never saved).
+  bool songbookOutOfDate = false;
   static final textScaleChoices = {1.0: 'Normal', 1.25: 'Large', 1.5: 'Extra large'};
   bool autocue = true;
 
@@ -98,7 +113,11 @@ class AppState extends ChangeNotifier {
     await _reloadQueue();
     await _reloadPlaylists();
     await refreshResults();
-    if (rescanLibrary && roots.isNotEmpty) unawaited(rescan());
+    if (rescanLibrary && rescanOnStart && roots.isNotEmpty) {
+      unawaited(rescan());
+    } else {
+      unawaited(checkSongbook());
+    }
   }
 
   // ------------------------------------------------------------ settings
@@ -112,6 +131,10 @@ class AppState extends ChangeNotifier {
       crossfade = m['crossfade'] as bool? ?? crossfade;
       stageView = m['stage'] as bool? ?? stageView;
       stageLyricsRight = m['stageLyricsRight'] as bool? ?? stageLyricsRight;
+      rescanOnStart = m['rescanOnStart'] as bool? ?? rescanOnStart;
+      songbookTitle = m['songbookTitle'] as String? ?? songbookTitle;
+      songbookUrl = m['songbookUrl'] as String? ?? songbookUrl;
+      songbookSaved = m['songbookSaved'] as String? ?? songbookSaved;
       final scale = (m['textScale'] as num?)?.toDouble();
       if (textScaleChoices.containsKey(scale)) textScale = scale!;
       autocue = m['autocue'] as bool? ?? autocue;
@@ -139,6 +162,10 @@ class AppState extends ChangeNotifier {
       'textScale': textScale,
       'stage': stageView,
       'stageLyricsRight': stageLyricsRight,
+      'rescanOnStart': rescanOnStart,
+      'songbookTitle': songbookTitle,
+      'songbookUrl': songbookUrl,
+      'songbookSaved': songbookSaved,
       'autocue': autocue,
       'fadeMs': fadeOutTime.inMilliseconds,
       'type': typeFilter?.name,
@@ -251,6 +278,56 @@ class AppState extends ChangeNotifier {
     scanning = false;
     await _reloadFolders();
     await refreshResults();
+    await checkSongbook();
+  }
+
+  // ------------------------------------------------------------ songbook
+
+  /// The songbook web page for the library as it is now. Call
+  /// [songbookWasSaved] with its fingerprint once it is saved.
+  Future<({String html, String fingerprint, int count})> buildSongbook() async {
+    final songs = await db.tracks.songbook();
+    final html = songbookHtml(title: songbookTitle, songs: songs);
+    return (html: html, fingerprint: _fingerprint(songs), count: songs.length);
+  }
+
+  void songbookWasSaved(String fingerprint) {
+    songbookSaved = fingerprint;
+    songbookOutOfDate = false;
+    notifyListeners();
+  }
+
+  void setRescanOnStart(bool v) {
+    rescanOnStart = v;
+    notifyListeners();
+  }
+
+  void setSongbook({String? title, String? url}) {
+    songbookTitle = title ?? songbookTitle;
+    songbookUrl = url ?? songbookUrl;
+    notifyListeners();
+  }
+
+  /// Compares the library with the songbook last saved.
+  Future<void> checkSongbook() async {
+    if (songbookSaved.isEmpty) return;
+    final now = _fingerprint(await db.tracks.songbook());
+    final out = now != songbookSaved;
+    if (out != songbookOutOfDate) {
+      songbookOutOfDate = out;
+      notifyListeners();
+    }
+  }
+
+  /// A short fingerprint of a song list (FNV-1a), the same from run to run.
+  static String _fingerprint(List<SongbookEntry> songs) {
+    var h = 0x811c9dc5;
+    for (final s in songs) {
+      for (final c in '${s.artist}\u0001${s.title}\u0002'.codeUnits) {
+        h = ((h ^ c) * 0x01000193) & 0xffffffff;
+      }
+    }
+    return '${songs.length}-${h.toRadixString(16)}';
   }
 
   Future<void> toggleExpanded(Folder f) async {
@@ -340,6 +417,7 @@ class AppState extends ChangeNotifier {
     await db.tracks.editTags(t.id, title: title, artist: artist, type: type);
     await _reloadQueue();
     await refreshResults();
+    await checkSongbook();
   }
 
   // --------------------------------------------------------------- queue

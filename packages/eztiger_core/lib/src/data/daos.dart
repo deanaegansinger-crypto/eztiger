@@ -80,6 +80,31 @@ class TrackDao {
   final Database db;
   final bool hasFts;
 
+  /// Every song in the searchable library, once each (several versions of a
+  /// song count once), for the audience songbook: by artist, then title.
+  Future<List<SongbookEntry>> songbook() async {
+    final rows = await db.rawQuery('''
+SELECT COALESCE(t.user_title, t.title) AS title, COALESCE(t.user_artist, t.artist) AS artist
+FROM tracks t JOIN folders f ON f.id = t.folder_id
+WHERE f.included = 1''');
+    final seen = <String>{};
+    final songs = <SongbookEntry>[];
+    for (final r in rows) {
+      final title = (r['title'] as String).trim();
+      final artist = (r['artist'] as String?)?.trim() ?? '';
+      if (title.isEmpty) continue;
+      if (seen.add('${normalize(artist)}|${normalize(title)}')) {
+        songs.add((title: title, artist: artist));
+      }
+    }
+    int by(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
+    songs.sort((a, b) {
+      final c = by(a.artist, b.artist);
+      return c != 0 ? c : by(a.title, b.title);
+    });
+    return songs;
+  }
+
   Future<Track?> byId(int id) async {
     final rows = await db.rawQuery('$trackSelect WHERE t.id = ?', [id]);
     return rows.isEmpty ? null : Track.fromRow(rows.first);
