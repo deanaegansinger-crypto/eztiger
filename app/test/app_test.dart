@@ -880,6 +880,37 @@ void main() {
     expect(find.text('➕ Add to queue'), findsNothing); // no menu after a real drag
   });
 
+  testWidgets('tablet: the player folds away while the keyboard is up for a search', (tester) async {
+    touchUi = true;
+    addTearDown(() => touchUi = false);
+    await pumpApp(tester);
+    expect(find.byType(PlayerStrip), findsOneWidget);
+
+    // The keyboard alone (search box not in use) changes nothing.
+    tester.view.viewInsets = const FakeViewPadding(bottom: 200);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(PlayerStrip), findsOneWidget);
+
+    // Typing in the search box with the keyboard up: the player folds away.
+    await tester.tap(find.byType(TextField));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(PlayerStrip), findsNothing);
+
+    // Hiding the keyboard (the tablet's Back button) opens it again.
+    tester.view.viewInsets = FakeViewPadding.zero;
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(PlayerStrip), findsOneWidget);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 200);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(PlayerStrip), findsNothing);
+
+    // Touching a song to pick it opens the player, ready to drop it on.
+    await tester.tap(find.byType(ResultRow).first);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(PlayerStrip), findsOneWidget);
+    expect(find.byType(QueuePanel), findsOneWidget);
+  });
+
   testWidgets('tablet: holding a queued song still opens its menu', (tester) async {
     touchUi = true;
     addTearDown(() => touchUi = false);

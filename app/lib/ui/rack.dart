@@ -17,32 +17,71 @@ import 'songbook_dialog.dart';
 
 /// The left column of the mockup: player, settings, library, search and
 /// results.
-class Rack extends StatelessWidget {
+class Rack extends StatefulWidget {
   const Rack({super.key});
+  @override
+  State<Rack> createState() => _RackState();
+}
+
+class _RackState extends State<Rack> {
+  final _searchFocus = FocusNode(debugLabel: 'search');
+
+  @override
+  void initState() {
+    super.initState();
+    _searchFocus.addListener(_changed);
+  }
+
+  void _changed() => setState(() {});
+
+  @override
+  void dispose() {
+    _searchFocus.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    // On the tablet the on-screen keyboard takes the bottom of the screen, so
+    // while typing a search the player folds away to leave room for the
+    // results. Touching a song (to pick it, or drag it to the player or the
+    // queue) leaves the search box, and the player opens again.
+    final typing = _searchFocus.hasFocus && MediaQuery.viewInsetsOf(context).bottom > 0;
     return Container(
       color: context.ez.panel,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _BrandRow(),
-          SizedBox(height: 8),
-          PlayerStrip(),
-          SizedBox(height: 6),
-          SeekBar(),
-          _VolumeRow(),
-          SizedBox(height: 6),
-          _TogglesRow(),
-          SizedBox(height: 8),
-          ListText(child: LibraryTabs()),
-          SizedBox(height: 8),
-          ListText(child: SearchBox()),
-          SizedBox(height: 6),
-          Expanded(child: ListText(child: ResultsTable())),
-          _StatusLine(),
+          const _BrandRow(),
+          const SizedBox(height: 8),
+          ClipRect(
+            child: AnimatedSize(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              alignment: Alignment.topCenter,
+              child: typing
+                  ? const SizedBox(key: Key('player-folded'), width: double.infinity)
+                  : const Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        PlayerStrip(),
+                        SizedBox(height: 6),
+                        SeekBar(),
+                        _VolumeRow(),
+                        SizedBox(height: 6),
+                        _TogglesRow(),
+                        SizedBox(height: 8),
+                      ],
+                    ),
+            ),
+          ),
+          const ListText(child: LibraryTabs()),
+          const SizedBox(height: 8),
+          ListText(child: SearchBox(focusNode: _searchFocus)),
+          const SizedBox(height: 6),
+          const Expanded(child: ListText(child: ResultsTable())),
+          const _StatusLine(),
         ],
       ),
     );
@@ -883,7 +922,8 @@ Future<void> pasteInto(AppState s, int playlistId) async {
 }
 
 class SearchBox extends StatefulWidget {
-  const SearchBox({super.key});
+  const SearchBox({super.key, this.focusNode});
+  final FocusNode? focusNode;
   @override
   State<SearchBox> createState() => _SearchBoxState();
 }
@@ -901,6 +941,7 @@ class _SearchBoxState extends State<SearchBox> {
     final s = AppScope.of(context);
     return TextField(
       controller: _c,
+      focusNode: widget.focusNode,
       onChanged: s.setQuery,
       // Clicking elsewhere leaves the box, so Space goes back to play/pause.
       onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
