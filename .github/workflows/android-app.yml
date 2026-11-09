@@ -42,11 +42,14 @@ jobs:
         run: |
           f="$RUNNER_TEMP/test-results.json"
           jq -r 'select(.type=="testStart") | "\(.test.id)\t\(.test.name)"' "$f" > "$RUNNER_TEMP/names.tsv"
-          jq -r 'select(.type=="error") | "\(.testID)\t\(.error | gsub("[\r\n]+"; " ") | .[0:900])"' "$f" |
-            while IFS=$'\t' read -r id err; do
-              name=$(awk -F'\t' -v id="$id" '$1==id {print $2}' "$RUNNER_TEMP/names.tsv")
-              echo "::error title=Failed: ${name//:/ -}::${err}"
-            done
+          # Each failed test, with what it printed (Flutter prints the
+          # exception) and its errors, cut to fit in an annotation.
+          for id in $(jq -r 'select(.type=="error") | .testID' "$f" | sort -u); do
+            name=$(awk -F'\t' -v id="$id" '$1==id {print $2}' "$RUNNER_TEMP/names.tsv")
+            text=$(jq -r --argjson id "$id" 'select(.testID==$id and (.type=="print" or .type=="error")) | (.message // .error)' "$f" |
+              grep -v '^[══]*$' | tr '\r\n' '  ' | sed 's/  */ /g' | cut -c1-3500)
+            echo "::error title=Failed: ${name//:/ -}::${text//%/%25}"
+          done
 
       - name: Signing key
         # The same key every time, so a new version installs over the old one.
