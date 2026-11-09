@@ -33,8 +33,20 @@ jobs:
         run: flutter pub get
 
       - name: Test
-        # The github reporter names each failing test in the run's summary.
-        run: flutter test --reporter github
+        run: flutter test --file-reporter json:$RUNNER_TEMP/test-results.json
+
+      - name: Name the failing tests
+        # Puts each failing test and its error in the run's summary, which
+        # can be read without signing in (the full log can't).
+        if: failure()
+        run: |
+          f="$RUNNER_TEMP/test-results.json"
+          jq -r 'select(.type=="testStart") | "\(.test.id)\t\(.test.name)"' "$f" > "$RUNNER_TEMP/names.tsv"
+          jq -r 'select(.type=="error") | "\(.testID)\t\(.error | gsub("[\r\n]+"; " ") | .[0:900])"' "$f" |
+            while IFS=$'\t' read -r id err; do
+              name=$(awk -F'\t' -v id="$id" '$1==id {print $2}' "$RUNNER_TEMP/names.tsv")
+              echo "::error title=Failed: ${name//:/ -}::${err}"
+            done
 
       - name: Signing key
         # The same key every time, so a new version installs over the old one.

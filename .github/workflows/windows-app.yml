@@ -31,8 +31,7 @@ jobs:
         run: flutter analyze
 
       - name: Test
-        # The github reporter names each failing test in the run's summary.
-        run: flutter test --reporter github
+        run: flutter test
 
       - name: Build
         run: flutter build windows --release
