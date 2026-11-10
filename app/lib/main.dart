@@ -62,7 +62,12 @@ Future<void> main(List<String> args) async {
     backends[KaraokeEngine(backend)] = backend;
   }
   final decks = backends.keys.toList();
-  final state = AppState(db, decks[0], deckB: decks.length > 1 ? decks[1] : null);
+  final state = AppState(
+    db,
+    decks[0],
+    deckB: decks.length > 1 ? decks[1] : null,
+    analyseMedia: analyseInBackground, // the key and BPM on the players
+  );
   await state.init();
   licence?.addListener(state.editionChanged);
 

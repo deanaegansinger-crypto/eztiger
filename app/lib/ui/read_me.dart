@@ -197,6 +197,7 @@ const _sections = <(String, List<String>)>[
       'Double-click a song in the list to load it into the player, paused. Or drag it onto the player.',
       'Space plays and pauses. ⏮ goes back to the start, ⏭ (or Ctrl+→) moves on to the next song in the queue.',
       'Drag the bar under the player to skip through a song.',
+      'KEY and BPM, top right of the player: the song\'s musical key (C, C#, D … and Am, F#m … for minor keys) and its tempo in beats a minute. EZTiger works them out the first time a song loads (about a second; "KEY … BPM …" shows meanwhile) and remembers them, so after that they show straight away. With the key moved in Pro, it shows the key the song plays in now, with its own key after it: KEY E (D+2). They are worked out by ear, so the odd song can come out at half or double its tempo, or in its relative minor or major.',
     ],
   ),
   (

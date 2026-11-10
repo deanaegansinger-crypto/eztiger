@@ -8,6 +8,7 @@ environment:
 
 dependencies:
   archive: ^4.0.0
+  ffi: ^2.1.0
   path: ^1.9.0
   sqflite_common: ^2.5.0
   # Pure Dart (no Flutter). Used by the command-line scanner and on Windows.

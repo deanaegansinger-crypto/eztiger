@@ -114,6 +114,18 @@ class KaraokeEngine extends ChangeNotifier {
   /// Told when the key is changed by hand, to remember it for the song.
   void Function(Track track, int semitones)? onKeyShift;
 
+  /// Works out (or looks up) a song's key and tempo as it loads; [media] is
+  /// the file that plays (the MP3 inside a zip, once unpacked). Null: the
+  /// players show no key or tempo.
+  Future<TrackAnalysis?> Function(Track track, String media)? analyse;
+
+  /// The loaded song's key and tempo, once known.
+  TrackAnalysis? analysis;
+
+  /// True while the loaded song's key and tempo are being worked out.
+  bool analysing = false;
+  int _loadId = 0;
+
   /// When the loaded song came up in a changed key, for the flashing
   /// warning; null when it loaded in its own key.
   DateTime? keyWarningSince;
@@ -156,8 +168,11 @@ class KaraokeEngine extends ChangeNotifier {
     bool skipSilence = false,
   }) async {
     _fadeId++;
+    final loadId = ++_loadId;
     error = null;
     edges = null;
+    analysis = null;
+    analysing = false;
     cueStart = Duration.zero;
     current = track;
     this.singer = singer;
@@ -179,6 +194,7 @@ class KaraokeEngine extends ChangeNotifier {
         _cdg = CdgDecoder(await File(cdgPath).readAsBytes());
         await _render();
       }
+      _startAnalysis(track, media, loadId);
       keyShift = (keyShiftFor?.call(track) ?? 0).clamp(minKey, maxKey);
       keyWarningSince = keyShift != 0 ? DateTime.now() : null;
       await _applyFilter();
@@ -234,8 +250,11 @@ class KaraokeEngine extends ChangeNotifier {
 
   Future<void> stop() async {
     _fadeId++;
+    _loadId++;
     await backend.stop();
     current = null;
+    analysis = null;
+    analysing = false;
     _cdg = null;
     cdgFrame.value = null;
     cdgPixels = null;
@@ -244,6 +263,24 @@ class KaraokeEngine extends ChangeNotifier {
   }
 
   Future<void> restart() => backend.seek(cueStart);
+
+  /// Works out the key and tempo in the background; the song plays
+  /// meanwhile. A song loaded in the meantime wins.
+  void _startAnalysis(Track track, String media, int loadId) {
+    final analyse = this.analyse;
+    if (analyse == null) return;
+    analysing = true;
+    notifyListeners();
+    analyse(track, media).then<TrackAnalysis?>((r) => r, onError: (_) => null).then((r) {
+      if (loadId != _loadId) return;
+      analysis = r;
+      analysing = false;
+      notifyListeners();
+    });
+  }
+
+  /// The key the song is playing in now: its own key moved by [keyShift].
+  String? get playingKey => analysis?.keyShifted(keyShift);
 
   Future<AudioEdges?> _edgesOf(String path) async {
     if (_edgeCache.containsKey(path)) return _edgeCache[path];

@@ -4,6 +4,8 @@
 library;
 
 export 'src/audio/audio_edges.dart';
+export 'src/audio/mpv_decode.dart';
+export 'src/audio/track_analysis.dart';
 export 'src/cdg/cdg_decoder.dart';
 export 'src/data/database.dart';
 export 'src/data/daos.dart' hide trackSelect;

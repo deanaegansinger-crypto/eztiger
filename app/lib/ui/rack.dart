@@ -20,6 +20,7 @@ import 'common.dart';
 import 'lock.dart';
 import 'dialogs.dart';
 import 'logo.dart';
+import 'key_tempo.dart';
 import 'pro_sound.dart';
 import 'twin_decks.dart';
 import 'read_me.dart';
@@ -716,7 +717,10 @@ class PlayerStrip extends StatelessWidget {
                         style: TextStyle(fontFamily: vfdFont, fontSize: 9, color: EzColors.vfdSub, letterSpacing: 2),
                       ),
                       if (isPro) ...[const SizedBox(width: 8), KeyWarning(engine: e)],
-                      const Spacer(),
+                      Expanded(
+                        child: Align(alignment: Alignment.centerRight, child: KeyTempo(engine: e)),
+                      ),
+                      if (t != null) const SizedBox(width: 12),
                       if (t != null)
                         Text(
                           '${fmt(e.position)} / ${fmt(e.duration)}',

@@ -139,4 +139,41 @@ Nothing Like This At All
     expect(cols, contains('played_at'));
     await db.close();
   });
+
+  test('key and tempo: saved per song, forgotten when the file changes', () async {
+    final t = await lib.track('a/Toto - Africa.mp3');
+    expect(await lib.db.analysis.forTrack(t), isNull);
+    await lib.db.analysis.save(t, const TrackAnalysis(pitchClass: 11, minor: false, bpm: 92.4));
+    final saved = (await lib.db.analysis.forTrack(t))!.result!;
+    expect(saved.key, 'B');
+    expect(saved.bpm, 92.4);
+    // Saved again (a re-analysis) replaces it.
+    await lib.db.analysis.save(t, const TrackAnalysis(pitchClass: 9, minor: true, bpm: 93));
+    expect((await lib.db.analysis.forTrack(t))!.result!.key, 'Am');
+    // A changed file is analysed again.
+    lib.touch('a/Toto - Africa.mp3', bytes: 20, mtime: DateTime(2026, 1, 2));
+    await lib.scan();
+    expect(await lib.db.analysis.forTrack(await lib.track('a/Toto - Africa.mp3')), isNull);
+  });
+
+  test("key and tempo: a song it couldn't tell is remembered as that", () async {
+    final t = await lib.track('a/Lady Gaga - Shallow.mp3');
+    await lib.db.analysis.save(t, null);
+    final saved = await lib.db.analysis.forTrack(t);
+    expect(saved, isNotNull);
+    expect(saved!.result, isNull);
+  });
+
+  test('an older database gets the key and tempo table when opened', () async {
+    final path = p.join(lib.dir.path, 'old2.db');
+    await (await EztigerDatabase.open(databaseFactoryFfiNoIsolate, path)).close();
+    final raw = await databaseFactoryFfiNoIsolate.openDatabase(path);
+    await raw.execute('DROP TABLE track_analysis');
+    await raw.setVersion(2);
+    await raw.close();
+    final db = await EztigerDatabase.open(databaseFactoryFfiNoIsolate, path);
+    final tables = (await db.db.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table'")).map((r) => r['name']);
+    expect(tables, contains('track_analysis'));
+    await db.close();
+  });
 }

@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show HttpClient, Platform;
+import 'dart:isolate';
 
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show FocusNode;
+import 'package:path/path.dart' as p;
 
 import 'edition.dart';
 import 'platform.dart';
@@ -20,7 +22,10 @@ enum ResultsView { search, playlist, history }
 /// Everything the screens show, and every action they can take.
 class AppState extends ChangeNotifier {
   /// [deckB] is the second player for Pro's 2-deck mode.
-  AppState(this.db, KaraokeEngine deckA, {KaraokeEngine? deckB}) : decks = [deckA, ?deckB] {
+  /// [analyseMedia] works out a song's key and tempo from its file (the
+  /// real one decodes it through libmpv, see [analyseInBackground]); without
+  /// it the players show no key or tempo.
+  AppState(this.db, KaraokeEngine deckA, {KaraokeEngine? deckB, this.analyseMedia}) : decks = [deckA, ?deckB] {
     for (final d in decks) {
       d.onFinished = () {
         if (identical(d, engine)) _onTrackFinished();
@@ -34,6 +39,7 @@ class AppState extends ChangeNotifier {
       _deckListeners.add(onChange);
       d.keyShiftFor = (t) => isPro ? keyShifts[t.path] ?? 0 : 0;
       d.onKeyShift = _rememberKey;
+      if (analyseMedia != null) d.analyse = (t, media) => keyAndTempo(t, media, d.tempDir);
       d.addListener(onChange);
     }
   }
@@ -395,6 +401,35 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ------------------------------------------------- key and tempo
+
+  /// Decodes a file and works out its key and tempo: (media path, temp dir).
+  final Future<TrackAnalysis?> Function(String media, String tempDir)? analyseMedia;
+  final Map<String, Future<TrackAnalysis?>> _analysing = {};
+
+  /// A song's key and tempo: saved in the database after the first time it
+  /// loads, so later loads show them at once. Both players asking for the
+  /// same song share one analysis.
+  Future<TrackAnalysis?> keyAndTempo(Track t, String media, String tempDir) {
+    final analyse = analyseMedia;
+    if (analyse == null) return Future.value(null);
+    return _analysing[t.path] ??= () async {
+      try {
+        final saved = await db.analysis.forTrack(t);
+        if (saved != null) return saved.result;
+        final r = await analyse(media, tempDir);
+        await db.analysis.save(t, r);
+        return r;
+      } catch (_) {
+        return null;
+      } finally {
+        // Keep it in memory only while it's being worked out; the database
+        // has it after that (and notices a changed file).
+        unawaited(Future<void>(() => _analysing.remove(t.path)));
+      }
+    }();
+  }
+
   // ------------------------------------------------- Pro sound options
 
   /// The key each song was last sung in, by file path (EZTiger Pro).
@@ -484,7 +519,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> _doCueStandby() async {
     final sb = standby;
-    if (sb == null || _oldFading) return;
+    if (sb == null || _oldFading || holdForReview) return;
     final up = upNext;
     if (up == null) {
       standbyQueueId = null;
@@ -804,6 +839,7 @@ class AppState extends ChangeNotifier {
   /// Autocue: whenever the player is empty, the top of the queue is loaded
   /// paused, ready to go.
   Future<void> _autocue() async {
+    if (holdForReview) return;
     final next = upNext;
     if (autocue && engine.current == null && !_fading && next != null) {
       await _cue(next, autostart: false);
@@ -985,6 +1021,7 @@ class AppState extends ChangeNotifier {
 
   /// Plays a track straight away, without queueing it.
   Future<void> playNow(Track t, {bool autostart = true}) async {
+    holdForReview = false;
     nowPlayingQueueId = null;
     _endFade();
     await engine.load(t, autostart: autostart, skipSilence: autocue);
@@ -1015,6 +1052,7 @@ class AppState extends ChangeNotifier {
   Future<void> previous() => engine.restart();
 
   Future<void> _cue(QueueEntry e, {required bool autostart, Duration? fadeIn, Duration? fadeOutOld}) async {
+    holdForReview = false;
     if (standby != null) return _cueOnOtherDeck(e, autostart: autostart, fadeIn: fadeIn, fadeOutOld: fadeOutOld);
     nowPlayingQueueId = e.id;
     _endFade();
@@ -1339,11 +1377,22 @@ class AppState extends ChangeNotifier {
   int? queuePlaylistId;
   Playlist? get queuePlaylist => playlists.where((p) => p.id == queuePlaylistId).firstOrNull;
 
-  /// Adds a saved playlist's songs to the queue, and remembers it.
+  /// True after a playlist is loaded into the queue while nothing plays:
+  /// the players stay empty so the running order can be checked first.
+  /// Starting a song (double-click the top one) ends it; with 2 decks the
+  /// next song then waits on the other deck as usual.
+  bool holdForReview = false;
+
+  /// Adds a saved playlist's songs to the queue, and remembers it. Nothing
+  /// is loaded into the players unless a song is already playing.
   Future<void> loadPlaylistIntoQueue(int playlistId) async {
     final p = playlists.where((p) => p.id == playlistId).firstOrNull;
     if (p == null) return;
-    status = 'Added "${p.name}" to $theQueue';
+    final idle = !engine.playing && !(standby?.playing ?? false);
+    if (idle) holdForReview = true;
+    status = idle
+        ? 'Added "${p.name}" to $theQueue: check the order, then double-click the first song to start'
+        : 'Added "${p.name}" to $theQueue';
     await enqueueAll(await db.playlists.tracks(playlistId));
     queuePlaylistId = playlistId;
     notifyListeners();
@@ -1396,3 +1445,15 @@ class AppState extends ChangeNotifier {
     super.dispose();
   }
 }
+
+/// The real key and tempo analysis: decodes [media] with the libmpv the app
+/// ships, in a background isolate, so the screen never stalls.
+Future<TrackAnalysis?> analyseInBackground(String media, String tempDir) {
+  final lib = libmpvPath();
+  return Isolate.run(() => analyseMediaFile(media, tempDir: tempDir, libmpvPath: lib));
+}
+
+/// Where the app's libmpv is: beside eztiger.exe on Windows; found by name
+/// elsewhere.
+String libmpvPath() =>
+    Platform.isWindows ? p.join(p.dirname(Platform.resolvedExecutable), defaultLibmpvName()) : defaultLibmpvName();

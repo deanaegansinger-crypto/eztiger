@@ -16,6 +16,7 @@ class EztigerDatabase {
         playlists = PlaylistDao(db),
         queue = QueueDao(db),
         history = HistoryDao(db),
+        analysis = AnalysisDao(db),
         search = SearchDao(db, hasFts);
 
   final Database db;
@@ -28,6 +29,7 @@ class EztigerDatabase {
   final PlaylistDao playlists;
   final QueueDao queue;
   final HistoryDao history;
+  final AnalysisDao analysis;
   final SearchDao search;
 
   /// Opens (creating if needed) the database at [path]. Use
@@ -42,6 +44,7 @@ class EztigerDatabase {
         },
         onUpgrade: (db, from, to) async {
           if (from < 2) await db.execute('ALTER TABLE queue ADD COLUMN played_at INTEGER');
+          if (from < 3) await db.execute(trackAnalysisStatement);
         },
         onCreate: (db, version) async {
           final batch = db.batch();

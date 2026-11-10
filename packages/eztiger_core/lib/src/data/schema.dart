@@ -12,7 +12,8 @@
 library;
 
 /// 2: queue.played_at (played songs stay in the queue).
-const int schemaVersion = 2;
+/// 3: track_analysis (each song's key and tempo).
+const int schemaVersion = 3;
 
 /// Bump when the filename parser or classification rules change. A scan that
 /// sees a different value re-parses every track (as UPDATEs, ids unchanged).
@@ -105,7 +106,23 @@ CREATE TABLE singer_history (
   sung_at   INTEGER NOT NULL
 )''',
   'CREATE INDEX idx_history_sung_at ON singer_history(sung_at)',
+  trackAnalysisStatement,
 ];
+
+/// Each song's key and tempo, worked out the first time it loads into a
+/// player. Keyed by file path (not track id) so it survives the song being
+/// taken out of the library and put back; size and mtime say whether the
+/// file has changed since.
+const String trackAnalysisStatement = '''
+CREATE TABLE IF NOT EXISTS track_analysis (
+  path        TEXT PRIMARY KEY,
+  size        INTEGER NOT NULL,
+  mtime       INTEGER NOT NULL,
+  -- C, C#, D, Eb … for majors, Cm, C#m … for minors; NULL if it couldn't tell.
+  musical_key TEXT,
+  bpm         REAL,
+  analysed_at INTEGER NOT NULL
+)''';
 
 /// Full-text index. A standalone FTS5 table keyed by track id, holding
 /// normalised text. It is rebuilt once at the end of a scan that changed

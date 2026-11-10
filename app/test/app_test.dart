@@ -64,6 +64,53 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('the player shows the key and BPM, worked out once and remembered', (tester) async {
+    var analysed = 0;
+    Future<TrackAnalysis?> fakeAnalyse(String media, String tempDir) async {
+      analysed++;
+      return const TrackAnalysis(pitchClass: 2, minor: false, bpm: 119.6); // D, 120 BPM
+    }
+
+    state = AppState(db, KaraokeEngine(backend, scanEdges: scan), analyseMedia: fakeAnalyse);
+    await pumpApp(tester);
+    final tracks = state.results.map((g) => g.primary).toList();
+    await tester.runAsync(() async {
+      await state.playNow(tracks[0], autostart: false);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+    expect(analysed, 1);
+    final shown = tester.widget<Text>(find.byKey(const Key('key-tempo')));
+    expect(shown.textSpan!.toPlainText(), 'KEY D  ·  120 BPM');
+
+    // Moved up 2 semitones, it shows the key it plays in now.
+    await tester.runAsync(() => state.keyUp());
+    await tester.runAsync(() => state.keyUp());
+    await tester.pump();
+    expect(tester.widget<Text>(find.byKey(const Key('key-tempo'))).textSpan!.toPlainText(), 'KEY E (D+2)  ·  120 BPM');
+    await tester.runAsync(() => state.keyReset());
+
+    // Loading it again reads the saved result instead of analysing again.
+    await tester.runAsync(() async {
+      await state.playNow(tracks[1], autostart: false);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await state.playNow(tracks[0], autostart: false);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+    expect(analysed, 2); // tracks[0] once, tracks[1] once
+    expect(state.engine.analysis?.key, 'D');
+    expect((await tester.runAsync(() => db.analysis.forTrack(tracks[0])))!.result!.bpmRounded, 120);
+  });
+
+  testWidgets('no key or BPM shows when the analysis is off', (tester) async {
+    await pumpApp(tester);
+    final tracks = state.results.map((g) => g.primary).toList();
+    await tester.runAsync(() => state.playNow(tracks[0], autostart: false));
+    await tester.pump();
+    expect(find.byKey(const Key('key-tempo')), findsNothing);
+  });
+
   group('EZTiger Pro sound', () {
     testWidgets('key change: up to 3 semitones, remembered for the song, and a warning on load', (tester) async {
       await pumpApp(tester);
@@ -635,6 +682,41 @@ void main() {
     final saved = await tester.runAsync(() => db.playlists.tracks(id));
     expect(saved!.map((t) => t.id), [tracks[1].id, tracks[2].id]);
     expect(state.playlists.singleWhere((p) => p.name == 'Friday').trackCount, 2);
+  });
+
+  testWidgets('a loaded playlist waits for a double-click of the top song, then the 2nd waits on the other deck', (
+    tester,
+  ) async {
+    final deckB = KaraokeEngine(FakeBackend(), scanEdges: scan);
+    state = AppState(db, KaraokeEngine(backend, scanEdges: scan), deckB: deckB);
+    await pumpApp(tester);
+    await tester.runAsync(() => state.setTwoDecks(true));
+    final tracks = state.results.map((g) => g.primary).toList();
+    final id = (await tester.runAsync(() => state.createPlaylist('Gig', tracks: tracks.sublist(0, 3))))!;
+    await tester.runAsync(() async {
+      await state.loadPlaylistIntoQueue(id);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+    // Nothing loads: the order can be checked (and changed) first.
+    expect(state.queue.length, 3);
+    expect(state.decks.every((d) => d.current == null), isTrue);
+    await tester.runAsync(() async {
+      await state.moveInQueue(state.queue[2], 0);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    expect(state.decks.every((d) => d.current == null), isTrue);
+
+    // Double-click the top song: it plays, and the next one waits on the other deck.
+    await tester.runAsync(() async {
+      await state.playEntry(state.queue.first);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+    expect(state.engine.current?.id, tracks[2].id);
+    expect(state.engine.playing, isTrue);
+    expect(state.standby?.current?.id, tracks[0].id);
+    expect(state.standby?.playing, isFalse);
   });
 
   testWidgets('Pro 2 decks: the decks sit side by side, with the crossfade slider', (tester) async {

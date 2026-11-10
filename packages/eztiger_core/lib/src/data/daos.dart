@@ -1,7 +1,9 @@
 import 'package:sqflite_common/sqlite_api.dart';
 
 import '../text.dart';
+import '../audio/track_analysis.dart';
 import 'models.dart';
+import 'schema.dart' show trackAnalysisStatement;
 import 'search.dart';
 
 const String trackSelect = 'SELECT t.*, f.path AS folder_path FROM tracks t JOIN folders f ON f.id = t.folder_id';
@@ -422,4 +424,32 @@ List<T> moveBlockIn<T>(List<T> list, Iterable<int> positions, int to) {
   final before = pos.where((p) => p < to).length;
   rest.insertAll((to - before).clamp(0, rest.length), block);
   return rest;
+}
+
+/// The key and tempo saved for each song (see [trackAnalysisStatement]).
+class AnalysisDao {
+  AnalysisDao(this.db);
+  final Database db;
+
+  /// What was saved for [track], or null when it hasn't been analysed or the
+  /// file has changed since. A saved row with no key means the analysis was
+  /// tried and couldn't tell, so it isn't tried again on every load.
+  Future<({TrackAnalysis? result})?> forTrack(Track track) async {
+    final rows = await db.query('track_analysis', where: 'path = ?', whereArgs: [track.path]);
+    if (rows.isEmpty) return null;
+    final r = rows.first;
+    if (r['size'] != track.size || r['mtime'] != track.mtime) return null;
+    final key = parseKeyName(r['musical_key'] as String?);
+    final bpm = (r['bpm'] as num?)?.toDouble();
+    if (key == null || bpm == null) return (result: null);
+    return (result: TrackAnalysis(pitchClass: key.$1, minor: key.$2, bpm: bpm));
+  }
+
+  /// Saves [result] for [track] (null: it couldn't tell).
+  Future<void> save(Track track, TrackAnalysis? result) => db.rawInsert(
+    'INSERT INTO track_analysis(path, size, mtime, musical_key, bpm, analysed_at) VALUES(?, ?, ?, ?, ?, ?) '
+    'ON CONFLICT(path) DO UPDATE SET size = excluded.size, mtime = excluded.mtime, '
+    'musical_key = excluded.musical_key, bpm = excluded.bpm, analysed_at = excluded.analysed_at',
+    [track.path, track.size, track.mtime, result?.key, result?.bpm, _now()],
+  );
 }
