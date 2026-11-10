@@ -244,6 +244,14 @@ const _sections = <(String, List<String>)>[
     ],
   ),
   (
+    'Song requests from phones',
+    [
+      'Singers send requests from their phones over the venue Wi-Fi to the song-request list ("Start song requests" on the PC), which needs no internet. New requests wait there until you add them to its singing queue, or reject them.',
+      'Each song you add to that singing queue comes into Tonight\'s playlist here by itself, with the singer\'s name, while EZTiger is open. The request list shows "✓ In EZTiger" beside it, or "Not found in EZTiger" if the song isn\'t in your library.',
+      '☰ Menu → Song requests: on the PC that runs the request list the link is localhost:8080 (already set). On a tablet, type the DJ link from the request list\'s window, the one ending ?key=…, and press Connect. The Menu says "connected" while it works.',
+    ],
+  ),
+  (
     'Your settings',
     [
       '🎤 Stage, top right: the view for performing, with the tablet on the mic stand. Lyrics large on the left; the song, time left, big Restart / Play / Next buttons, the volume and the next songs on the right. Double-tap a song in Up next to play it now; its ↑ ↓ arrows move it up or down and ✕ takes it out of the queue. Single / Autoplay sits by the volume. Double-tap the lyrics for full screen. The ⇄ button (or the Menu) swaps the lyrics to the other side. Library goes back. EZtiger opens in the view you used last.',

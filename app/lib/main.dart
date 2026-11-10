@@ -77,6 +77,7 @@ Future<void> main(List<String> args) async {
   );
   WidgetsBinding.instance.addPostFrameCallback((_) {
     state.startUp();
+    state.startSongRequests();
     licence?.recheckInBackground();
   });
 }
@@ -122,5 +123,6 @@ Future<void> runOnTablet() async {
       await state.rescan();
     }
     await state.startUp();
+    state.startSongRequests();
   });
 }

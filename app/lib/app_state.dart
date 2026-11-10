@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show HttpClient, Platform;
 
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/foundation.dart';
@@ -8,6 +9,7 @@ import 'package:flutter/widgets.dart' show FocusNode;
 import 'edition.dart';
 import 'platform.dart';
 import 'player.dart';
+import 'song_requests.dart';
 import 'sync.dart';
 import 'ui/common.dart' show SongDrag;
 
@@ -279,6 +281,7 @@ class AppState extends ChangeNotifier {
       songbookTitle = m['songbookTitle'] as String? ?? songbookTitle;
       songbookUrl = m['songbookUrl'] as String? ?? songbookUrl;
       songbookSaved = m['songbookSaved'] as String? ?? songbookSaved;
+      requestsLink = m['requestsLink'] as String? ?? requestsLink;
       libraryCollapsed = m['libraryCollapsed'] as bool? ?? libraryCollapsed;
       lockEnabled = m['lockEnabled'] as bool? ?? lockEnabled;
       doubleClickToQueue = m['doubleClickToQueue'] as bool? ?? doubleClickToQueue;
@@ -331,6 +334,7 @@ class AppState extends ChangeNotifier {
       'songbookTitle': songbookTitle,
       'songbookUrl': songbookUrl,
       'songbookSaved': songbookSaved,
+      'requestsLink': requestsLink,
       'libraryCollapsed': libraryCollapsed,
       'lockEnabled': lockEnabled,
       'doubleClickToQueue': doubleClickToQueue,
@@ -868,6 +872,112 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ------------------------------------------------------- song requests
+
+  /// The song-request list's link (☰ Menu → Song requests). While EZTiger is
+  /// open, each song the DJ adds to the singing queue there comes into
+  /// Tonight's playlist with the singer's name. Empty: off. On the PC that
+  /// runs the request list ("Start song requests") it is `localhost:8080`;
+  /// a tablet uses the DJ link that the request list's window shows.
+  String requestsLink = Platform.isWindows ? 'localhost:8080' : '';
+
+  /// How the link to the request list is doing, for the menu.
+  RequestsState requestsState = RequestsState.off;
+
+  Timer? _requestsTimer;
+  bool _requestsBusy = false;
+  HttpClient? _requestsHttp;
+
+  /// Requests already put in Tonight's playlist (true) or not found (false),
+  /// so one is never added twice while the request list is told.
+  final Map<String, bool> _requestsTaken = {};
+
+  /// Starts checking the request list every few seconds (or stops, when the
+  /// link is empty). Called once EZTiger is on screen.
+  void startSongRequests() {
+    _requestsTimer?.cancel();
+    _requestsTimer = null;
+    if (RequestServer.parse(requestsLink) == null) {
+      _setRequestsState(RequestsState.off);
+      return;
+    }
+    _setRequestsState(RequestsState.connecting);
+    _requestsTimer = Timer.periodic(const Duration(seconds: 3), (_) => checkSongRequests());
+    unawaited(checkSongRequests());
+  }
+
+  void setRequestsLink(String link) {
+    requestsLink = link.trim();
+    _requestsTaken.clear();
+    notifyListeners();
+    startSongRequests();
+  }
+
+  void _setRequestsState(RequestsState v) {
+    if (requestsState == v) return;
+    requestsState = v;
+    notifyListeners();
+  }
+
+  /// Puts the songs waiting in the request list's singing queue into
+  /// Tonight's playlist, in order, each with its singer's name.
+  Future<void> checkSongRequests() async {
+    final server = RequestServer.parse(requestsLink);
+    if (server == null || _requestsBusy) return;
+    _requestsBusy = true;
+    try {
+      final http = _requestsHttp ??= HttpClient()..connectionTimeout = const Duration(seconds: 3);
+      final waiting = await server.waiting(http);
+      _setRequestsState(RequestsState.connected);
+      for (final r in waiting) {
+        if (!_requestsTaken.containsKey(r.id)) {
+          final t = await findRequestedSong(r);
+          if (t != null) await enqueue(t, singer: r.singer.isEmpty ? null : r.singer);
+          _requestsTaken[r.id] = t != null;
+          status = t != null
+              ? '🎤 From the request list: ${r.singer.isEmpty ? '' : '${r.singer} – '}${t.title}'
+              : '⚠ Request not in the library: ${r.title} – ${r.artist}${r.singer.isEmpty ? '' : ' (${r.singer})'}';
+          notifyListeners();
+        }
+        await server.collected(http, r.id, found: _requestsTaken[r.id]!);
+      }
+    } on RequestServerRefused {
+      _setRequestsState(RequestsState.needsCode);
+    } catch (_) {
+      _setRequestsState(RequestsState.unreachable);
+    } finally {
+      _requestsBusy = false;
+    }
+  }
+
+  /// The library's copy of a requested song: the exact file when the request
+  /// list knows it, else the song with the same title (and artist).
+  Future<Track?> findRequestedSong(SongRequest r) async {
+    if (r.path.isNotEmpty) {
+      final t = await db.tracks.byPath(r.path);
+      if (t != null) return t;
+    }
+    if (r.file.isNotEmpty) {
+      final t = await db.tracks.byPathEnding(r.file);
+      if (t != null) return t;
+    }
+    final title = normalize(r.title), artist = normalize(r.artist);
+    if (title.isEmpty) return null;
+    bool sameArtist(Track t) {
+      final a = normalize(t.artist ?? '');
+      return artist.isEmpty || a == artist || (a.isNotEmpty && (a.contains(artist) || artist.contains(a)));
+    }
+
+    for (final q in ['${r.title} ${r.artist}', r.title]) {
+      for (final g in await db.search.search(q, limit: 30)) {
+        for (final t in g.versions) {
+          if (normalize(t.title) == title && sameArtist(t)) return t;
+        }
+      }
+    }
+    return null;
+  }
+
   // ------------------------------------------------------------- playing
 
   /// Plays a queue entry now.
@@ -1278,6 +1388,8 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _debounce?.cancel();
+    _requestsTimer?.cancel();
+    _requestsHttp?.close(force: true);
     for (final (i, d) in decks.indexed) {
       d.removeListener(_deckListeners[i]);
     }

@@ -80,6 +80,16 @@ void main() {
     expect((await lib.db.playlists.tracks(pl)).last.title, 'Piano Man');
   });
 
+  test('a song is found by its folder and file name, wherever the library is', () async {
+    final t = await lib.db.tracks.byPathEnding(r'A\toto - AFRICA.mp3');
+    expect(t?.title, 'Africa');
+    expect((await lib.db.tracks.byPathEnding('a/Billy Joel - Piano Man.mp3'))?.title, 'Piano Man');
+    // The whole folder name must match, not just the end of it.
+    expect(await lib.db.tracks.byPathEnding('xa/Toto - Africa.mp3'), isNull);
+    expect(await lib.db.tracks.byPathEnding('b/Toto - Africa.mp3'), isNull);
+    expect(await lib.db.tracks.byPathEnding(''), isNull);
+  });
+
   test('a pasted song list is matched line by line', () async {
     final m = await lib.db.search.matchList('''
 1. Africa - Toto

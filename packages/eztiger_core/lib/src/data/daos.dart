@@ -115,6 +115,18 @@ WHERE f.included = 1''');
     return rows.isEmpty ? null : Track.fromRow(rows.first);
   }
 
+  /// The song whose file is [tail] inside some folder, such as
+  /// `Sunfly/SF001/SF001-01 - Abba - Waterloo.mp3`, ignoring case and `/` or
+  /// `\`: for a song named by another computer, whose library is somewhere
+  /// else. Null if there is none.
+  Future<Track?> byPathEnding(String tail) async {
+    final t = '/${tail.replaceAll('\\', '/').replaceFirst(RegExp(r'^/+'), '')}';
+    if (t.length < 2) return null;
+    final rows = await db.rawQuery(
+        "$trackSelect WHERE substr(REPLACE(LOWER(t.path), '\\', '/'), -?) = LOWER(?) LIMIT 1", [t.length, t]);
+    return rows.isEmpty ? null : Track.fromRow(rows.first);
+  }
+
   /// Tracks directly in a folder, for browsing.
   Future<List<Track>> inFolder(int folderId) async => (await db.rawQuery(
           '$trackSelect WHERE t.folder_id = ? '

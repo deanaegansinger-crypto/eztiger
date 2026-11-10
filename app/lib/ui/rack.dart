@@ -23,6 +23,8 @@ import 'logo.dart';
 import 'pro_sound.dart';
 import 'twin_decks.dart';
 import 'read_me.dart';
+import 'requests_dialog.dart';
+import '../song_requests.dart';
 import 'songbook_dialog.dart';
 
 /// The left column of the mockup: player, settings, library, search and
@@ -440,6 +442,31 @@ class _MainMenu extends StatelessWidget {
             checked: s.textScale == scale,
             child: Text(label, style: TextStyle(fontSize: 14 * scale)),
           ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          key: const Key('menu-requests'),
+          value: 'requests',
+          child: Row(
+            children: [
+              const Icon(Icons.record_voice_over_outlined, size: 18),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text.rich(
+                  TextSpan(
+                    text: 'Song requests…',
+                    children: [
+                      if (s.requestsState == RequestsState.connected)
+                        TextSpan(text: '  connected', style: TextStyle(fontSize: 12, color: EzColors.green))
+                      else if (s.requestsState == RequestsState.unreachable ||
+                          s.requestsState == RequestsState.needsCode)
+                        TextSpan(text: '  not connected', style: TextStyle(fontSize: 12, color: EzColors.brass)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
       onSelected: (c) {
         if (c == 'skins') {
@@ -448,6 +475,8 @@ class _MainMenu extends StatelessWidget {
           showReadMe(context);
         } else if (c == 'songbook') {
           showSongbook(context);
+        } else if (c == 'requests') {
+          showSongRequests(context);
         } else if (c == 'rescan') {
           s.rescan();
         } else if (c == 'rescanOnStart') {
