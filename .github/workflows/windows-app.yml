@@ -80,6 +80,8 @@ jobs:
           $tags = & "$tools\ffmpeg.exe" -hide_banner -i "$t\song EZVocrem.mp3" 2>&1 | Out-String
           if ($tags -notmatch 'title\s*:\s*Test Song EZVocrem' -or $tags -notmatch 'artist\s*:\s*Test Band') { throw "tags not written: $tags" }
           "::notice title=Remove vocals::demucs-cpu separated an 8 s clip in $secs s (includes the one-time model download); the instrumental MP3 has its tags"
+          # (ffmpeg -i with no output file "fails" by design; the checks above passed.)
+          exit 0
 
       - uses: actions/upload-artifact@v4
         with:
