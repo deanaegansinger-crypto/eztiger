@@ -13,7 +13,15 @@ Future<String> ffmpeg(List<String> args) async {
   final r = await Process.run('ffmpeg', ['-hide_banner', '-nostats', ...args]);
   if (r.exitCode != 0) {
     stderr.writeln(r.stderr);
-    throw StateError('ffmpeg failed: ${args.join(' ')}');
+    if (Platform.environment['GITHUB_ACTIONS'] == 'true') {
+      final tail = '${r.stderr}'.trim().split('\n').reversed.take(4).toList().reversed.join(' / ');
+      print('::error title=ffmpeg failed::${tail.replaceAll('%', '%25')}');
+      // The surround filter's options in this ffmpeg, to see what it accepts.
+      final h = await Process.run('ffmpeg', ['-hide_banner', '-h', 'filter=surround']);
+      final opts = RegExp(r'^\s+(\w+)\s+<', multiLine: true).allMatches('${h.stdout}').map((m) => m.group(1)).toSet();
+      print('::notice title=surround options::${opts.join(' ')}');
+    }
+    exit(2);
   }
   return '${r.stderr}';
 }
