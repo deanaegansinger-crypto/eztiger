@@ -53,6 +53,20 @@ Future<void> main() async {
         '[v][g][b][k]amix=inputs=4:normalize=0[o]',
     '-map', '[o]', mix,
   ]);
+  // For tuning: how other front spreads compare (shown, not checked).
+  final spread = RegExp(r'flx=([\d.]+)').firstMatch(vocalCutGraph)?.group(1);
+  if (spread != null && Platform.environment['GITHUB_ACTIONS'] == 'true') {
+    for (final s in ['1.5', '2', '2.5', '3']) {
+      final g = vocalCutGraph.replaceAllMapped(RegExp(r'(flx|frx|blx|brx)=[\d.]+'), (m) => '${m.group(1)}=$s');
+      final t = '${dir.path}/t$s.wav';
+      await ffmpeg(['-y', '-i', mix, '-af', g, t]);
+      final parts = <String>[];
+      for (final (n, hz) in [('vocal', 1000), ('keys 3/4 left', 2500), ('guitar left', 500), ('bass', 60)]) {
+        parts.add('$n -${((await level(mix, hz)) - (await level(t, hz))).toStringAsFixed(1)}');
+      }
+      print('::notice title=Spread $s${s == spread ? ' (in use)' : ''}::${parts.join(', ')} dB');
+    }
+  }
   await ffmpeg(['-y', '-i', mix, '-af', vocalCutGraph, out]);
 
   final checks = [

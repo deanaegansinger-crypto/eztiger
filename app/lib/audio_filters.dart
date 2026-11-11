@@ -19,5 +19,5 @@
 /// centre channel only (by default the fronts get 70% of it too), while a
 /// sound panned well over to one side stays where it was.
 const vocalCutGraph = 'aformat=channel_layouts=stereo,'
-    'surround=chl_out=5.1:lfe=1:lfe_mode=sub:lfe_low=120:lfe_high=250:flx=3:frx=3:blx=3:brx=3,'
+    'surround=chl_out=5.1:lfe=1:lfe_mode=sub:lfe_low=120:lfe_high=250:flx=2:frx=2:blx=2:brx=2,'
     'pan=stereo|c0=FL+0.7071*BL+LFE|c1=FR+0.7071*BR+LFE';
