@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show HttpClient, Platform;
+import 'dart:io' show File, HttpClient, Platform;
 import 'dart:isolate';
 
 import 'package:eztiger_core/eztiger_core.dart';
@@ -13,6 +13,7 @@ import 'platform.dart';
 import 'player.dart';
 import 'song_requests.dart';
 import 'sync.dart';
+import 'vocal_remover.dart';
 import 'ui/common.dart' show SongDrag;
 
 enum PlayMode { single, autoplay }
@@ -38,6 +39,7 @@ class AppState extends ChangeNotifier {
 
       _deckListeners.add(onChange);
       d.keyShiftFor = (t) => isPro ? keyShifts[t.path] ?? 0 : 0;
+      d.instrumentalFor = (t) => isPro ? vocalRemoved[t.path] : null;
       d.onKeyShift = _rememberKey;
       if (analyseMedia != null) d.analyse = (t, media) => keyAndTempo(t, media, d.tempDir);
       d.addListener(onChange);
@@ -243,6 +245,7 @@ class AppState extends ChangeNotifier {
   Future<void> init({bool rescanLibrary = true}) async {
     await _loadSettings();
     await _loadKeys();
+    await _loadVocalRemoved();
     _applyFadeShape();
     await _reloadFolders();
     await _reloadQueue();
@@ -908,6 +911,114 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ------------------------------------------------- remove vocals (AI)
+
+  /// Pro on Windows: makes AI instrumentals (see [VocalRemover]); null when
+  /// the tools aren't installed (Basic, the tablet, tests).
+  VocalRemover? vocalRemover;
+
+  /// Each song's AI instrumental: the song's path → the instrumental's.
+  Map<String, String> vocalRemoved = {};
+
+  /// Songs waiting to have their vocals removed, and the one being done.
+  final List<Track> vocalJobs = [];
+  Track? vocalJob;
+  String vocalJobStep = '';
+  DateTime? _vocalJobSince;
+  Timer? _vocalTicker;
+
+  Future<void> _loadVocalRemoved() async {
+    try {
+      final m = jsonDecode(await db.getMeta('vocal_removed') ?? '{}') as Map<String, dynamic>;
+      vocalRemoved = {for (final e in m.entries) if (e.value is String) e.key: e.value as String};
+    } catch (_) {}
+  }
+
+  /// True when [t] has an AI instrumental that's still there.
+  bool hasInstrumental(Track t) {
+    final path = vocalRemoved[t.path];
+    return path != null && File(path).existsSync();
+  }
+
+  /// Queues [tracks] to have their vocals removed, one at a time in the
+  /// background. Instrumentals themselves are skipped.
+  void removeVocals(List<Track> tracks) {
+    if (vocalRemover == null) return;
+    for (final t in tracks) {
+      if (VocalRemover.isInstrumental(t.path)) continue;
+      if (vocalJob?.path == t.path || vocalJobs.any((j) => j.path == t.path)) continue;
+      vocalJobs.add(t);
+    }
+    notifyListeners();
+    if (vocalJob == null) unawaited(_runVocalJobs());
+  }
+
+  Future<void> _runVocalJobs() async {
+    final remover = vocalRemover;
+    if (remover == null) return;
+    var made = 0;
+    String? lastOut;
+    final failed = <String>[];
+    while (vocalJobs.isNotEmpty) {
+      final t = vocalJob = vocalJobs.removeAt(0);
+      _vocalJobSince = DateTime.now();
+      vocalJobStep = 'Starting…';
+      _vocalTicker?.cancel();
+      _vocalTicker = Timer.periodic(const Duration(seconds: 1), (_) => _showVocalJob());
+      _showVocalJob();
+      try {
+        final out = await remover.remove(t, onStep: (s) {
+          vocalJobStep = s;
+          _showVocalJob();
+        });
+        vocalRemoved[t.path] = out;
+        await db.setMeta('vocal_removed', jsonEncode(vocalRemoved));
+        made++;
+        lastOut = out;
+        for (final d in decks) {
+          await d.instrumentalReady(t);
+        }
+      } catch (e) {
+        failed.add('${t.title}: $e');
+      }
+    }
+    _vocalTicker?.cancel();
+    vocalJob = null;
+    vocalJobStep = '';
+    // The instrumentals go into the library, so they can be found and queued.
+    if (made > 0) await _scanVocalRemovedFolder(remover.outDir);
+    status = [
+      if (made > 0) '✓ Vocals removed from $made song${made == 1 ? '' : 's'}: in ${p.basename(p.dirname(lastOut!))}',
+      if (failed.isNotEmpty) '⚠ Could not remove vocals: ${failed.join('; ')}',
+    ].join('   ');
+    notifyListeners();
+  }
+
+  void _showVocalJob() {
+    final t = vocalJob;
+    if (t == null) return;
+    final secs = DateTime.now().difference(_vocalJobSince ?? DateTime.now()).inSeconds;
+    final left = vocalJobs.isEmpty ? '' : ' (${vocalJobs.length} more waiting)';
+    status = '🎤 Removing vocals: ${t.title} – $vocalJobStep ${secs ~/ 60}:${(secs % 60).toString().padLeft(2, '0')}$left';
+    notifyListeners();
+  }
+
+  Future<void> _scanVocalRemovedFolder(String folder) async {
+    try {
+      final roots = await db.folders.roots();
+      final root = roots.where((r) => p.equals(r.path, folder)).firstOrNull;
+      if (root == null) {
+        await scanner.addAndScan(folder);
+      } else {
+        await scanner.scanRoot(root.id);
+      }
+      await _reloadFolders();
+      await refreshResults();
+    } catch (_) {
+      // The instrumentals are made; they'll be found at the next rescan.
+    }
+  }
+
   // ------------------------------------------------------- song requests
 
   /// The song-request list's link (☰ Menu → Song requests). While EZTiger is
@@ -1439,6 +1550,7 @@ class AppState extends ChangeNotifier {
     _debounce?.cancel();
     _requestsTimer?.cancel();
     _requestsHttp?.close(force: true);
+    _vocalTicker?.cancel();
     for (final (i, d) in decks.indexed) {
       d.removeListener(_deckListeners[i]);
     }

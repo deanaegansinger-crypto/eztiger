@@ -20,6 +20,7 @@ import 'player.dart';
 import 'second_screen.dart';
 import 'ui/android_folders.dart';
 import 'ui/app.dart';
+import 'vocal_remover.dart';
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,6 +69,8 @@ Future<void> main(List<String> args) async {
     deckB: decks.length > 1 ? decks[1] : null,
     analyseMedia: analyseInBackground, // the key and BPM on the players
   );
+  // Pro: "Remove vocals (AI)", when its tools came with the installer.
+  if (builtAsPro) state.vocalRemover = await VocalRemover.forThisPc();
   await state.init();
   licence?.addListener(state.editionChanged);
 

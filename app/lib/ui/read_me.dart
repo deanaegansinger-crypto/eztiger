@@ -160,7 +160,8 @@ const _pro = (
   [
     'KEY, under the volume: − and + move the song down or up a semitone, as far as 3 either way. The 0 in the middle puts it back. EZTiger remembers the key for each song, and when a song loads in a changed key, "KEY +2" (or −) flashes red on the player and the Stage view.',
     'Level, under the volume: evens out the loudness, so quiet and loud MP3s and videos play at about the same level. It takes a moment to settle at the start of a song.',
-    'Vocal cut, under the volume: takes out the lead vocal on most stereo tracks. It finds what sits in the middle, frequency by frequency, and takes just that out, keeping the rest of the mix, its stereo spread and the bass. It works best on studio recordings; an instrument in the middle with the singer comes down a little too, and reverb and backing vocals can still come through.',
+    'Vocal cut, under the volume: takes out the lead vocal on most stereo tracks. It finds what sits in the middle, frequency by frequency, and takes just that out, keeping the rest of the mix, its stereo spread and the bass. It works best on studio recordings; an instrument in the middle with the singer comes down a little too, and reverb and backing vocals can still come through. A song with an AI instrumental (below) plays that instead.',
+    'Remove vocals (AI): right-click a song, or a block of songs, → 🎤 Remove vocals (AI). The Demucs AI model splits the song into its parts and mixes everything but the vocals into an instrumental, saved in your Music folder in EZVocalremoved, named like the original with EZVocrem on the end (EZVocrem is on the end of its title tag too), with its CDG lyrics beside it. It takes a minute or two a song (longer without a suitable graphics card); the bar at the bottom shows how it\'s going, and you can carry on meanwhile. The first time, the model (84 MB) downloads. After that, Vocal cut on that song plays the instrumental, and the EZVocalremoved folder is in your library to search.',
     '2 decks (☰ Menu, under Playback): deck A and deck B sit side by side across the top and share Tonight\'s playlist. The deck marked ON AIR is playing; the other shows the song waiting to come in, ready to start straight away. Its ⇄ button mixes into it now.',
     'Stage view with 2 decks: both decks run across the top of the screen, with Restart / Play / Next on the deck ON AIR and ⇄ on the next one, so the lyrics and Up next get the room below.',
     'Each deck has its own − KEY +: set the key of the song waiting on the other deck before it comes in, in the library or the Stage view. EZTiger remembers it for that song.',
@@ -180,7 +181,7 @@ const _pro = (
 
 /// The Pro lines that apply on the tablet: no Level or Vocal cut (the
 /// tablet's sound engine doesn't have them).
-bool _onTablet(String line) => !['Level', 'Vocal cut'].any(line.startsWith);
+bool _onTablet(String line) => !['Level', 'Vocal cut', 'Remove vocals'].any(line.startsWith);
 
 const _sections = <(String, List<String>)>[
   (

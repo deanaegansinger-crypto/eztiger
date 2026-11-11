@@ -107,8 +107,19 @@ class KaraokeEngine extends ChangeNotifier {
   /// the same level.
   bool levelLoudness = false;
 
-  /// Pro: cuts the lead vocal (what is panned to the middle).
+  /// Pro: cuts the lead vocal. A song with an AI instrumental ("Remove
+  /// vocals") plays that instead; any other gets the live filter, which
+  /// takes out what is panned to the middle.
   bool vocalCut = false;
+
+  /// The AI instrumental made for a song, if there is one (Pro, Windows).
+  String? Function(Track track)? instrumentalFor;
+
+  /// The file playing now: the song's own sound, or its instrumental.
+  String? _media, _ownMedia;
+
+  /// True while the AI instrumental plays in place of the song's own sound.
+  bool get playingInstrumental => _media != null && _media != _ownMedia;
 
   /// The saved key for a song, looked up as it loads (EZTiger Pro).
   int Function(Track track)? keyShiftFor;
@@ -197,6 +208,9 @@ class KaraokeEngine extends ChangeNotifier {
         await _render();
       }
       _startAnalysis(track, media, loadId);
+      _ownMedia = media;
+      if (vocalCut) media = _instrumental(track) ?? media;
+      _media = media;
       keyShift = (keyShiftFor?.call(track) ?? 0).clamp(minKey, maxKey);
       keyWarningSince = keyShift != 0 ? DateTime.now() : null;
       await _applyFilter();
@@ -255,6 +269,7 @@ class KaraokeEngine extends ChangeNotifier {
     _loadId++;
     await backend.stop();
     current = null;
+    _media = _ownMedia = null;
     analysis = null;
     analysing = false;
     _cdg = null;
@@ -318,14 +333,47 @@ class KaraokeEngine extends ChangeNotifier {
   Future<void> setVocalCut(bool on) async {
     if (on == vocalCut) return;
     vocalCut = on;
+    // A song with an AI instrumental swaps to it (or back) where it is.
+    final t = current, own = _ownMedia;
+    if (t != null && own != null) {
+      final want = on ? (_instrumental(t) ?? own) : own;
+      if (want != _media) {
+        final at = position, wasPlaying = playing;
+        _media = want;
+        await _applyFilter();
+        try {
+          await backend.open(want, start: at);
+          wasPlaying ? await backend.play() : await backend.pause();
+        } catch (e) {
+          error = 'Could not play ${p.basename(want)}: $e';
+        }
+        notifyListeners();
+        return;
+      }
+    }
     await _applyFilter();
     notifyListeners();
+  }
+
+  /// The instrumental of [t], if one has been made and is still there.
+  String? _instrumental(Track t) {
+    final path = instrumentalFor?.call(t);
+    return path != null && File(path).existsSync() ? path : null;
+  }
+
+  /// A new instrumental was made: if it's for the song loaded now, with
+  /// Vocal cut on, switch to it.
+  Future<void> instrumentalReady(Track t) async {
+    if (!vocalCut || current?.path != t.path) return;
+    vocalCut = false;
+    await setVocalCut(true);
   }
 
   double _appliedPitch = 1;
 
   Future<void> _applyFilter() async {
-    final f = audioFilterChain(levelLoudness: levelLoudness, vocalCut: vocalCut);
+    // The AI instrumental has no vocal to cut: no filter for it.
+    final f = audioFilterChain(levelLoudness: levelLoudness, vocalCut: vocalCut && !playingInstrumental);
     final pitch = keyRatio(keyShift);
     try {
       if (f != _appliedFilter) {

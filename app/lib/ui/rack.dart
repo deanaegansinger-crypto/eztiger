@@ -1735,6 +1735,21 @@ Future<void> trackMenu(BuildContext context, Offset at, SearchGroup group, {requ
         child: Text(many ? 'Remove $n from this playlist   Del' : 'Remove from this playlist   Del'),
       ),
     if (!many) const PopupMenuItem(value: 'edit', child: Text('✏️ Edit tags…')),
+    // Pro on Windows: the AI instrumental, saved in Music\EZVocalremoved.
+    if (isPro && s.vocalRemover != null) ...[
+      const PopupMenuDivider(),
+      PopupMenuItem(
+        key: const Key('menu-remove-vocals'),
+        value: 'vocals',
+        child: Text(
+          many
+              ? '🎤 Remove vocals (AI) from $n'
+              : s.hasInstrumental(t)
+                  ? '🎤 Remove vocals (AI) again'
+                  : '🎤 Remove vocals (AI)',
+        ),
+      ),
+    ],
   ]);
   if (!context.mounted || choice == null) return;
   switch (choice) {
@@ -1757,6 +1772,8 @@ Future<void> trackMenu(BuildContext context, Offset at, SearchGroup group, {requ
       await s.removeSelectedFromPlaylist();
     case 'edit':
       await showEditTags(context, t);
+    case 'vocals':
+      s.removeVocals(many ? tracks : [t]);
     default:
       if (choice.startsWith('pl:')) await s.addToPlaylist(int.parse(choice.substring(3)), tracks);
   }
