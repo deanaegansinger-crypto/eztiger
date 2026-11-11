@@ -1411,6 +1411,42 @@ void main() {
     expect(find.textContaining('needs updating'), findsOneWidget);
   });
 
+  testWidgets('on opening, a QR link to this PC is checked against its address on this Wi-Fi', (tester) async {
+    Future<void> settle() async {
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    tester.view.physicalSize = const Size(1400, 860);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.runAsync(() async {
+      await state.init();
+      await state.addRootFolder(lib.path);
+    });
+    // Last used at .2; this PC is at .12 on this Wi-Fi.
+    state.setSongbook(url: 'http://192.168.88.2:8080/');
+    state.findPcAddress = () async => '192.168.88.12';
+    await tester.pumpWidget(EztigerApp(state: state));
+    await settle();
+    expect(find.byKey(const Key('qr-link-check')), findsOneWidget);
+    expect(find.textContaining('http://192.168.88.12:8080/'), findsOneWidget);
+    expect(state.songbookUrl, 'http://192.168.88.2:8080/', reason: 'kept until changed');
+    expect(state.qrLinkOutOfDate, isTrue);
+    await tester.tap(find.byKey(const Key('qr-link-use')));
+    await settle();
+    expect(state.songbookUrl, 'http://192.168.88.12:8080/');
+    expect(state.qrLinkOutOfDate, isFalse);
+
+    // Opening again on the same Wi-Fi: no question, just a note it's right.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(EztigerApp(state: state));
+    await settle();
+    expect(find.byKey(const Key('qr-link-check')), findsNothing);
+    expect(find.byKey(const Key('qr-link-ok')), findsOneWidget);
+  });
+
   testWidgets('rescan is by hand unless turned on for start-up, and finds new songs', (tester) async {
     await pumpApp(tester);
     expect(state.rescanOnStart, isFalse);

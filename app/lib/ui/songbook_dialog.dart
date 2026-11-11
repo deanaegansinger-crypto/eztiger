@@ -5,6 +5,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../local_address.dart';
+import '../platform.dart';
 import '../theme.dart';
 import 'common.dart';
 
@@ -12,6 +14,55 @@ import 'common.dart';
 /// their phones, and the QR code that opens it.
 Future<void> showSongbook(BuildContext context) =>
     showDialog<void>(context: context, builder: (_) => const _SongbookDialog());
+
+/// When EZTiger opens: if the QR code points at a PC on the local network
+/// (the song-request page), check it against this PC's address now. Out of
+/// date (another venue or router): ask which to use, the last one kept
+/// unless changed. Up to date: say so, with a way to review it.
+Future<void> checkQrLinkOnOpen(BuildContext context) async {
+  final s = AppScope.of(context);
+  if (!isLocalNetworkUrl(s.songbookUrl)) return;
+  final ip = await s.detectPcAddress();
+  if (!context.mounted || ip == null) return;
+  if (!s.qrLinkOutOfDate) {
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        key: const Key('qr-link-ok'),
+        content: Text('QR code link checked ✓  ${s.songbookUrl} is this PC'),
+        action: SnackBarAction(label: 'Review', onPressed: () => showSongbook(context)),
+        duration: const Duration(seconds: 6),
+      ),
+    );
+    return;
+  }
+  final last = s.songbookUrl, now = withAddress(last, ip);
+  final choice = await showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      key: const Key('qr-link-check'),
+      title: const Text('Check the QR code link'),
+      content: SizedBox(
+        width: 480,
+        child: Text(
+          'The QR code points to $last, the address last used.\n\n'
+          'On this Wi-Fi, this PC is at $ip, so phones need $now.',
+        ),
+      ),
+      actions: [
+        TextButton(key: const Key('qr-link-keep'), onPressed: () => Navigator.pop(context, 'keep'), child: const Text('Keep the old one')),
+        TextButton(onPressed: () => Navigator.pop(context, 'edit'), child: const Text('Change…')),
+        FilledButton(
+          key: const Key('qr-link-use'),
+          onPressed: () => Navigator.pop(context, 'use'),
+          child: Text('Use $ip'),
+        ),
+      ],
+    ),
+  );
+  if (!context.mounted) return;
+  if (choice == 'use') s.useThisPcForQr();
+  if (choice == 'edit') await showSongbook(context);
+}
 
 /// The QR code, big, for the audience to scan. Tap anywhere to close.
 Future<void> showSongbookQr(BuildContext context) {
@@ -45,6 +96,12 @@ Future<void> showSongbookQr(BuildContext context) {
                   QrImageView(data: s.songbookUrl, size: size, backgroundColor: Colors.white),
                   const SizedBox(height: 12),
                   Text(s.songbookUrl, style: const TextStyle(fontSize: 15, color: Colors.black54)),
+                  if (s.qrLinkOutOfDate)
+                    Text(
+                      'This PC is now at ${s.pcAddress}: change it in ☰ Menu → Songbook',
+                      key: const Key('qr-out-of-date'),
+                      style: const TextStyle(fontSize: 15, color: Colors.red, fontWeight: FontWeight.w700),
+                    ),
                   const SizedBox(height: 6),
                   const Text('Tap to close', style: TextStyle(fontSize: 13, color: Colors.black38)),
                 ],
@@ -143,6 +200,30 @@ class _SongbookDialogState extends State<_SongbookDialog> {
                 ),
                 onChanged: (_) => setState(_keep),
               ),
+              // The song-request page on this PC, at its address on this Wi-Fi now.
+              if (!touchUi)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: const Key('songbook-this-pc'),
+                    onPressed: () async {
+                      final ip = await s.detectPcAddress();
+                      if (!mounted) return;
+                      if (ip == null) {
+                        setState(() => message = "This PC isn't on a Wi-Fi or network right now.");
+                        return;
+                      }
+                      s.useThisPcForQr();
+                      setState(() => url.text = s.songbookUrl);
+                    },
+                    icon: const Icon(Icons.wifi, size: 18),
+                    label: Text(
+                      s.pcAddress == null
+                          ? "Use this PC's song-request page"
+                          : "Use this PC's song-request page (${s.pcAddress})",
+                    ),
+                  ),
+                ),
               const SizedBox(height: 14),
               if (s.songbookOutOfDate)
                 Container(

@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart' show FocusNode;
 import 'package:path/path.dart' as p;
 
 import 'edition.dart';
+import 'local_address.dart';
 import 'platform.dart';
 import 'player.dart';
 import 'song_requests.dart';
@@ -696,6 +697,34 @@ class AppState extends ChangeNotifier {
     songbookTitle = title ?? songbookTitle;
     songbookUrl = url ?? songbookUrl;
     notifyListeners();
+  }
+
+  /// This PC's address on the network it's on now (see [thisPcAddress]),
+  /// worked out each time EZTiger starts, as venues and routers change.
+  String? pcAddress;
+
+  /// Finds [pcAddress]; replaced in tests.
+  Future<String?> Function() findPcAddress = thisPcAddress;
+
+  Future<String?> detectPcAddress() async {
+    pcAddress = await findPcAddress();
+    notifyListeners();
+    return pcAddress;
+  }
+
+  /// True when the QR code points at a PC on the local network, and that
+  /// isn't this PC's address now (a different venue or router).
+  bool get qrLinkOutOfDate {
+    final ip = pcAddress;
+    if (ip == null || !isLocalNetworkUrl(songbookUrl)) return false;
+    return Uri.tryParse(songbookUrl.trim())?.host != ip;
+  }
+
+  /// Moves the QR code's link to this PC's address now.
+  void useThisPcForQr() {
+    final ip = pcAddress;
+    if (ip == null) return;
+    setSongbook(url: isLocalNetworkUrl(songbookUrl) ? withAddress(songbookUrl, ip) : requestPageUrl(ip));
   }
 
   /// Compares the library with the songbook last saved.
