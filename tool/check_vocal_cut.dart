@@ -38,9 +38,11 @@ Future<void> main() async {
     '-f', 'lavfi', '-i', 'sine=f=1000:d=6:sample_rate=48000',
     '-f', 'lavfi', '-i', 'sine=f=500:d=6:sample_rate=48000',
     '-f', 'lavfi', '-i', 'sine=f=60:d=6:sample_rate=48000',
+    '-f', 'lavfi', '-i', 'sine=f=2500:d=6:sample_rate=48000',
     '-filter_complex',
     '[0]pan=stereo|c0=0.5*c0|c1=0.5*c0[v];[1]pan=stereo|c0=0.5*c0|c1=0*c0[g];'
-        '[2]pan=stereo|c0=0.5*c0|c1=0.5*c0[b];[v][g][b]amix=inputs=3:normalize=0[o]',
+        '[2]pan=stereo|c0=0.5*c0|c1=0.5*c0[b];[3]pan=stereo|c0=0.45*c0|c1=0.15*c0[k];'
+        '[v][g][b][k]amix=inputs=4:normalize=0[o]',
     '-map', '[o]', mix,
   ]);
   await ffmpeg(['-y', '-i', mix, '-af', vocalCutGraph, out]);
@@ -49,6 +51,7 @@ Future<void> main() async {
     ('vocal in the middle (1 kHz)', 1000, 'both', (double drop) => drop >= 12, 'drop at least 12 dB'),
     ('guitar hard left (500 Hz)', 500, 'left', (double drop) => drop.abs() <= 4, 'stay within 4 dB'),
     ('bass in the middle (60 Hz)', 60, 'both', (double drop) => drop.abs() <= 4, 'stay within 4 dB'),
+    ('keys half left (2.5 kHz)', 2500, 'both', (double drop) => drop.abs() <= 9, 'stay within 9 dB'),
   ];
   var failed = false;
   for (final (name, hz, ch, ok, rule) in checks) {
