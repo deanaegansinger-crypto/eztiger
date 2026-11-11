@@ -31,6 +31,9 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      # A ready-built ffmpeg (apt's install can take many minutes here).
+      - run: |
+          curl -sSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz | tar xJ -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/ffmpeg-master-latest-linux64-gpl/bin" >> "$GITHUB_PATH"
       - run: ffmpeg -hide_banner -filters | grep -E ' (surround|pan|aformat) '
       - run: dart tool/check_vocal_cut.dart

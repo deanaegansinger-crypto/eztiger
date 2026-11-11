@@ -56,8 +56,11 @@ Future<void> main() async {
     final drop = before - after;
     final pass = ok(drop);
     failed |= !pass;
-    print('${pass ? 'PASS' : 'FAIL'}  $name: ${before.toStringAsFixed(1)} dB -> ${after.toStringAsFixed(1)} dB '
-        '(${drop >= 0 ? 'down' : 'up'} ${drop.abs().toStringAsFixed(1)} dB; must $rule)');
+    final line = '${pass ? 'PASS' : 'FAIL'}  $name: ${before.toStringAsFixed(1)} dB -> ${after.toStringAsFixed(1)} dB '
+        '(${drop >= 0 ? 'down' : 'up'} ${drop.abs().toStringAsFixed(1)} dB; must $rule)';
+    print(line);
+    // Shown on the run's summary page too, without signing in to read the log.
+    if (Platform.environment['GITHUB_ACTIONS'] == 'true') print('::notice title=Vocal cut::$line');
   }
   dir.deleteSync(recursive: true);
   if (failed) {
