@@ -15,9 +15,9 @@
 /// It is still a filter, not a separation: an instrument sitting in the
 /// middle with the vocal comes down with it, and the vocal's reverb can stay.
 ///
-/// fl_x / fr_x narrow the front speakers, so a sound in the middle goes to the
+/// flx / frx narrow the front speakers, so a sound in the middle goes to the
 /// centre channel only (by default the fronts get 70% of it too), while a
 /// sound panned well over to one side stays where it was.
 const vocalCutGraph = 'aformat=channel_layouts=stereo,'
-    'surround=chl_out=5.1:lfe=1:lfe_mode=sub:lfe_low=120:lfe_high=250:fl_x=3:fr_x=3:bl_x=3:br_x=3,'
+    'surround=chl_out=5.1:lfe=1:lfe_mode=sub:lfe_low=120:lfe_high=250:flx=3:frx=3:blx=3:brx=3,'
     'pan=stereo|c0=FL+0.7071*BL+LFE|c1=FR+0.7071*BR+LFE';
