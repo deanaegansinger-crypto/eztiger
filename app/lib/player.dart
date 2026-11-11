@@ -9,6 +9,8 @@ import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import 'audio_filters.dart';
+
 /// What the karaoke engine needs from an audio/video player. The real one
 /// is media_kit (libmpv); tests use a fake.
 abstract class MediaBackend {
@@ -439,10 +441,9 @@ double keyRatio(int semitones) => semitones == 0 ? 1 : math.pow(2, semitones / 1
 /// The mpv audio filter chain for the Pro sound options: an ffmpeg filter
 /// graph wrapped as mpv's `lavfi` filter, or '' when nothing is switched on.
 ///
-/// * Vocal cut: the left channel minus the right (and the other way round)
-///   cancels whatever is panned to the middle, usually the lead vocal.
-///   The bass and kick drum are usually in the middle too, so the sound
-///   below 150 Hz is kept as it was.
+/// * Vocal cut: [vocalCutGraph] takes out what sits in the middle, frequency
+///   by frequency (usually the lead vocal), and keeps the rest of the mix,
+///   its stereo spread and the bass.
 /// * Even out loudness: ffmpeg's loudnorm (EBU R128), aiming every song at
 ///   the same loudness as it plays.
 ///
@@ -452,12 +453,7 @@ double keyRatio(int semitones) => semitones == 0 ? 1 : math.pow(2, semitones / 1
 String audioFilterChain({bool levelLoudness = false, bool vocalCut = false}) {
   const rate = 48000;
   final parts = <String>[];
-  if (vocalCut) {
-    parts.add(
-      'aformat=channel_layouts=stereo,asplit=2[full][side];[full]lowpass=f=150[low];'
-      '[side]highpass=f=150,pan=stereo|c0=c0-c1|c1=c1-c0[high];[low][high]amix=inputs=2:normalize=0',
-    );
-  }
+  if (vocalCut) parts.add(vocalCutGraph);
   if (levelLoudness) parts.add('loudnorm=I=-16:TP=-1.5:LRA=11,aresample=$rate');
   if (parts.isEmpty) return '';
   final graph = parts.join(',');

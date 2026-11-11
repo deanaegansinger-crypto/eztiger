@@ -22,3 +22,15 @@ jobs:
       - run: dart pub get
       - run: dart analyze
       - run: dart test
+
+  # Pro's Vocal cut, run through real ffmpeg with test tones and measured.
+  vocal-cut:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: ffmpeg -hide_banner -filters | grep -E ' (surround|pan|aformat) '
+      - run: dart tool/check_vocal_cut.dart
