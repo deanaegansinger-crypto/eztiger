@@ -176,7 +176,7 @@ const _pro = (
     'When nothing is playing (cued, paused or stopped) the lyrics screen, the Stage view and the second screen show the spinning logo and what is up next, instead of frozen lyrics.',
     'Skins (☰ Menu → Skin): six looks for the whole app.',
     'Sync PC ⇄ tablet (☰ Menu): Save sync file writes your playlists and song keys to EZtiger-sync.json. Copy it to the tablet (or put it in the library folder before you copy that), then Load sync file there. It works the other way round too. Songs are matched by where they sit in the library folder, or by file name.',
-    'A playlist with its songs, PC to tablet: right-click a playlist on the PC → 📤 Export to USB, SD card or Dropbox (as a folder, or one zip) or 📶 Send to the tablet over Wi-Fi (it shows the PC\'s address and a code). On the tablet, ☰ Menu → Import playlist or Receive playlist from PC. Every song, with its CDG and lyrics, is copied into the tablet\'s EZTiger imports folder, and the playlist comes back with its keys.',
+    'A playlist with its songs, PC to tablet: right-click a playlist on the PC → 📤 Export to USB, SD card or Dropbox (as a folder, or one zip) or 📶 Send to the tablet over Wi-Fi (it shows the PC\'s address and a code). On the tablet, ☰ Menu → Import playlist… or Receive from PC…. Every song, with its CDG and lyrics, is copied into the tablet\'s EZTiger imports folder, and the playlist comes back with its keys.',
   ],
 );
 

@@ -217,7 +217,7 @@ class _SendDialogState extends State<_SendDialog> {
               const Text('Getting ready…')
             else ...[
               Text('${x.pkg.songs.length} songs, ${_mb(x.pkg.totalBytes)}. On the tablet, on the same Wi-Fi: '
-                  '☰ Menu → Receive playlist from PC, and type in:'),
+                  '☰ Menu → Receive from PC, and type in:'),
               const SizedBox(height: 12),
               Row(children: [
                 const SizedBox(width: 90, child: Text('PC address')),
