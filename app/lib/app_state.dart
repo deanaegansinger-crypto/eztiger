@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show File, HttpClient, Platform;
+import 'dart:io' show Directory, File, HttpClient, Platform;
 import 'dart:isolate';
 
 import 'package:eztiger_core/eztiger_core.dart';
@@ -12,6 +12,7 @@ import 'edition.dart';
 import 'local_address.dart';
 import 'platform.dart';
 import 'player.dart';
+import 'playlist_transfer.dart';
 import 'song_requests.dart';
 import 'sync.dart';
 import 'vocal_remover.dart';
@@ -292,6 +293,7 @@ class AppState extends ChangeNotifier {
       songbookUrl = m['songbookUrl'] as String? ?? songbookUrl;
       songbookSaved = m['songbookSaved'] as String? ?? songbookSaved;
       requestsLink = m['requestsLink'] as String? ?? requestsLink;
+      transferHost = m['transferHost'] as String? ?? transferHost;
       libraryCollapsed = m['libraryCollapsed'] as bool? ?? libraryCollapsed;
       lockEnabled = m['lockEnabled'] as bool? ?? lockEnabled;
       doubleClickToQueue = m['doubleClickToQueue'] as bool? ?? doubleClickToQueue;
@@ -345,6 +347,7 @@ class AppState extends ChangeNotifier {
       'songbookUrl': songbookUrl,
       'songbookSaved': songbookSaved,
       'requestsLink': requestsLink,
+      'transferHost': transferHost,
       'libraryCollapsed': libraryCollapsed,
       'lockEnabled': lockEnabled,
       'doubleClickToQueue': doubleClickToQueue,
@@ -938,6 +941,74 @@ class AppState extends ChangeNotifier {
     queue = await db.queue.all();
     if (!queue.any((e) => e.id == nowPlayingQueueId)) nowPlayingQueueId = null;
     notifyListeners();
+  }
+
+  // ------------------------------------------- playlists to the tablet
+
+  /// Where imported playlists' songs go: an "EZTiger imports" folder on the
+  /// same storage as the library (the SD card), each playlist in a folder of
+  /// its own. [importsRootOverride] is for tests.
+  String? importsRootOverride;
+  String get importsRoot {
+    if (importsRootOverride != null) return importsRootOverride!;
+    final first = roots.firstOrNull?.path;
+    if (first != null) {
+      final volume = RegExp(r'^(/storage/[^/]+(?:/0)?)').firstMatch(first)?.group(1);
+      return p.join(volume ?? p.dirname(first), 'EZTiger imports');
+    }
+    return p.join(Platform.isAndroid ? '/storage/emulated/0/Music' : Directory.systemTemp.path, 'EZTiger imports');
+  }
+
+  String importFolderFor(PlaylistPackage pkg) => p.join(importsRoot, safeName(pkg.name));
+
+  /// The address of the PC last received from, for next time.
+  String transferHost = '';
+
+  void setTransferHost(String host) {
+    transferHost = host.trim();
+    notifyListeners();
+  }
+
+  /// After an import or a receive: the songs (copied into [folder]) go into
+  /// the library, and the playlist is made again (replacing one of the same
+  /// name), with its keys. Returns a line saying what happened.
+  Future<String> addImportedPlaylist(PlaylistPackage pkg, String folder) async {
+    final rootsNow = await db.folders.roots();
+    final holder = rootsNow.where((r) => p.equals(r.path, folder) || p.isWithin(r.path, folder)).firstOrNull;
+    if (holder != null) {
+      await scanner.scanRoot(holder.id);
+    } else {
+      await scanner.addAndScan(p.dirname(folder)); // "EZTiger imports" joins the library
+    }
+    final ids = <int>[];
+    final missing = <String>[];
+    var keys = 0;
+    for (final s in pkg.songs) {
+      final t = await db.tracks.byPath(p.join(folder, songsFolder, s.play));
+      if (t == null) {
+        missing.add(s.title);
+        continue;
+      }
+      ids.add(t.id);
+      if (s.key != 0) {
+        keyShifts[t.path] = s.key.clamp(KaraokeEngine.minKey, KaraokeEngine.maxKey);
+        keys++;
+      }
+    }
+    if (keys > 0) await db.setMeta('key_shifts', jsonEncode(keyShifts));
+    final name = pkg.name.trim().isEmpty ? 'Imported' : pkg.name.trim();
+    for (final old in await db.playlists.all()) {
+      if (old.name.toLowerCase() == name.toLowerCase()) await db.playlists.delete(old.id);
+    }
+    final id = await db.playlists.create(name);
+    await db.playlists.addAll(id, ids);
+    await _reloadFolders();
+    await _reloadPlaylists();
+    await refreshResults();
+    status = '✓ ★ $name: ${ids.length} song${ids.length == 1 ? '' : 's'} in your library'
+        '${missing.isEmpty ? '' : ' (${missing.length} could not be read: ${missing.take(3).join(', ')})'}';
+    notifyListeners();
+    return status;
   }
 
   // ------------------------------------------------- remove vocals (AI)

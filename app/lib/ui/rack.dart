@@ -27,6 +27,7 @@ import 'read_me.dart';
 import 'requests_dialog.dart';
 import '../song_requests.dart';
 import 'songbook_dialog.dart';
+import 'transfer_dialogs.dart';
 
 /// The left column of the mockup: player, settings, library, search and
 /// results.
@@ -373,6 +374,21 @@ class _MainMenu extends StatelessWidget {
             value: 'sync-load',
             child: Row(children: [Icon(Icons.download, size: 18), SizedBox(width: 10), Text('Load sync file…')]),
           ),
+          // The tablet: a playlist and its songs, exported by EZTiger Pro.
+          if (touchUi) ...[
+            const PopupMenuItem(
+              key: Key('import-playlist'),
+              value: 'import-playlist',
+              child: Row(
+                children: [Icon(Icons.usb, size: 18), SizedBox(width: 10), Text('Import playlist (USB, SD, Dropbox)…')],
+              ),
+            ),
+            const PopupMenuItem(
+              key: Key('receive-playlist'),
+              value: 'receive-playlist',
+              child: Row(children: [Icon(Icons.wifi, size: 18), SizedBox(width: 10), Text('Receive playlist from PC…')]),
+            ),
+          ],
         ],
         if (licence case final l?) ...[
           const PopupMenuDivider(),
@@ -492,6 +508,10 @@ class _MainMenu extends StatelessWidget {
           saveSyncFile(context, s);
         } else if (c == 'sync-load') {
           loadSyncFile(context, s);
+        } else if (c == 'import-playlist') {
+          importPlaylist(context);
+        } else if (c == 'receive-playlist') {
+          receivePlaylist(context);
         } else if (c == 'licence') {
           showLicenceDialog(context, licence!);
         } else if (c == 'lock-enabled') {
@@ -1267,6 +1287,21 @@ class PlaylistsPanel extends StatelessWidget {
                   ),
                   PopupMenuItem(value: 'queue', child: Text('Save $theQueue into this playlist')),
                   PopupMenuItem(value: 'toqueue', child: Text('➕ Add the whole playlist to $theQueue')),
+                  // Pro on the PC: the playlist and its songs to the tablet.
+                  if (isPro && !touchUi) ...[
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      key: Key('playlist-export'),
+                      value: 'export',
+                      child: Text('📤 Export to USB, SD card or Dropbox…'),
+                    ),
+                    const PopupMenuItem(
+                      key: Key('playlist-send'),
+                      value: 'send',
+                      child: Text('📶 Send to the tablet over Wi-Fi…'),
+                    ),
+                    const PopupMenuDivider(),
+                  ],
                   const PopupMenuItem(value: 'delete', child: Text('Delete playlist')),
                 ]);
                 switch (c) {
@@ -1278,6 +1313,10 @@ class PlaylistsPanel extends StatelessWidget {
                     await s.saveQueueTo(p.id);
                   case 'toqueue':
                     await s.enqueueAll(await s.db.playlists.tracks(p.id));
+                  case 'export':
+                    if (context.mounted) await showExportPlaylist(context, p);
+                  case 'send':
+                    if (context.mounted) await showSendPlaylist(context, p);
                   case 'delete':
                     await s.deletePlaylist(p);
                 }
