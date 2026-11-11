@@ -380,13 +380,15 @@ class _MainMenu extends StatelessWidget {
               key: Key('import-playlist'),
               value: 'import-playlist',
               child: Row(
-                children: [Icon(Icons.usb, size: 18), SizedBox(width: 10), Text('Import playlist (USB, SD, Dropbox)…')],
+                children: [Icon(Icons.usb, size: 18), SizedBox(width: 10), Flexible(child: Text('Import playlist…'))],
               ),
             ),
             const PopupMenuItem(
               key: Key('receive-playlist'),
               value: 'receive-playlist',
-              child: Row(children: [Icon(Icons.wifi, size: 18), SizedBox(width: 10), Text('Receive playlist from PC…')]),
+              child: Row(
+                children: [Icon(Icons.wifi, size: 18), SizedBox(width: 10), Flexible(child: Text('Receive from PC…'))],
+              ),
             ),
           ],
         ],
