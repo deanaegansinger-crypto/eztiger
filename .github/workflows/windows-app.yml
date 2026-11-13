@@ -21,18 +21,31 @@ jobs:
     env:
       DEMUCS_RS_COMMIT: 805d6f72ede20282832ac78c634e8767716c0b21
     steps:
+      # The finished tools, kept between builds: compiling demucs takes
+      # ~25 minutes, so it only happens when the pinned commit changes.
+      - name: Reuse the tools built before
+        id: tools
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/tools
+          key: vocal-tools-${{ env.DEMUCS_RS_COMMIT }}-v1
+
       - uses: actions/checkout@v4
+        if: steps.tools.outputs.cache-hit != 'true'
         with:
           repository: nikhilunni/demucs-rs
           ref: ${{ env.DEMUCS_RS_COMMIT }}
           path: demucs-rs
       - uses: dtolnay/rust-toolchain@stable
+        if: steps.tools.outputs.cache-hit != 'true'
       - uses: Swatinem/rust-cache@v2
+        if: steps.tools.outputs.cache-hit != 'true'
         with:
           workspaces: demucs-rs -> target
           key: ${{ env.DEMUCS_RS_COMMIT }}
 
       - name: Build demucs (graphics card) and demucs-cpu
+        if: steps.tools.outputs.cache-hit != 'true'
         shell: pwsh
         working-directory: demucs-rs
         run: |
@@ -47,6 +60,7 @@ jobs:
           Copy-Item LICENSE* "$tools\" -ErrorAction SilentlyContinue
 
       - name: ffmpeg (LGPL build, with the MP3 encoder)
+        if: steps.tools.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           $tools = Join-Path $env:RUNNER_TEMP tools
@@ -63,6 +77,7 @@ jobs:
       # end to end on a short clip: separate, then mix the instrumental the
       # way EZTiger does.
       - name: Try a separation
+        if: steps.tools.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           $tools = Join-Path $env:RUNNER_TEMP tools

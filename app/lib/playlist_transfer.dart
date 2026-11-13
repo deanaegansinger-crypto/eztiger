@@ -211,12 +211,14 @@ Future<(PlaylistPackage, String)> importPackage(String source, DestinationFor de
     onProgress?.call(0, 1, p.basename(source));
     // Straight from the zip to disk, a file at a time, then moved into place
     // once the playlist's name is known.
-    final incoming = Directory(p.join(workDir, '.incoming-${DateTime.now().millisecondsSinceEpoch}'));
-    await extractFileToDisk(source, incoming.path);
+    final incoming = Directory(p.join(workDir, '.incoming-${DateTime.now().millisecondsSinceEpoch}'))
+      ..createSync(recursive: true);
+    final names = _unzip(source, incoming.path, onProgress);
     final manifest = File(p.join(incoming.path, manifestName));
     if (!manifest.existsSync()) {
       incoming.deleteSync(recursive: true);
-      throw const FormatException('This zip is not an EZTiger playlist export.');
+      throw FormatException('This zip is not an EZTiger playlist export '
+          '(it holds ${names.take(4).join(', ')}${names.length > 4 ? '…' : ''}).');
     }
     final pkg = PlaylistPackage.fromJson(jsonDecode(manifest.readAsStringSync()) as Map<String, dynamic>);
     final dest = destFor(pkg);
@@ -251,6 +253,38 @@ Future<(PlaylistPackage, String)> importPackage(String source, DestinationFor de
   manifest.copySync(p.join(destDir, manifestName));
   onProgress?.call(total, total, '');
   return (pkg, destDir);
+}
+
+/// Unpacks [zip] into [dir], a file at a time (a big zip never sits in
+/// memory), and returns the names in it. Names that would climb out of
+/// [dir] ("..") are skipped.
+List<String> _unzip(String zip, String dir, TransferProgress? onProgress) {
+  final input = InputFileStream(zip);
+  final names = <String>[];
+  try {
+    final archive = ZipDecoder().decodeStream(input);
+    final total = archive.where((f) => f.isFile).fold<int>(0, (a, f) => a + f.size);
+    var done = 0;
+    for (final f in archive) {
+      final parts = f.name.replaceAll('\\', '/').split('/').where((s) => s.isNotEmpty).toList();
+      if (parts.isEmpty || parts.contains('..')) continue;
+      names.add(parts.join('/'));
+      if (!f.isFile) continue;
+      final out = File(p.joinAll([dir, ...parts]));
+      out.parent.createSync(recursive: true);
+      final stream = OutputFileStream(out.path);
+      try {
+        f.writeContent(stream);
+      } finally {
+        stream.closeSync();
+      }
+      done += f.size;
+      onProgress?.call(done, total, parts.last);
+    }
+  } finally {
+    input.closeSync();
+  }
+  return names;
 }
 
 // ------------------------------------------------------------ over Wi-Fi
