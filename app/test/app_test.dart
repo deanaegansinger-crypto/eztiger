@@ -64,6 +64,53 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('the player shows the key and BPM, worked out once and remembered', (tester) async {
+    var analysed = 0;
+    Future<TrackAnalysis?> fakeAnalyse(String media, String tempDir) async {
+      analysed++;
+      return const TrackAnalysis(pitchClass: 2, minor: false, bpm: 119.6); // D, 120 BPM
+    }
+
+    state = AppState(db, KaraokeEngine(backend, scanEdges: scan), analyseMedia: fakeAnalyse);
+    await pumpApp(tester);
+    final tracks = state.results.map((g) => g.primary).toList();
+    await tester.runAsync(() async {
+      await state.playNow(tracks[0], autostart: false);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+    expect(analysed, 1);
+    final shown = tester.widget<Text>(find.byKey(const Key('key-tempo')));
+    expect(shown.textSpan!.toPlainText(), 'KEY D  ·  120 BPM');
+
+    // Moved up 2 semitones, it shows the key it plays in now.
+    await tester.runAsync(() => state.keyUp());
+    await tester.runAsync(() => state.keyUp());
+    await tester.pump();
+    expect(tester.widget<Text>(find.byKey(const Key('key-tempo'))).textSpan!.toPlainText(), 'KEY E (D+2)  ·  120 BPM');
+    await tester.runAsync(() => state.keyReset());
+
+    // Loading it again reads the saved result instead of analysing again.
+    await tester.runAsync(() async {
+      await state.playNow(tracks[1], autostart: false);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await state.playNow(tracks[0], autostart: false);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+    expect(analysed, 2); // tracks[0] once, tracks[1] once
+    expect(state.engine.analysis?.key, 'D');
+    expect((await tester.runAsync(() => db.analysis.forTrack(tracks[0])))!.result!.bpmRounded, 120);
+  });
+
+  testWidgets('no key or BPM shows when the analysis is off', (tester) async {
+    await pumpApp(tester);
+    final tracks = state.results.map((g) => g.primary).toList();
+    await tester.runAsync(() => state.playNow(tracks[0], autostart: false));
+    await tester.pump();
+    expect(find.byKey(const Key('key-tempo')), findsNothing);
+  });
+
   group('EZTiger Pro sound', () {
     testWidgets('key change: up to 3 semitones, remembered for the song, and a warning on load', (tester) async {
       await pumpApp(tester);
@@ -635,6 +682,41 @@ void main() {
     final saved = await tester.runAsync(() => db.playlists.tracks(id));
     expect(saved!.map((t) => t.id), [tracks[1].id, tracks[2].id]);
     expect(state.playlists.singleWhere((p) => p.name == 'Friday').trackCount, 2);
+  });
+
+  testWidgets('a loaded playlist waits for a double-click of the top song, then the 2nd waits on the other deck', (
+    tester,
+  ) async {
+    final deckB = KaraokeEngine(FakeBackend(), scanEdges: scan);
+    state = AppState(db, KaraokeEngine(backend, scanEdges: scan), deckB: deckB);
+    await pumpApp(tester);
+    await tester.runAsync(() => state.setTwoDecks(true));
+    final tracks = state.results.map((g) => g.primary).toList();
+    final id = (await tester.runAsync(() => state.createPlaylist('Gig', tracks: tracks.sublist(0, 3))))!;
+    await tester.runAsync(() async {
+      await state.loadPlaylistIntoQueue(id);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+    // Nothing loads: the order can be checked (and changed) first.
+    expect(state.queue.length, 3);
+    expect(state.decks.every((d) => d.current == null), isTrue);
+    await tester.runAsync(() async {
+      await state.moveInQueue(state.queue[2], 0);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    expect(state.decks.every((d) => d.current == null), isTrue);
+
+    // Double-click the top song: it plays, and the next one waits on the other deck.
+    await tester.runAsync(() async {
+      await state.playEntry(state.queue.first);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+    expect(state.engine.current?.id, tracks[2].id);
+    expect(state.engine.playing, isTrue);
+    expect(state.standby?.current?.id, tracks[0].id);
+    expect(state.standby?.playing, isFalse);
   });
 
   testWidgets('Pro 2 decks: the decks sit side by side, with the crossfade slider', (tester) async {
@@ -1285,6 +1367,170 @@ void main() {
     expect(find.byType(QueuePanel), findsOneWidget);
   });
 
+  testWidgets('songbook: QR code, and it knows when the library has changed', (tester) async {
+    await pumpApp(tester);
+    Future<void> settle() async {
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    // The page lists the library's songs.
+    final book = await tester.runAsync(state.buildSongbook);
+    expect(book!.count, 3);
+    expect(book.html, contains('Bohemian Rhapsody'));
+    state.songbookWasSaved(book.fingerprint);
+    expect(state.songbookOutOfDate, isFalse);
+
+    await tester.tap(find.byKey(const Key('main-menu')));
+    await settle();
+    await tester.tap(find.byKey(const Key('menu-songbook')));
+    await settle();
+    await tester.enterText(find.byKey(const Key('songbook-title')), "Deano's songs");
+    await tester.enterText(find.byKey(const Key('songbook-url')), 'deano.github.io/songbook/');
+    await tester.pump();
+    expect(state.songbookTitle, "Deano's songs");
+    expect(state.songbookUrl, 'https://deano.github.io/songbook/');
+    expect(find.text('✓ The songbook matches your library.'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('songbook-show-qr')));
+    await settle();
+    expect(find.byKey(const Key('songbook-qr')), findsOneWidget);
+    expect(find.text('Scan with your phone camera to see the songs'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('songbook-qr')));
+    await settle();
+    await tester.tap(find.text('Close'));
+    await settle();
+
+    // Correcting a title makes the songbook out of date.
+    final t = state.results.first.primary;
+    await tester.runAsync(() => state.editTags(t, title: 'Corrected Title', artist: t.artist ?? '', type: t.type));
+    await tester.pump();
+    expect(state.songbookOutOfDate, isTrue);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    await settle();
+    expect(find.textContaining('needs updating'), findsOneWidget);
+  });
+
+  testWidgets('on opening, a QR link to this PC is checked against its address on this Wi-Fi', (tester) async {
+    Future<void> settle() async {
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    tester.view.physicalSize = const Size(1400, 860);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.runAsync(() async {
+      await state.init();
+      await state.addRootFolder(lib.path);
+    });
+    // Last used at .2; this PC is at .12 on this Wi-Fi.
+    state.setSongbook(url: 'http://192.168.88.2:8080/');
+    state.findPcAddress = () async => '192.168.88.12';
+    await tester.pumpWidget(EztigerApp(state: state));
+    await settle();
+    expect(find.byKey(const Key('qr-link-check')), findsOneWidget);
+    expect(find.textContaining('http://192.168.88.12:8080/'), findsOneWidget);
+    expect(state.songbookUrl, 'http://192.168.88.2:8080/', reason: 'kept until changed');
+    expect(state.qrLinkOutOfDate, isTrue);
+    await tester.tap(find.byKey(const Key('qr-link-use')));
+    await settle();
+    expect(state.songbookUrl, 'http://192.168.88.12:8080/');
+    expect(state.qrLinkOutOfDate, isFalse);
+
+    // Opening again on the same Wi-Fi: no question, just a note it's right.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(EztigerApp(state: state));
+    await settle();
+    expect(find.byKey(const Key('qr-link-check')), findsNothing);
+    expect(find.byKey(const Key('qr-link-ok')), findsOneWidget);
+  });
+
+  testWidgets('rescan is by hand unless turned on for start-up, and finds new songs', (tester) async {
+    await pumpApp(tester);
+    expect(state.rescanOnStart, isFalse);
+    File('${lib.path}/Toto - Africa.mp3').writeAsStringSync('x');
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('rescan')));
+      for (var i = 0; i < 50 && (state.scanning || state.results.length < 4); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    });
+    await tester.pump();
+    expect(state.results.map((g) => g.primary.title), contains('Africa'));
+
+    state.setRescanOnStart(true);
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final again = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan));
+      await again.init(rescanLibrary: false);
+      expect(again.rescanOnStart, isTrue);
+    });
+  });
+
+  testWidgets('columns: hide one from the heading menu, drag to resize, remembered, reset', (tester) async {
+    await pumpApp(tester);
+    Future<void> settle() async {
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    final results = find.byType(ResultsTable);
+    Finder heading(String text) => find.descendant(of: results, matching: find.text(text.toUpperCase()));
+    expect(heading('Location'), findsOneWidget);
+    final originalArtistLeft = tester.getTopLeft(heading('Artist')).dx;
+
+    // Right-click a heading, untick Location.
+    await tester.tap(heading('Type'), buttons: kSecondaryButton);
+    await settle();
+    await tester.tap(find.byKey(const Key('col-results-location')));
+    await settle();
+    expect(heading('Location'), findsNothing);
+    expect(state.hiddenColumns, contains('results.location'));
+
+    // Drag the edge of Title to the right: Title gets wider, Artist narrower.
+    final titleWidth = tester.getSize(find.descendant(of: results, matching: find.text('Waterloo'))).width;
+    final artistLeft = tester.getTopLeft(heading('Artist')).dx;
+    await tester.drag(find.byKey(const Key('resize-results-title')), const Offset(80, 0));
+    await tester.pump();
+    expect(tester.getTopLeft(heading('Artist')).dx, greaterThan(artistLeft + 60));
+    expect(
+      tester.getSize(find.descendant(of: results, matching: find.text('Waterloo'))).width,
+      greaterThanOrEqualTo(titleWidth),
+    );
+
+    // Remembered for next time.
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final again = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan));
+      await again.init(rescanLibrary: false);
+      expect(again.hiddenColumns, contains('results.location'));
+      expect(again.columnWeights['results.title'], greaterThan(5));
+    });
+
+    // Reset puts it all back.
+    await tester.tap(heading('Type'), buttons: kSecondaryButton);
+    await settle();
+    await tester.tap(find.byKey(const Key('col-reset')));
+    await settle();
+    expect(heading('Location'), findsOneWidget);
+    expect(tester.getTopLeft(heading('Artist')).dx, closeTo(originalArtistLeft, 1));
+  });
+
+  testWidgets('the queue hides the Played column', (tester) async {
+    await pumpApp(tester);
+    await tester.runAsync(() => state.enqueue(state.results.first.primary));
+    await tester.pump();
+    final queue = find.byType(QueuePanel);
+    expect(find.descendant(of: queue, matching: find.text('PLAYED')), findsOneWidget);
+    state.toggleColumn('queue.played');
+    await tester.pump();
+    expect(find.descendant(of: queue, matching: find.text('PLAYED')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('the menu makes the song lists larger, but not the player', (tester) async {
     await pumpApp(tester);
     await tester.runAsync(() => state.enqueue(state.results.first.primary));
@@ -1394,6 +1640,37 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(state.queue.length, 2);
     expect(find.text("➕ Add to Tonight's playlist"), findsNothing); // no menu after a real drag
+  });
+
+  testWidgets('tablet: the player folds away while the keyboard is up for a search', (tester) async {
+    touchUi = true;
+    addTearDown(() => touchUi = false);
+    await pumpApp(tester);
+    expect(find.byType(PlayerStrip), findsOneWidget);
+
+    // The keyboard alone (search box not in use) changes nothing.
+    tester.view.viewInsets = const FakeViewPadding(bottom: 200);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(PlayerStrip), findsOneWidget);
+
+    // Typing in the search box with the keyboard up: the player folds away.
+    await tester.tap(find.byType(TextField));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(PlayerStrip), findsNothing);
+
+    // Hiding the keyboard (the tablet's Back button) opens it again.
+    tester.view.viewInsets = FakeViewPadding.zero;
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(PlayerStrip), findsOneWidget);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 200);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(PlayerStrip), findsNothing);
+
+    // Touching a song to pick it opens the player, ready to drop it on.
+    await tester.tap(find.byType(ResultRow).first);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(PlayerStrip), findsOneWidget);
+    expect(find.byType(QueuePanel), findsOneWidget);
   });
 
   testWidgets('tablet: holding a queued song still opens its menu', (tester) async {

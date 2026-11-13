@@ -15,13 +15,19 @@ import '../platform.dart';
 import '../sync.dart';
 import 'android_folders.dart';
 import '../theme.dart';
+import 'columns.dart';
 import 'common.dart';
 import 'lock.dart';
 import 'dialogs.dart';
 import 'logo.dart';
+import 'key_tempo.dart';
 import 'pro_sound.dart';
 import 'twin_decks.dart';
 import 'read_me.dart';
+import 'requests_dialog.dart';
+import '../song_requests.dart';
+import 'songbook_dialog.dart';
+import 'transfer_dialogs.dart';
 
 /// The left column of the mockup: player, settings, library, search and
 /// results.
@@ -42,24 +48,84 @@ class Rack extends StatelessWidget {
         children: [
           const _BrandRow(),
           const SizedBox(height: 8),
-          if (twin) const TwinDecks() else ...[const PlayerStrip(), const SizedBox(height: 6), const SeekBar()],
-          // Pro: while searching, everything under the player folds away so
-          // the results get the room.
-          if (!folded) ...[
-            if (isPro) const CrossfadeRow(),
-            const _VolumeRow(),
-            if (isPro) const ProSoundRow(),
-            if (!twin) const _DeckLine(),
-            const SizedBox(height: 8),
-            const ListText(child: LibraryTabs()),
-          ],
+          _PlayerFold(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (twin) const TwinDecks() else ...[const PlayerStrip(), const SizedBox(height: 6), const SeekBar()],
+                // Pro: while searching, everything under the player folds
+                // away so the results get the room.
+                if (!folded) ...[
+                  if (isPro) const CrossfadeRow(),
+                  const _VolumeRow(),
+                  if (isPro) const ProSoundRow(),
+                  if (!twin) const _DeckLine(),
+                ],
+              ],
+            ),
+          ),
+          if (!folded) ...[const SizedBox(height: 8), const ListText(child: LibraryTabs())],
           const SizedBox(height: 8),
-          const ListText(child: SearchBox()),
+          // Keyed, so the box (and what is typed in it) stays put when the
+          // library tabs above fold away.
+          const ListText(key: Key('search-box'), child: SearchBox()),
           const SizedBox(height: 6),
           const Expanded(child: ListText(child: ResultsTable())),
           const _StatusLine(),
         ],
       ),
+    );
+  }
+}
+
+/// On the tablet the on-screen keyboard takes the bottom of the screen, so
+/// while typing a search the player folds away, to leave room for the
+/// results. Touching a song (to pick it, or drag it to the player or the
+/// queue) leaves the search box, and the player opens again; so does hiding
+/// the keyboard.
+class _PlayerFold extends StatefulWidget {
+  const _PlayerFold({required this.child});
+  final Widget child;
+  @override
+  State<_PlayerFold> createState() => _PlayerFoldState();
+}
+
+class _PlayerFoldState extends State<_PlayerFold> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // The Scaffold hides the keyboard from the MediaQuery below it, so watch
+  // the window itself.
+  @override
+  void didChangeMetrics() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) {
+    final focus = AppScope.of(context).searchFocus;
+    return ListenableBuilder(
+      listenable: focus,
+      builder: (context, _) {
+        final keyboardUp = View.of(context).viewInsets.bottom > 0;
+        return ClipRect(
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            alignment: Alignment.topCenter,
+            child: keyboardUp && focus.hasFocus
+                ? const SizedBox(key: Key('player-folded'), width: double.infinity)
+                : widget.child,
+          ),
+        );
+      },
     );
   }
 }
@@ -208,6 +274,49 @@ class _MainMenu extends StatelessWidget {
             child: const Text('Screen lock button 🔒'),
           ),
         const PopupMenuDivider(),
+        PopupMenuItem(
+          key: const Key('menu-songbook'),
+          value: 'songbook',
+          child: Row(
+            children: [
+              const Icon(Icons.qr_code_2, size: 18),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text.rich(
+                  TextSpan(
+                    text: 'Songbook…',
+                    children: [
+                      if (s.songbookOutOfDate)
+                        TextSpan(
+                          text: '  needs updating',
+                          style: TextStyle(fontSize: 12, color: EzColors.brass),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          key: const Key('menu-rescan'),
+          value: 'rescan',
+          enabled: !s.scanning && s.roots.isNotEmpty,
+          child: const Row(
+            children: [
+              Icon(Icons.refresh, size: 18),
+              SizedBox(width: 10),
+              Flexible(child: Text('Rescan library')),
+            ],
+          ),
+        ),
+        CheckedPopupMenuItem(
+          key: const Key('menu-rescan-on-start'),
+          value: 'rescanOnStart',
+          checked: s.rescanOnStart,
+          child: const Text('Rescan at start-up'),
+        ),
+        const PopupMenuDivider(),
         const PopupMenuItem(
           enabled: false,
           height: 28,
@@ -265,6 +374,23 @@ class _MainMenu extends StatelessWidget {
             value: 'sync-load',
             child: Row(children: [Icon(Icons.download, size: 18), SizedBox(width: 10), Text('Load sync file…')]),
           ),
+          // The tablet: a playlist and its songs, exported by EZTiger Pro.
+          if (touchUi) ...[
+            const PopupMenuItem(
+              key: Key('import-playlist'),
+              value: 'import-playlist',
+              child: Row(
+                children: [Icon(Icons.usb, size: 18), SizedBox(width: 10), Flexible(child: Text('Import playlist…'))],
+              ),
+            ),
+            const PopupMenuItem(
+              key: Key('receive-playlist'),
+              value: 'receive-playlist',
+              child: Row(
+                children: [Icon(Icons.wifi, size: 18), SizedBox(width: 10), Flexible(child: Text('Receive from PC…'))],
+              ),
+            ),
+          ],
         ],
         if (licence case final l?) ...[
           const PopupMenuDivider(),
@@ -335,12 +461,45 @@ class _MainMenu extends StatelessWidget {
             checked: s.textScale == scale,
             child: Text(label, style: TextStyle(fontSize: 14 * scale)),
           ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          key: const Key('menu-requests'),
+          value: 'requests',
+          child: Row(
+            children: [
+              const Icon(Icons.record_voice_over_outlined, size: 18),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text.rich(
+                  TextSpan(
+                    text: 'Song requests…',
+                    children: [
+                      if (s.requestsState == RequestsState.connected)
+                        TextSpan(text: '  connected', style: TextStyle(fontSize: 12, color: EzColors.green))
+                      else if (s.requestsState == RequestsState.unreachable ||
+                          s.requestsState == RequestsState.needsCode)
+                        TextSpan(text: '  not connected', style: TextStyle(fontSize: 12, color: EzColors.brass)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
       onSelected: (c) {
         if (c == 'skins') {
           _pickSkin(context, s);
         } else if (c == 'readme') {
           showReadMe(context);
+        } else if (c == 'songbook') {
+          showSongbook(context);
+        } else if (c == 'requests') {
+          showSongRequests(context);
+        } else if (c == 'rescan') {
+          s.rescan();
+        } else if (c == 'rescanOnStart') {
+          s.setRescanOnStart(!s.rescanOnStart);
         } else if (c == 'stage') {
           s.setStageView(true);
         } else if (c == 'autocue') {
@@ -351,6 +510,10 @@ class _MainMenu extends StatelessWidget {
           saveSyncFile(context, s);
         } else if (c == 'sync-load') {
           loadSyncFile(context, s);
+        } else if (c == 'import-playlist') {
+          importPlaylist(context);
+        } else if (c == 'receive-playlist') {
+          receivePlaylist(context);
         } else if (c == 'licence') {
           showLicenceDialog(context, licence!);
         } else if (c == 'lock-enabled') {
@@ -576,7 +739,10 @@ class PlayerStrip extends StatelessWidget {
                         style: TextStyle(fontFamily: vfdFont, fontSize: 9, color: EzColors.vfdSub, letterSpacing: 2),
                       ),
                       if (isPro) ...[const SizedBox(width: 8), KeyWarning(engine: e)],
-                      const Spacer(),
+                      Expanded(
+                        child: Align(alignment: Alignment.centerRight, child: KeyTempo(engine: e)),
+                      ),
+                      if (t != null) const SizedBox(width: 12),
                       if (t != null)
                         Text(
                           '${fmt(e.position)} / ${fmt(e.duration)}',
@@ -801,9 +967,14 @@ class _LibraryTabsState extends State<LibraryTabs> {
                     _TabButton(label: '★ Playlists', selected: tab == 1 && !collapsed, onTap: () => _show(s, 1)),
               ),
               const Spacer(),
+              // Shrinks a little rather than spill over when space is tight.
               if (tab == 0 && !collapsed)
                 const Flexible(
-                  child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: _AddFolderButton()),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [_RescanButton(), _AddFolderButton()]),
+                  ),
                 ),
               IconButton(
                 key: const Key('library-fold'),
@@ -873,6 +1044,22 @@ class _AddFolderButton extends StatelessWidget {
                   : await FilePicker.getDirectoryPath(dialogTitle: 'Choose a karaoke folder');
               if (path != null) await s.addRootFolder(path);
             },
+    );
+  }
+}
+
+/// "🔄 Rescan": finds songs added, removed or renamed since the last scan.
+class _RescanButton extends StatelessWidget {
+  const _RescanButton();
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    return TextButton.icon(
+      key: const Key('rescan'),
+      style: TextButton.styleFrom(visualDensity: tapDensity, foregroundColor: EzColors.brass),
+      icon: const Icon(Icons.refresh, size: 16),
+      label: const Text('Rescan', style: TextStyle(fontSize: 11)),
+      onPressed: s.scanning || s.roots.isEmpty ? null : s.rescan,
     );
   }
 }
@@ -1102,6 +1289,21 @@ class PlaylistsPanel extends StatelessWidget {
                   ),
                   PopupMenuItem(value: 'queue', child: Text('Save $theQueue into this playlist')),
                   PopupMenuItem(value: 'toqueue', child: Text('➕ Add the whole playlist to $theQueue')),
+                  // Pro on the PC: the playlist and its songs to the tablet.
+                  if (isPro && !touchUi) ...[
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      key: Key('playlist-export'),
+                      value: 'export',
+                      child: Text('📤 Export to USB, SD card or Dropbox…'),
+                    ),
+                    const PopupMenuItem(
+                      key: Key('playlist-send'),
+                      value: 'send',
+                      child: Text('📶 Send to the tablet over Wi-Fi…'),
+                    ),
+                    const PopupMenuDivider(),
+                  ],
                   const PopupMenuItem(value: 'delete', child: Text('Delete playlist')),
                 ]);
                 switch (c) {
@@ -1113,6 +1315,10 @@ class PlaylistsPanel extends StatelessWidget {
                     await s.saveQueueTo(p.id);
                   case 'toqueue':
                     await s.enqueueAll(await s.db.playlists.tracks(p.id));
+                  case 'export':
+                    if (context.mounted) await showExportPlaylist(context, p);
+                  case 'send':
+                    if (context.mounted) await showSendPlaylist(context, p);
                   case 'delete':
                     await s.deletePlaylist(p);
                 }
@@ -1303,17 +1509,22 @@ class _ResultsTableState extends State<ResultsTable> {
     return Focus(
       focusNode: focus,
       onKeyEvent: (_, e) => _onKey(s, e),
-      child: Column(
+      // Short on room with the tablet's keyboard up: the filter bar steps
+      // aside so the songs still show. (Rebuilt as the keyboard resizes it.)
+      child: LayoutBuilder(
+        builder: (context, c) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
             '$label · ${s.resultsTitle} · ${groups.length} ${groups.length == 1 ? 'match' : 'matches'}'
             '${n > 1 ? ' · $n selected (drag them, or Ctrl+C)' : ''}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 11, color: context.ez.textDim),
           ),
           const SizedBox(height: 4),
           if (s.scanning) const LoadingBanner(),
-          const _FilterBar(),
+          if (View.of(context).viewInsets.bottom == 0 || c.maxHeight >= listSize(context, 220)) const _FilterBar(),
           const _ResultsHeader(),
           Expanded(
             child: groups.isEmpty
@@ -1343,6 +1554,7 @@ class _ResultsTableState extends State<ResultsTable> {
                   ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -1418,13 +1630,10 @@ class _ResultsHeader extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: context.ez.border)),
       ),
-      child: Row(
-        children: [
-          Expanded(flex: 5, child: sortable('Title', SearchSort.title)),
-          Expanded(flex: 4, child: sortable('Artist', SearchSort.artist)),
-          SizedBox(width: listSize(context, 44), child: const HeadText('Type')),
-          const Expanded(flex: 3, child: HeadText('Location')),
-        ],
+      child: ColumnsHeader(
+        table: 'results',
+        columns: resultColumns,
+        headings: {'title': sortable('Title', SearchSort.title), 'artist': sortable('Artist', SearchSort.artist)},
       ),
     );
   }
@@ -1461,54 +1670,44 @@ class _ResultRowState extends State<ResultRow> {
             ? EzColors.brass.withValues(alpha: 0.28)
             : (index.isOdd ? context.ez.raised.withValues(alpha: 0.4) : null),
         padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 5,
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(text: t.title),
-                    if (t.version != null)
-                      TextSpan(
-                        text: '  ${t.version}',
-                        style: TextStyle(color: context.ez.textDim, fontSize: 10),
-                      ),
-                    if (group.versions.length > 1)
-                      TextSpan(
-                        text: '  ×${group.versions.length}',
-                        style: TextStyle(color: EzColors.cyan, fontSize: 10),
-                      ),
-                  ],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12),
+        child: ColumnsRow(
+          table: 'results',
+          columns: resultColumns,
+          cells: {
+            'title': Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(text: t.title),
+                  if (t.version != null)
+                    TextSpan(
+                      text: '  ${t.version}',
+                      style: TextStyle(color: context.ez.textDim, fontSize: 10),
+                    ),
+                  if (group.versions.length > 1)
+                    TextSpan(
+                      text: '  ×${group.versions.length}',
+                      style: TextStyle(color: EzColors.cyan, fontSize: 10),
+                    ),
+                ],
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12),
             ),
-            Expanded(
-              flex: 4,
-              child: Text(
-                t.artist ?? '—',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: context.ez.textDim),
-              ),
+            'artist': Text(
+              t.artist ?? '—',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: context.ez.textDim),
             ),
-            SizedBox(
-              width: listSize(context, 44),
-              child: Align(alignment: Alignment.centerLeft, child: TypeChip(t.type)),
+            'type': Align(alignment: Alignment.centerLeft, child: TypeChip(t.type)),
+            'location': Text(
+              locationOf(t),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 10, fontFamily: vfdFont, color: context.ez.textDim),
             ),
-            Expanded(
-              flex: 3,
-              child: Text(
-                locationOf(t),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 10, fontFamily: vfdFont, color: context.ez.textDim),
-              ),
-            ),
-          ],
+          },
         ),
       ),
     );
@@ -1577,6 +1776,21 @@ Future<void> trackMenu(BuildContext context, Offset at, SearchGroup group, {requ
         child: Text(many ? 'Remove $n from this playlist   Del' : 'Remove from this playlist   Del'),
       ),
     if (!many) const PopupMenuItem(value: 'edit', child: Text('✏️ Edit tags…')),
+    // Pro on Windows: the AI instrumental, saved in Music\EZVocalremoved.
+    if (isPro && s.vocalRemover != null) ...[
+      const PopupMenuDivider(),
+      PopupMenuItem(
+        key: const Key('menu-remove-vocals'),
+        value: 'vocals',
+        child: Text(
+          many
+              ? '🎤 Remove vocals (AI) from $n'
+              : s.hasInstrumental(t)
+                  ? '🎤 Remove vocals (AI) again'
+                  : '🎤 Remove vocals (AI)',
+        ),
+      ),
+    ],
   ]);
   if (!context.mounted || choice == null) return;
   switch (choice) {
@@ -1599,6 +1813,8 @@ Future<void> trackMenu(BuildContext context, Offset at, SearchGroup group, {requ
       await s.removeSelectedFromPlaylist();
     case 'edit':
       await showEditTags(context, t);
+    case 'vocals':
+      s.removeVocals(many ? tracks : [t]);
     default:
       if (choice.startsWith('pl:')) await s.addToPlaylist(int.parse(choice.substring(3)), tracks);
   }

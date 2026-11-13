@@ -9,6 +9,8 @@ import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import 'audio_filters.dart';
+
 /// What the karaoke engine needs from an audio/video player. The real one
 /// is media_kit (libmpv); tests use a fake.
 abstract class MediaBackend {
@@ -105,14 +107,37 @@ class KaraokeEngine extends ChangeNotifier {
   /// the same level.
   bool levelLoudness = false;
 
-  /// Pro: cuts the lead vocal (what is panned to the middle).
+  /// Pro: cuts the lead vocal. A song with an AI instrumental ("Remove
+  /// vocals") plays that instead; any other gets the live filter, which
+  /// takes out what is panned to the middle.
   bool vocalCut = false;
+
+  /// The AI instrumental made for a song, if there is one (Pro, Windows).
+  String? Function(Track track)? instrumentalFor;
+
+  /// The file playing now: the song's own sound, or its instrumental.
+  String? _media, _ownMedia;
+
+  /// True while the AI instrumental plays in place of the song's own sound.
+  bool get playingInstrumental => _media != null && _media != _ownMedia;
 
   /// The saved key for a song, looked up as it loads (EZTiger Pro).
   int Function(Track track)? keyShiftFor;
 
   /// Told when the key is changed by hand, to remember it for the song.
   void Function(Track track, int semitones)? onKeyShift;
+
+  /// Works out (or looks up) a song's key and tempo as it loads; [media] is
+  /// the file that plays (the MP3 inside a zip, once unpacked). Null: the
+  /// players show no key or tempo.
+  Future<TrackAnalysis?> Function(Track track, String media)? analyse;
+
+  /// The loaded song's key and tempo, once known.
+  TrackAnalysis? analysis;
+
+  /// True while the loaded song's key and tempo are being worked out.
+  bool analysing = false;
+  int _loadId = 0;
 
   /// When the loaded song came up in a changed key, for the flashing
   /// warning; null when it loaded in its own key.
@@ -156,8 +181,11 @@ class KaraokeEngine extends ChangeNotifier {
     bool skipSilence = false,
   }) async {
     _fadeId++;
+    final loadId = ++_loadId;
     error = null;
     edges = null;
+    analysis = null;
+    analysing = false;
     cueStart = Duration.zero;
     current = track;
     this.singer = singer;
@@ -179,6 +207,10 @@ class KaraokeEngine extends ChangeNotifier {
         _cdg = CdgDecoder(await File(cdgPath).readAsBytes());
         await _render();
       }
+      _startAnalysis(track, media, loadId);
+      _ownMedia = media;
+      if (vocalCut) media = _instrumental(track) ?? media;
+      _media = media;
       keyShift = (keyShiftFor?.call(track) ?? 0).clamp(minKey, maxKey);
       keyWarningSince = keyShift != 0 ? DateTime.now() : null;
       await _applyFilter();
@@ -234,8 +266,12 @@ class KaraokeEngine extends ChangeNotifier {
 
   Future<void> stop() async {
     _fadeId++;
+    _loadId++;
     await backend.stop();
     current = null;
+    _media = _ownMedia = null;
+    analysis = null;
+    analysing = false;
     _cdg = null;
     cdgFrame.value = null;
     cdgPixels = null;
@@ -244,6 +280,24 @@ class KaraokeEngine extends ChangeNotifier {
   }
 
   Future<void> restart() => backend.seek(cueStart);
+
+  /// Works out the key and tempo in the background; the song plays
+  /// meanwhile. A song loaded in the meantime wins.
+  void _startAnalysis(Track track, String media, int loadId) {
+    final analyse = this.analyse;
+    if (analyse == null) return;
+    analysing = true;
+    notifyListeners();
+    analyse(track, media).then<TrackAnalysis?>((r) => r, onError: (_) => null).then((r) {
+      if (loadId != _loadId) return;
+      analysis = r;
+      analysing = false;
+      notifyListeners();
+    });
+  }
+
+  /// The key the song is playing in now: its own key moved by [keyShift].
+  String? get playingKey => analysis?.keyShifted(keyShift);
 
   Future<AudioEdges?> _edgesOf(String path) async {
     if (_edgeCache.containsKey(path)) return _edgeCache[path];
@@ -279,14 +333,47 @@ class KaraokeEngine extends ChangeNotifier {
   Future<void> setVocalCut(bool on) async {
     if (on == vocalCut) return;
     vocalCut = on;
+    // A song with an AI instrumental swaps to it (or back) where it is.
+    final t = current, own = _ownMedia;
+    if (t != null && own != null) {
+      final want = on ? (_instrumental(t) ?? own) : own;
+      if (want != _media) {
+        final at = position, wasPlaying = playing;
+        _media = want;
+        await _applyFilter();
+        try {
+          await backend.open(want, start: at);
+          wasPlaying ? await backend.play() : await backend.pause();
+        } catch (e) {
+          error = 'Could not play ${p.basename(want)}: $e';
+        }
+        notifyListeners();
+        return;
+      }
+    }
     await _applyFilter();
     notifyListeners();
+  }
+
+  /// The instrumental of [t], if one has been made and is still there.
+  String? _instrumental(Track t) {
+    final path = instrumentalFor?.call(t);
+    return path != null && File(path).existsSync() ? path : null;
+  }
+
+  /// A new instrumental was made: if it's for the song loaded now, with
+  /// Vocal cut on, switch to it.
+  Future<void> instrumentalReady(Track t) async {
+    if (!vocalCut || current?.path != t.path) return;
+    vocalCut = false;
+    await setVocalCut(true);
   }
 
   double _appliedPitch = 1;
 
   Future<void> _applyFilter() async {
-    final f = audioFilterChain(levelLoudness: levelLoudness, vocalCut: vocalCut);
+    // The AI instrumental has no vocal to cut: no filter for it.
+    final f = audioFilterChain(levelLoudness: levelLoudness, vocalCut: vocalCut && !playingInstrumental);
     final pitch = keyRatio(keyShift);
     try {
       if (f != _appliedFilter) {
@@ -402,10 +489,9 @@ double keyRatio(int semitones) => semitones == 0 ? 1 : math.pow(2, semitones / 1
 /// The mpv audio filter chain for the Pro sound options: an ffmpeg filter
 /// graph wrapped as mpv's `lavfi` filter, or '' when nothing is switched on.
 ///
-/// * Vocal cut: the left channel minus the right (and the other way round)
-///   cancels whatever is panned to the middle, usually the lead vocal.
-///   The bass and kick drum are usually in the middle too, so the sound
-///   below 150 Hz is kept as it was.
+/// * Vocal cut: [vocalCutGraph] takes out what sits in the middle, frequency
+///   by frequency (usually the lead vocal), and keeps the rest of the mix,
+///   its stereo spread and the bass.
 /// * Even out loudness: ffmpeg's loudnorm (EBU R128), aiming every song at
 ///   the same loudness as it plays.
 ///
@@ -415,12 +501,7 @@ double keyRatio(int semitones) => semitones == 0 ? 1 : math.pow(2, semitones / 1
 String audioFilterChain({bool levelLoudness = false, bool vocalCut = false}) {
   const rate = 48000;
   final parts = <String>[];
-  if (vocalCut) {
-    parts.add(
-      'aformat=channel_layouts=stereo,asplit=2[full][side];[full]lowpass=f=150[low];'
-      '[side]highpass=f=150,pan=stereo|c0=c0-c1|c1=c1-c0[high];[low][high]amix=inputs=2:normalize=0',
-    );
-  }
+  if (vocalCut) parts.add(vocalCutGraph);
   if (levelLoudness) parts.add('loudnorm=I=-16:TP=-1.5:LRA=11,aresample=$rate');
   if (parts.isEmpty) return '';
   final graph = parts.join(',');

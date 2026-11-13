@@ -2,7 +2,7 @@ name: Windows app
 
 on:
   push:
-    branches: [main, windows-app]
+    branches: [main, windows-app, claude/easy-tiger-android-download-yuyply]
   pull_request:
   workflow_dispatch:
 
@@ -10,7 +10,101 @@ permissions:
   contents: write
 
 jobs:
+  # Pro's "Remove vocals (AI)": demucs (the Demucs stem-separation model, from
+  # demucs-rs, Apache-2.0, pinned to one commit) and ffmpeg (to mix the
+  # instrumental and write the MP3 with its tags). demucs.exe uses the
+  # graphics card (Vulkan); demucs-cpu.exe is the fallback for PCs without
+  # one. The model itself (84 MB) downloads from Hugging Face on first use.
+  # Dean OK'd bundling demucs and ffmpeg in the Pro installer on 2026-11-11.
+  vocal-tools:
+    runs-on: windows-latest
+    env:
+      DEMUCS_RS_COMMIT: 805d6f72ede20282832ac78c634e8767716c0b21
+    steps:
+      # The finished tools, kept between builds: compiling demucs takes
+      # ~25 minutes, so it only happens when the pinned commit changes.
+      - name: Reuse the tools built before
+        id: tools
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/tools
+          key: vocal-tools-${{ env.DEMUCS_RS_COMMIT }}-v1
+
+      - uses: actions/checkout@v4
+        if: steps.tools.outputs.cache-hit != 'true'
+        with:
+          repository: nikhilunni/demucs-rs
+          ref: ${{ env.DEMUCS_RS_COMMIT }}
+          path: demucs-rs
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.tools.outputs.cache-hit != 'true'
+      - uses: Swatinem/rust-cache@v2
+        if: steps.tools.outputs.cache-hit != 'true'
+        with:
+          workspaces: demucs-rs -> target
+          key: ${{ env.DEMUCS_RS_COMMIT }}
+
+      - name: Build demucs (graphics card) and demucs-cpu
+        if: steps.tools.outputs.cache-hit != 'true'
+        shell: pwsh
+        working-directory: demucs-rs
+        run: |
+          cargo build -p demucs-cli --release
+          if ($LASTEXITCODE -ne 0) { throw "demucs build failed" }
+          cargo build -p demucs-cli --release --features cpu --target-dir target-cpu
+          if ($LASTEXITCODE -ne 0) { throw "demucs-cpu build failed" }
+          $tools = Join-Path $env:RUNNER_TEMP tools
+          New-Item -ItemType Directory -Force $tools | Out-Null
+          Copy-Item target\release\demucs.exe "$tools\demucs.exe"
+          Copy-Item target-cpu\release\demucs.exe "$tools\demucs-cpu.exe"
+          Copy-Item LICENSE* "$tools\" -ErrorAction SilentlyContinue
+
+      - name: ffmpeg (LGPL build, with the MP3 encoder)
+        if: steps.tools.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $tools = Join-Path $env:RUNNER_TEMP tools
+          $zip = Join-Path $env:RUNNER_TEMP ffmpeg.zip
+          curl.exe -fsSL --retry 3 -o $zip https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip
+          if ($LASTEXITCODE -ne 0) { throw "ffmpeg download failed" }
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\ffmpeg" -Force
+          $exe = Get-ChildItem "$env:RUNNER_TEMP\ffmpeg" -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+          Copy-Item $exe.FullName "$tools\ffmpeg.exe"
+          $enc = & "$tools\ffmpeg.exe" -hide_banner -encoders 2>&1 | Out-String
+          if ($enc -notmatch 'libmp3lame') { throw "this ffmpeg has no MP3 encoder (libmp3lame)" }
+
+      # The graphics-card version can't run here (no GPU), so try the CPU one
+      # end to end on a short clip: separate, then mix the instrumental the
+      # way EZTiger does.
+      - name: Try a separation
+        if: steps.tools.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $tools = Join-Path $env:RUNNER_TEMP tools
+          $t = Join-Path $env:RUNNER_TEMP try
+          New-Item -ItemType Directory -Force $t | Out-Null
+          & "$tools\ffmpeg.exe" -hide_banner -loglevel error -y -f lavfi -i "sine=f=220:d=8" -f lavfi -i "sine=f=880:d=8" -filter_complex "[0][1]amerge=inputs=2[a]" -map "[a]" -ar 44100 -metadata title="Test Song" -metadata artist="Test Band" "$t\song.mp3"
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          & "$tools\demucs-cpu.exe" -m htdemucs -s drums,bass,other -o "$t\stems" "$t\song.mp3"
+          if ($LASTEXITCODE -ne 0) { throw "demucs-cpu failed" }
+          $secs = [int]$sw.Elapsed.TotalSeconds
+          foreach ($s in 'drums','bass','other') { if (-not (Test-Path "$t\stems\$s.wav")) { throw "no $s.wav" } }
+          if (Test-Path "$t\stems\vocals.wav") { throw "vocals.wav should not be written" }
+          & "$tools\ffmpeg.exe" -hide_banner -loglevel error -y -i "$t\stems\drums.wav" -i "$t\stems\bass.wav" -i "$t\stems\other.wav" -i "$t\song.mp3" -filter_complex "[0][1][2]amix=inputs=3:normalize=0[a]" -map "[a]" -map_metadata 3 -metadata title="Test Song EZVocrem" -id3v2_version 3 -c:a libmp3lame -q:a 2 "$t\song EZVocrem.mp3"
+          if ($LASTEXITCODE -ne 0) { throw "mixing the instrumental failed" }
+          $tags = & "$tools\ffmpeg.exe" -hide_banner -i "$t\song EZVocrem.mp3" 2>&1 | Out-String
+          if ($tags -notmatch 'title\s*:\s*Test Song EZVocrem' -or $tags -notmatch 'artist\s*:\s*Test Band') { throw "tags not written: $tags" }
+          "::notice title=Remove vocals::demucs-cpu separated an 8 s clip in $secs s (includes the one-time model download); the instrumental MP3 has its tags"
+          # (ffmpeg -i with no output file "fails" by design; the checks above passed.)
+          exit 0
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vocal-tools
+          path: ${{ runner.temp }}/tools
+
   build:
+    needs: vocal-tools
     runs-on: windows-latest
     defaults:
       run:
@@ -27,11 +121,41 @@ jobs:
       - name: Get packages
         run: flutter pub get
 
+      # Each issue also goes on the run's summary page (readable without
+      # signing in to the log).
       - name: Analyze
-        run: flutter analyze
+        shell: pwsh
+        run: |
+          $out = dart analyze --fatal-infos --format=machine 2>&1
+          $code = $LASTEXITCODE
+          foreach ($l in $out) {
+            $p = "$l".Split('|')
+            if ($p.Count -ge 8) { "::error title=$($p[2])::$(Split-Path $p[3] -Leaf):$($p[4]) $($p[7])" }
+            elseif ($code -ne 0 -and "$l".Trim()) { "::notice title=analyze::$l" }
+            else { "$l" }
+          }
+          exit $code
 
       - name: Test
-        run: flutter test
+        shell: pwsh
+        run: |
+          flutter test --file-reporter "json:$env:RUNNER_TEMP\test-results.json"
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            # Each failed test on the run's summary, with what went wrong.
+            $names = @{}; $errors = @{}
+            foreach ($line in Get-Content "$env:RUNNER_TEMP\test-results.json") {
+              try { $e = $line | ConvertFrom-Json } catch { continue }
+              if ($e.type -eq 'testStart') { $names[[string]$e.test.id] = $e.test.name }
+              if ($e.type -eq 'error') { $errors[[string]$e.testID] += "$($e.error) " }
+            }
+            foreach ($id in $errors.Keys) {
+              $msg = ($errors[$id] -replace '\s+', ' ').Trim()
+              if ($msg.Length -gt 1500) { $msg = $msg.Substring(0, 1500) }
+              "::error title=Failed: $($names[$id])::$msg"
+            }
+          }
+          exit $code
 
       - name: Build
         run: flutter build windows --release
@@ -96,6 +220,12 @@ jobs:
           if (-not (Test-Path "$release\libmpv-2.dll")) { throw "No bundled libmpv-2.dll to replace in $release" }
           Copy-Item "$dir\out\libmpv-2.dll" "$release\libmpv-2.dll" -Force
           Get-Item "$release\libmpv-2.dll" | Format-Table Name, Length
+
+      # Pro's "Remove vocals (AI)" tools, into tools\ beside eztiger.exe.
+      - uses: actions/download-artifact@v4
+        with:
+          name: vocal-tools
+          path: app/build/windows/x64/runner/Release/tools
 
       - name: Make the Pro installer
         shell: pwsh

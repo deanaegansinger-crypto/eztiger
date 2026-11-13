@@ -9,6 +9,7 @@ import 'lock.dart';
 import 'output_panel.dart';
 import 'queue_panel.dart';
 import 'rack.dart';
+import 'songbook_dialog.dart';
 import 'stage_view.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -29,6 +30,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _setFull(bool v) async {
     setState(() => fullScreen = v);
     await widget.setFullScreen?.call(v);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // The songbook / request QR code can point at this PC, whose address
+    // changes with the venue's Wi-Fi: check it each time EZTiger opens.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !touchUi) checkQrLinkOnOpen(context);
+    });
   }
 
   @override

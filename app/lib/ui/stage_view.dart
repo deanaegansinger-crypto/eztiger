@@ -8,6 +8,7 @@ import '../edition.dart';
 import 'lock.dart';
 import 'pro_sound.dart';
 import 'output_panel.dart';
+import 'songbook_dialog.dart';
 import 'twin_decks.dart';
 
 /// The view for performing, with the tablet on the mic stand: the lyrics or
@@ -112,6 +113,22 @@ class _Controls extends StatelessWidget {
             ),
             if (isPro) ...[const SizedBox(width: 10), KeyWarning(engine: e, fontSize: 16)],
             const Spacer(),
+            // The songbook's QR code, for the audience to scan.
+            if (s.songbookUrl.isNotEmpty) ...[
+              IconButton(
+                key: const Key('stage-qr'),
+                tooltip: 'Show the songbook QR code',
+                iconSize: 30,
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(52, 52),
+                  side: BorderSide(color: EzColors.cyan),
+                  foregroundColor: EzColors.cyan,
+                ),
+                onPressed: () => showSongbookQr(context),
+                icon: const Icon(Icons.qr_code_2),
+              ),
+              const SizedBox(width: 10),
+            ],
             if (isPro && s.lockEnabled) ...[const LockButton(big: true), const SizedBox(width: 10)],
             // Swap the lyrics and the buttons left and right.
             IconButton(

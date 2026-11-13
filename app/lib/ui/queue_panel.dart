@@ -5,6 +5,7 @@ import '../app_state.dart';
 import '../edition.dart';
 import '../platform.dart';
 import '../theme.dart';
+import 'columns.dart';
 import 'common.dart';
 import 'dialogs.dart';
 import 'rack.dart';
@@ -92,17 +93,7 @@ class QueuePanel extends StatelessWidget {
               decoration: BoxDecoration(
                 border: Border(bottom: BorderSide(color: context.ez.border)),
               ),
-              child: Row(
-                children: [
-                  SizedBox(width: listSize(context, 28), child: const HeadText('#')),
-                  const Expanded(flex: 5, child: HeadText('Title')),
-                  const Expanded(flex: 5, child: HeadText('Artist — Singer')),
-                  SizedBox(width: listSize(context, 44), child: const HeadText('Type')),
-                  SizedBox(width: listSize(context, 96), child: const HeadText('Played')),
-                  const Expanded(flex: 2, child: HeadText('Location')),
-                  SizedBox(width: listSize(context, 24)),
-                ],
-              ),
+              child: const ColumnsHeader(table: 'queue', columns: queueColumns),
             ),
             Expanded(
               child: s.queue.isEmpty
@@ -267,81 +258,62 @@ class _QueueRow extends StatelessWidget {
             color: playing ? EzColors.brass.withValues(alpha: 0.2) : null,
             child: Opacity(
               opacity: played ? 0.55 : 1,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: listSize(context, 28),
-                    child: playing
-                        ? Icon(Icons.play_arrow, size: 14, color: EzColors.brass)
-                        : played
-                        ? Icon(Icons.check, size: 14, color: EzColors.green)
-                        : Text('${index + 1}', style: TextStyle(fontSize: 11, color: dim)),
+              child: ColumnsRow(
+                table: 'queue',
+                columns: queueColumns,
+                cells: {
+                  'num': playing
+                      ? Icon(Icons.play_arrow, size: 14, color: EzColors.brass)
+                      : played
+                      ? Icon(Icons.check, size: 14, color: EzColors.green)
+                      : Text('${index + 1}', style: TextStyle(fontSize: 11, color: dim)),
+                  'title': Text(
+                    t.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
                   ),
-                  Expanded(
-                    flex: 5,
-                    child: Text(
-                      t.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 5,
-                    child: Text.rich(
-                      TextSpan(
-                        children: [
+                  'artist': Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: t.artist ?? '—',
+                          style: TextStyle(color: context.ez.textDim),
+                        ),
+                        if (entry.singer != null) const TextSpan(text: ' — '),
+                        if (entry.singer != null)
                           TextSpan(
-                            text: t.artist ?? '—',
-                            style: TextStyle(color: context.ez.textDim),
+                            text: entry.singer,
+                            style: TextStyle(color: EzColors.cyan),
                           ),
-                          if (entry.singer != null) const TextSpan(text: ' — '),
-                          if (entry.singer != null)
-                            TextSpan(
-                              text: entry.singer,
-                              style: TextStyle(color: EzColors.cyan),
-                            ),
-                        ],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12),
+                      ],
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
                   ),
-                  SizedBox(
-                    width: listSize(context, 44),
-                    child: Align(alignment: Alignment.centerLeft, child: TypeChip(t.type)),
+                  'type': Align(alignment: Alignment.centerLeft, child: TypeChip(t.type)),
+                  'played': Text(
+                    entry.playedAt != null
+                        ? whenText(entry.playedAt!)
+                        : entry.lastSung != null
+                        ? 'last ${whenText(entry.lastSung!)}'
+                        : '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: entry.playedAt != null ? EzColors.green : dim),
                   ),
-                  SizedBox(
-                    width: listSize(context, 96),
-                    child: Text(
-                      entry.playedAt != null
-                          ? whenText(entry.playedAt!)
-                          : entry.lastSung != null
-                          ? 'last ${whenText(entry.lastSung!)}'
-                          : '',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11, color: entry.playedAt != null ? EzColors.green : dim),
-                    ),
+                  'location': Text(
+                    locationOf(t),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 10, fontFamily: vfdFont, color: context.ez.textDim),
                   ),
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      locationOf(t),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 10, fontFamily: vfdFont, color: context.ez.textDim),
-                    ),
+                  'remove': InkWell(
+                    onTap: () => s.removeFromQueue(entry),
+                    child: Icon(Icons.close, size: 14, color: EzColors.red),
                   ),
-                  SizedBox(
-                    width: listSize(context, 24),
-                    child: InkWell(
-                      onTap: () => s.removeFromQueue(entry),
-                      child: Icon(Icons.close, size: 14, color: EzColors.red),
-                    ),
-                  ),
-                ],
+                },
               ),
             ),
           ),
