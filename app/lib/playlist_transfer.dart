@@ -74,9 +74,9 @@ class PlaylistPackage {
   final Map<String, String> sources;
 
   /// Every file, once each, in playlist order.
-  List<String> get fileNames => [
+  List<String> get fileNames => <String>{
         for (final s in songs) ...s.files,
-      ].toSet().toList();
+      }.toList();
 
   int get totalBytes => sizes.values.fold(0, (a, b) => a + b);
 

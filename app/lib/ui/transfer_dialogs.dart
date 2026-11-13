@@ -183,7 +183,10 @@ class _SendDialogState extends State<_SendDialog> {
           if (mounted) setState(() {});
         };
       await x.start();
-      if (!mounted) return x.stop();
+      if (!mounted) {
+        await x.stop();
+        return;
+      }
       setState(() {
         sender = x;
         address = ip;
