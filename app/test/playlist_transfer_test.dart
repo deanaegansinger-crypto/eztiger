@@ -76,35 +76,89 @@ void main() {
     expect(exportName(pkg), 'EZTiger export - Friday Late');
   });
 
+  Future<ImportPlan?> update(PlaylistPackage x) async => tablet.importPlan(x);
+  Future<ImportPlan?> keepBoth(PlaylistPackage x) async => tablet.importPlan(x, keepBoth: true, now: DateTime(2026, 11, 16));
+
   test('a folder on a USB stick: exported on the PC, imported on the tablet', () async {
     final folder = await exportToFolder(pkg, out.path);
     expect(File(p.join(folder, manifestName)).existsSync(), isTrue);
     expect(File(p.join(folder, 'songs', 'Abba - Waterloo.cdg')).lengthSync(), 24 * 300);
     expect(isPackage(folder), isTrue);
 
-    final (got, dest) = await importPackage(folder, tablet.importFolderFor, workDir: tablet.importsRoot);
-    expect(dest, p.join(tabletDir.path, 'EZTiger imports', 'Friday Late'));
-    final line = await tablet.addImportedPlaylist(got, dest);
+    final r = await importPackage(folder, update);
+    expect(r.plan.folder, p.join(tabletDir.path, 'EZTiger imports', 'Friday Late'));
+    expect(r.plan.update, isFalse); // nothing of that name yet
+    expect((r.copied, r.kept), (4, 0));
+    final line = await tablet.addImportedPlaylist(r);
     expect(line, contains('3 songs'));
     expect(await tabletPlaylist(), expected);
     // EZTiger imports is in the tablet's library now.
     expect(tablet.roots.map((r) => p.basename(r.path)), contains('EZTiger imports'));
-    // Imported again: the playlist is replaced, not doubled.
-    final (again, dest2) = await importPackage(folder, tablet.importFolderFor, workDir: tablet.importsRoot);
-    await tablet.addImportedPlaylist(again, dest2);
+
+    // Imported again: an update. Nothing is copied again and the playlist
+    // isn't doubled.
+    final again = await importPackage(folder, update);
+    expect(again.plan.update, isTrue);
+    expect((again.copied, again.kept), (0, 4));
+    expect(await tablet.addImportedPlaylist(again), contains('updated'));
     expect(tablet.playlists, hasLength(1));
+  });
+
+  test('update: only new or changed songs are copied, and dropped ones go', () async {
+    await tablet.addImportedPlaylist(await importPackage(await exportToFolder(pkg, out.path), update));
+
+    // The next export: Bohemian Rhapsody has come off the list, and
+    // Waterloo's MP3 is a different recording.
+    final smaller = PlaylistPackage(
+      name: pkg.name,
+      songs: pkg.songs.take(2).toList(),
+      sizes: {for (final s in pkg.songs.take(2)) for (final f in s.files) f: pkg.sizes[f]!},
+      sources: pkg.sources,
+    );
+    out.deleteSync(recursive: true);
+    out.createSync();
+    final exported = await exportToFolder(smaller, out.path);
+    final waterloo = File(p.join(exported, 'songs', 'Abba - Waterloo.mp3'))..writeAsBytesSync(List.filled(500, 1));
+    final r = await importPackage(exported, update);
+    expect((r.copied, r.kept), (1, 2)); // just the new Waterloo
+    await tablet.addImportedPlaylist(r);
+    final songs = Directory(p.join(r.plan.folder, 'songs'));
+    expect(File(p.join(songs.path, 'Abba - Waterloo.mp3')).lengthSync(), waterloo.lengthSync());
+    expect(File(p.join(songs.path, 'Queen - Bohemian Rhapsody.mp4')).existsSync(), isFalse);
+    expect(await tabletPlaylist(), ['Livin On A Prayer', 'Waterloo -2']);
+  });
+
+  test('keep both: the new one comes in beside it, with the date on', () async {
+    final folder = await exportToFolder(pkg, out.path);
+    await tablet.addImportedPlaylist(await importPackage(folder, update));
+    final r = await importPackage(folder, keepBoth);
+    expect(r.plan.name, 'Friday / Late (16 Nov)');
+    expect(r.plan.update, isFalse);
+    expect(r.plan.folder, p.join(tabletDir.path, 'EZTiger imports', 'Friday Late (16 Nov)'));
+    expect(await tablet.addImportedPlaylist(r), contains('added'));
+    expect(tablet.playlists.map((x) => x.name), containsAll(['Friday / Late', 'Friday / Late (16 Nov)']));
+    // A third the same day gets a number.
+    expect(tablet.labelledName('Friday / Late', DateTime(2026, 11, 16)), 'Friday / Late (16 Nov 2)');
+  });
+
+  test('cancelled at "Update or keep both?": nothing is copied', () async {
+    final folder = await exportToFolder(pkg, out.path);
+    await expectLater(importPackage(folder, (_) async => null), throwsA(isA<TransferCancelled>()));
+    expect(Directory(tablet.importsRoot).existsSync(), isFalse);
   });
 
   test('one zip for Dropbox: exported, then unpacked on the tablet', () async {
     final zip = await exportToZip(pkg, out.path);
     expect(p.basename(zip), 'EZTiger export - Friday Late.zip');
     expect(isPackage(zip), isTrue);
-    final (got, dest) = await importPackage(zip, tablet.importFolderFor, workDir: tablet.importsRoot);
-    expect(File(p.join(dest, 'songs', 'Queen - Bohemian Rhapsody.mp4')).existsSync(), isTrue);
-    await tablet.addImportedPlaylist(got, dest);
+    final r = await importPackage(zip, update);
+    expect(File(p.join(r.plan.folder, 'songs', 'Queen - Bohemian Rhapsody.mp4')).existsSync(), isTrue);
+    expect(File(p.join(r.plan.folder, manifestName)).existsSync(), isTrue);
+    await tablet.addImportedPlaylist(r);
     expect(await tabletPlaylist(), expected);
-    // Nothing half-unpacked is left behind.
-    expect(Directory(tablet.importsRoot).listSync().map((e) => p.basename(e.path)), isNot(contains(startsWith('.incoming'))));
+    // The same zip again: an update, with nothing to unpack.
+    final again = await importPackage(zip, update);
+    expect((again.copied, again.kept), (0, 4));
   });
 
   test('over the Wi-Fi: the PC sends, the tablet receives with the code', () async {
@@ -112,18 +166,25 @@ void main() {
     await sender.start();
     addTearDown(sender.stop);
     await expectLater(
-      receivePackage('127.0.0.1', '1111', tablet.importFolderFor, port: sender.boundPort),
+      receivePackage('127.0.0.1', '1111', update, port: sender.boundPort),
       throwsA(isA<TransferException>()),
     );
     final seen = <String>[];
-    final (got, dest) = await receivePackage('127.0.0.1', '4821', tablet.importFolderFor,
+    final r = await receivePackage('127.0.0.1', '4821', update,
         port: sender.boundPort, onProgress: (d, t, f) => seen.add(f));
     expect(seen, contains('Abba - Waterloo.cdg'));
     expect(sender.bytesSent, pkg.totalBytes);
-    expect(File(p.join(dest, manifestName)).existsSync(), isTrue);
-    expect(Directory(p.join(dest, 'songs')).listSync().where((f) => f.path.endsWith('.part')), isEmpty);
-    await tablet.addImportedPlaylist(got, dest);
+    expect(sender.finished, isTrue);
+    expect(File(p.join(r.plan.folder, manifestName)).existsSync(), isTrue);
+    expect(Directory(p.join(r.plan.folder, 'songs')).listSync().where((f) => f.path.endsWith('.part')), isEmpty);
+    await tablet.addImportedPlaylist(r);
     expect(await tabletPlaylist(), expected);
-    expect(jsonDecode(File(p.join(dest, manifestName)).readAsStringSync())['eztiger_playlist'], 1);
+    expect(jsonDecode(File(p.join(r.plan.folder, manifestName)).readAsStringSync())['eztiger_playlist'], 1);
+
+    // Sent again: the tablet already has every song, so none is sent.
+    final sent = sender.bytesSent;
+    final again = await receivePackage('127.0.0.1', '4821', update, port: sender.boundPort);
+    expect((again.copied, again.kept), (0, 4));
+    expect(sender.bytesSent, sent); // marked done, nothing more sent
   });
 }
