@@ -82,7 +82,8 @@ Future<void> showLyricsDelay(BuildContext context) {
             minimumSize: const Size(0, 40),
             padding: const EdgeInsets.symmetric(horizontal: 8),
           ),
-          onPressed: () => s.setLyricsDelayMs(ms + by),
+          // The time now, not when the dialog last redrew: quick taps all count.
+          onPressed: () => s.setLyricsDelayMs(s.lyricsDelayMs + by),
           child: Text(label, style: const TextStyle(fontSize: 12)),
         );
         return AlertDialog(
