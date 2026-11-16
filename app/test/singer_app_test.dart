@@ -183,6 +183,9 @@ void main() {
     );
     await tester.tap(find.text('open'));
     await settle(tester);
+    // The box scrolls down to the code (as Next on the keyboard does).
+    await tester.ensureVisible(find.byKey(const Key('receive-code')));
+    await settle(tester);
     await tester.tap(find.byKey(const Key('receive-code')));
     await settle(tester);
     expect(tester.takeException(), isNull, reason: 'nothing squashed off the box');
