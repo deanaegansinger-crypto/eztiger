@@ -1,14 +1,21 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Directory, File, HttpClient, Platform;
+import 'dart:isolate';
 
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show FocusNode;
+import 'package:path/path.dart' as p;
 
 import 'edition.dart';
+import 'local_address.dart';
 import 'platform.dart';
 import 'player.dart';
+import 'playlist_transfer.dart';
+import 'song_requests.dart';
 import 'sync.dart';
+import 'vocal_remover.dart';
 import 'ui/common.dart' show SongDrag;
 
 enum PlayMode { single, autoplay }
@@ -18,7 +25,10 @@ enum ResultsView { search, playlist, history }
 /// Everything the screens show, and every action they can take.
 class AppState extends ChangeNotifier {
   /// [deckB] is the second player for Pro's 2-deck mode.
-  AppState(this.db, KaraokeEngine deckA, {KaraokeEngine? deckB}) : decks = [deckA, ?deckB] {
+  /// [analyseMedia] works out a song's key and tempo from its file (the
+  /// real one decodes it through libmpv, see [analyseInBackground]); without
+  /// it the players show no key or tempo.
+  AppState(this.db, KaraokeEngine deckA, {KaraokeEngine? deckB, this.analyseMedia}) : decks = [deckA, ?deckB] {
     for (final d in decks) {
       d.onFinished = () {
         if (identical(d, engine)) _onTrackFinished();
@@ -31,7 +41,9 @@ class AppState extends ChangeNotifier {
 
       _deckListeners.add(onChange);
       d.keyShiftFor = (t) => isPro ? keyShifts[t.path] ?? 0 : 0;
+      d.instrumentalFor = (t) => isPro ? vocalRemoved[t.path] : null;
       d.onKeyShift = _rememberKey;
+      if (analyseMedia != null) d.analyse = (t, media) => keyAndTempo(t, media, d.tempDir);
       d.addListener(onChange);
     }
   }
@@ -84,6 +96,26 @@ class AppState extends ChangeNotifier {
   /// In the stage view: the lyrics on the right and the buttons on the
   /// left, instead of the other way round.
   bool stageLyricsRight = false;
+
+  /// Rescan the library each time EZtiger starts. Off: rescan by hand with
+  /// 🔄 Rescan when songs have been added or renamed.
+  bool rescanOnStart = false;
+
+  /// Song table columns: widths changed by dragging ("table.column" →
+  /// weight) and columns hidden.
+  Map<String, double> columnWeights = {};
+  Set<String> hiddenColumns = {};
+
+  /// The audience songbook: its heading, where it is online (for the QR
+  /// code), and a fingerprint of the song list last saved, to tell when the
+  /// library has changed since.
+  String songbookTitle = '';
+  String songbookUrl = '';
+  String songbookSaved = '';
+
+  /// True when songs were added, removed or retitled since the songbook was
+  /// last saved (false if it was never saved).
+  bool songbookOutOfDate = false;
 
   /// The Library / Playlists box is folded away, for more room for the songs.
   bool libraryCollapsed = false;
@@ -215,12 +247,17 @@ class AppState extends ChangeNotifier {
   Future<void> init({bool rescanLibrary = true}) async {
     await _loadSettings();
     await _loadKeys();
+    await _loadVocalRemoved();
     _applyFadeShape();
     await _reloadFolders();
     await _reloadQueue();
     await _reloadPlaylists();
     await refreshResults();
-    if (rescanLibrary && roots.isNotEmpty) unawaited(rescan());
+    if (rescanLibrary && rescanOnStart && roots.isNotEmpty) {
+      unawaited(rescan());
+    } else {
+      unawaited(checkSongbook());
+    }
   }
 
   /// Pro was switched on by a licence key: bring back the Pro settings
@@ -246,6 +283,17 @@ class AppState extends ChangeNotifier {
       crossfade = m['crossfade'] as bool? ?? crossfade;
       stageView = m['stage'] as bool? ?? stageView;
       stageLyricsRight = m['stageLyricsRight'] as bool? ?? stageLyricsRight;
+      rescanOnStart = m['rescanOnStart'] as bool? ?? rescanOnStart;
+      columnWeights = {
+        for (final e in ((m['columnWeights'] as Map?) ?? const {}).entries)
+          if (e.value is num) e.key as String: (e.value as num).toDouble(),
+      };
+      hiddenColumns = {...((m['hiddenColumns'] as List?) ?? const []).whereType<String>()};
+      songbookTitle = m['songbookTitle'] as String? ?? songbookTitle;
+      songbookUrl = m['songbookUrl'] as String? ?? songbookUrl;
+      songbookSaved = m['songbookSaved'] as String? ?? songbookSaved;
+      requestsLink = m['requestsLink'] as String? ?? requestsLink;
+      transferHost = m['transferHost'] as String? ?? transferHost;
       libraryCollapsed = m['libraryCollapsed'] as bool? ?? libraryCollapsed;
       lockEnabled = m['lockEnabled'] as bool? ?? lockEnabled;
       doubleClickToQueue = m['doubleClickToQueue'] as bool? ?? doubleClickToQueue;
@@ -292,6 +340,14 @@ class AppState extends ChangeNotifier {
       'textScale': textScale,
       'stage': stageView,
       'stageLyricsRight': stageLyricsRight,
+      'rescanOnStart': rescanOnStart,
+      'columnWeights': columnWeights,
+      'hiddenColumns': hiddenColumns.toList()..sort(),
+      'songbookTitle': songbookTitle,
+      'songbookUrl': songbookUrl,
+      'songbookSaved': songbookSaved,
+      'requestsLink': requestsLink,
+      'transferHost': transferHost,
       'libraryCollapsed': libraryCollapsed,
       'lockEnabled': lockEnabled,
       'doubleClickToQueue': doubleClickToQueue,
@@ -350,6 +406,35 @@ class AppState extends ChangeNotifier {
   void setStageView(bool v) {
     stageView = v;
     notifyListeners();
+  }
+
+  // ------------------------------------------------- key and tempo
+
+  /// Decodes a file and works out its key and tempo: (media path, temp dir).
+  final Future<TrackAnalysis?> Function(String media, String tempDir)? analyseMedia;
+  final Map<String, Future<TrackAnalysis?>> _analysing = {};
+
+  /// A song's key and tempo: saved in the database after the first time it
+  /// loads, so later loads show them at once. Both players asking for the
+  /// same song share one analysis.
+  Future<TrackAnalysis?> keyAndTempo(Track t, String media, String tempDir) {
+    final analyse = analyseMedia;
+    if (analyse == null) return Future.value(null);
+    return _analysing[t.path] ??= () async {
+      try {
+        final saved = await db.analysis.forTrack(t);
+        if (saved != null) return saved.result;
+        final r = await analyse(media, tempDir);
+        await db.analysis.save(t, r);
+        return r;
+      } catch (_) {
+        return null;
+      } finally {
+        // Keep it in memory only while it's being worked out; the database
+        // has it after that (and notices a changed file).
+        unawaited(Future<void>(() => _analysing.remove(t.path)));
+      }
+    }();
   }
 
   // ------------------------------------------------- Pro sound options
@@ -441,7 +526,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> _doCueStandby() async {
     final sb = standby;
-    if (sb == null || _oldFading) return;
+    if (sb == null || _oldFading || holdForReview) return;
     final up = upNext;
     if (up == null) {
       standbyQueueId = null;
@@ -568,6 +653,103 @@ class AppState extends ChangeNotifier {
     scanning = false;
     await _reloadFolders();
     await refreshResults();
+    await checkSongbook();
+  }
+
+  // ------------------------------------------------------------ songbook
+
+  /// The songbook web page for the library as it is now. Call
+  /// [songbookWasSaved] with its fingerprint once it is saved.
+  Future<({String html, String fingerprint, int count})> buildSongbook() async {
+    final songs = await db.tracks.songbook();
+    final html = songbookHtml(title: songbookTitle, songs: songs);
+    return (html: html, fingerprint: _fingerprint(songs), count: songs.length);
+  }
+
+  void songbookWasSaved(String fingerprint) {
+    songbookSaved = fingerprint;
+    songbookOutOfDate = false;
+    notifyListeners();
+  }
+
+  void setColumnWeights(String table, Map<String, double> weights) {
+    for (final e in weights.entries) {
+      columnWeights['$table.${e.key}'] = e.value;
+    }
+    notifyListeners();
+  }
+
+  /// Shows or hides a column ("table.column").
+  void toggleColumn(String key) {
+    if (!hiddenColumns.remove(key)) hiddenColumns.add(key);
+    notifyListeners();
+  }
+
+  void resetColumns(String table) {
+    columnWeights.removeWhere((k, _) => k.startsWith('$table.'));
+    hiddenColumns.removeWhere((k) => k.startsWith('$table.'));
+    notifyListeners();
+  }
+
+  void setRescanOnStart(bool v) {
+    rescanOnStart = v;
+    notifyListeners();
+  }
+
+  void setSongbook({String? title, String? url}) {
+    songbookTitle = title ?? songbookTitle;
+    songbookUrl = url ?? songbookUrl;
+    notifyListeners();
+  }
+
+  /// This PC's address on the network it's on now (see [thisPcAddress]),
+  /// worked out each time EZTiger starts, as venues and routers change.
+  String? pcAddress;
+
+  /// Finds [pcAddress]; replaced in tests.
+  Future<String?> Function() findPcAddress = thisPcAddress;
+
+  Future<String?> detectPcAddress() async {
+    pcAddress = await findPcAddress();
+    notifyListeners();
+    return pcAddress;
+  }
+
+  /// True when the QR code points at a PC on the local network, and that
+  /// isn't this PC's address now (a different venue or router).
+  bool get qrLinkOutOfDate {
+    final ip = pcAddress;
+    if (ip == null || !isLocalNetworkUrl(songbookUrl)) return false;
+    return Uri.tryParse(songbookUrl.trim())?.host != ip;
+  }
+
+  /// Moves the QR code's link to this PC's address now.
+  void useThisPcForQr() {
+    final ip = pcAddress;
+    if (ip == null) return;
+    setSongbook(url: isLocalNetworkUrl(songbookUrl) ? withAddress(songbookUrl, ip) : requestPageUrl(ip));
+  }
+
+  /// Compares the library with the songbook last saved.
+  Future<void> checkSongbook() async {
+    if (songbookSaved.isEmpty) return;
+    final now = _fingerprint(await db.tracks.songbook());
+    final out = now != songbookSaved;
+    if (out != songbookOutOfDate) {
+      songbookOutOfDate = out;
+      notifyListeners();
+    }
+  }
+
+  /// A short fingerprint of a song list (FNV-1a), the same from run to run.
+  static String _fingerprint(List<SongbookEntry> songs) {
+    var h = 0x811c9dc5;
+    for (final s in songs) {
+      for (final c in '${s.artist}\u0001${s.title}\u0002'.codeUnits) {
+        h = ((h ^ c) * 0x01000193) & 0xffffffff;
+      }
+    }
+    return '${songs.length}-${h.toRadixString(16)}';
   }
 
   Future<void> toggleExpanded(Folder f) async {
@@ -657,6 +839,7 @@ class AppState extends ChangeNotifier {
     await db.tracks.editTags(t.id, title: title, artist: artist, type: type);
     await _reloadQueue();
     await refreshResults();
+    await checkSongbook();
   }
 
   // --------------------------------------------------------------- queue
@@ -691,6 +874,7 @@ class AppState extends ChangeNotifier {
   /// Autocue: whenever the player is empty, the top of the queue is loaded
   /// paused, ready to go.
   Future<void> _autocue() async {
+    if (holdForReview) return;
     final next = upNext;
     if (autocue && engine.current == null && !_fading && next != null) {
       await _cue(next, autostart: false);
@@ -759,6 +943,288 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ------------------------------------------- playlists to the tablet
+
+  /// Where imported playlists' songs go: an "EZTiger imports" folder on the
+  /// same storage as the library (the SD card), each playlist in a folder of
+  /// its own. [importsRootOverride] is for tests.
+  String? importsRootOverride;
+  String get importsRoot {
+    if (importsRootOverride != null) return importsRootOverride!;
+    final first = roots.firstOrNull?.path;
+    if (first != null) {
+      final volume = RegExp(r'^(/storage/[^/]+(?:/0)?)').firstMatch(first)?.group(1);
+      return p.join(volume ?? p.dirname(first), 'EZTiger imports');
+    }
+    return p.join(Platform.isAndroid ? '/storage/emulated/0/Music' : Directory.systemTemp.path, 'EZTiger imports');
+  }
+
+  String importFolderFor(PlaylistPackage pkg) => p.join(importsRoot, safeName(pkg.name));
+
+  /// The address of the PC last received from, for next time.
+  String transferHost = '';
+
+  void setTransferHost(String host) {
+    transferHost = host.trim();
+    notifyListeners();
+  }
+
+  /// After an import or a receive: the songs (copied into [folder]) go into
+  /// the library, and the playlist is made again (replacing one of the same
+  /// name), with its keys. Returns a line saying what happened.
+  Future<String> addImportedPlaylist(PlaylistPackage pkg, String folder) async {
+    final rootsNow = await db.folders.roots();
+    final holder = rootsNow.where((r) => p.equals(r.path, folder) || p.isWithin(r.path, folder)).firstOrNull;
+    if (holder != null) {
+      await scanner.scanRoot(holder.id);
+    } else {
+      await scanner.addAndScan(p.dirname(folder)); // "EZTiger imports" joins the library
+    }
+    final ids = <int>[];
+    final missing = <String>[];
+    var keys = 0;
+    for (final s in pkg.songs) {
+      final t = await db.tracks.byPath(p.join(folder, songsFolder, s.play));
+      if (t == null) {
+        missing.add(s.title);
+        continue;
+      }
+      ids.add(t.id);
+      if (s.key != 0) {
+        keyShifts[t.path] = s.key.clamp(KaraokeEngine.minKey, KaraokeEngine.maxKey);
+        keys++;
+      }
+    }
+    if (keys > 0) await db.setMeta('key_shifts', jsonEncode(keyShifts));
+    final name = pkg.name.trim().isEmpty ? 'Imported' : pkg.name.trim();
+    for (final old in await db.playlists.all()) {
+      if (old.name.toLowerCase() == name.toLowerCase()) await db.playlists.delete(old.id);
+    }
+    final id = await db.playlists.create(name);
+    await db.playlists.addAll(id, ids);
+    await _reloadFolders();
+    await _reloadPlaylists();
+    await refreshResults();
+    status = '✓ ★ $name: ${ids.length} song${ids.length == 1 ? '' : 's'} in your library'
+        '${missing.isEmpty ? '' : ' (${missing.length} could not be read: ${missing.take(3).join(', ')})'}';
+    notifyListeners();
+    return status;
+  }
+
+  // ------------------------------------------------- remove vocals (AI)
+
+  /// Pro on Windows: makes AI instrumentals (see [VocalRemover]); null when
+  /// the tools aren't installed (Basic, the tablet, tests).
+  VocalRemover? vocalRemover;
+
+  /// Each song's AI instrumental: the song's path → the instrumental's.
+  Map<String, String> vocalRemoved = {};
+
+  /// Songs waiting to have their vocals removed, and the one being done.
+  final List<Track> vocalJobs = [];
+  Track? vocalJob;
+  String vocalJobStep = '';
+  DateTime? _vocalJobSince;
+  Timer? _vocalTicker;
+
+  Future<void> _loadVocalRemoved() async {
+    try {
+      final m = jsonDecode(await db.getMeta('vocal_removed') ?? '{}') as Map<String, dynamic>;
+      vocalRemoved = {for (final e in m.entries) if (e.value is String) e.key: e.value as String};
+    } catch (_) {}
+  }
+
+  /// True when [t] has an AI instrumental that's still there.
+  bool hasInstrumental(Track t) {
+    final path = vocalRemoved[t.path];
+    return path != null && File(path).existsSync();
+  }
+
+  /// Queues [tracks] to have their vocals removed, one at a time in the
+  /// background. Instrumentals themselves are skipped.
+  void removeVocals(List<Track> tracks) {
+    if (vocalRemover == null) return;
+    for (final t in tracks) {
+      if (VocalRemover.isInstrumental(t.path)) continue;
+      if (vocalJob?.path == t.path || vocalJobs.any((j) => j.path == t.path)) continue;
+      vocalJobs.add(t);
+    }
+    notifyListeners();
+    if (vocalJob == null) unawaited(_runVocalJobs());
+  }
+
+  Future<void> _runVocalJobs() async {
+    final remover = vocalRemover;
+    if (remover == null) return;
+    var made = 0;
+    String? lastOut;
+    final failed = <String>[];
+    while (vocalJobs.isNotEmpty) {
+      final t = vocalJob = vocalJobs.removeAt(0);
+      _vocalJobSince = DateTime.now();
+      vocalJobStep = 'Starting…';
+      _vocalTicker?.cancel();
+      _vocalTicker = Timer.periodic(const Duration(seconds: 1), (_) => _showVocalJob());
+      _showVocalJob();
+      try {
+        final out = await remover.remove(t, onStep: (s) {
+          vocalJobStep = s;
+          _showVocalJob();
+        });
+        vocalRemoved[t.path] = out;
+        await db.setMeta('vocal_removed', jsonEncode(vocalRemoved));
+        made++;
+        lastOut = out;
+        for (final d in decks) {
+          await d.instrumentalReady(t);
+        }
+      } catch (e) {
+        failed.add('${t.title}: $e');
+      }
+    }
+    _vocalTicker?.cancel();
+    vocalJob = null;
+    vocalJobStep = '';
+    // The instrumentals go into the library, so they can be found and queued.
+    if (made > 0) await _scanVocalRemovedFolder(remover.outDir);
+    status = [
+      if (made > 0) '✓ Vocals removed from $made song${made == 1 ? '' : 's'}: in ${p.basename(p.dirname(lastOut!))}',
+      if (failed.isNotEmpty) '⚠ Could not remove vocals: ${failed.join('; ')}',
+    ].join('   ');
+    notifyListeners();
+  }
+
+  void _showVocalJob() {
+    final t = vocalJob;
+    if (t == null) return;
+    final secs = DateTime.now().difference(_vocalJobSince ?? DateTime.now()).inSeconds;
+    final left = vocalJobs.isEmpty ? '' : ' (${vocalJobs.length} more waiting)';
+    status = '🎤 Removing vocals: ${t.title} – $vocalJobStep ${secs ~/ 60}:${(secs % 60).toString().padLeft(2, '0')}$left';
+    notifyListeners();
+  }
+
+  Future<void> _scanVocalRemovedFolder(String folder) async {
+    try {
+      final roots = await db.folders.roots();
+      final root = roots.where((r) => p.equals(r.path, folder)).firstOrNull;
+      if (root == null) {
+        await scanner.addAndScan(folder);
+      } else {
+        await scanner.scanRoot(root.id);
+      }
+      await _reloadFolders();
+      await refreshResults();
+    } catch (_) {
+      // The instrumentals are made; they'll be found at the next rescan.
+    }
+  }
+
+  // ------------------------------------------------------- song requests
+
+  /// The song-request list's link (☰ Menu → Song requests). While EZTiger is
+  /// open, each song the DJ adds to the singing queue there comes into
+  /// Tonight's playlist with the singer's name. Empty: off. On the PC that
+  /// runs the request list ("Start song requests") it is `localhost:8080`;
+  /// a tablet uses the DJ link that the request list's window shows.
+  String requestsLink = Platform.isWindows ? 'localhost:8080' : '';
+
+  /// How the link to the request list is doing, for the menu.
+  RequestsState requestsState = RequestsState.off;
+
+  Timer? _requestsTimer;
+  bool _requestsBusy = false;
+  HttpClient? _requestsHttp;
+
+  /// Requests already put in Tonight's playlist (true) or not found (false),
+  /// so one is never added twice while the request list is told.
+  final Map<String, bool> _requestsTaken = {};
+
+  /// Starts checking the request list every few seconds (or stops, when the
+  /// link is empty). Called once EZTiger is on screen.
+  void startSongRequests() {
+    _requestsTimer?.cancel();
+    _requestsTimer = null;
+    if (RequestServer.parse(requestsLink) == null) {
+      _setRequestsState(RequestsState.off);
+      return;
+    }
+    _setRequestsState(RequestsState.connecting);
+    _requestsTimer = Timer.periodic(const Duration(seconds: 3), (_) => checkSongRequests());
+    unawaited(checkSongRequests());
+  }
+
+  void setRequestsLink(String link) {
+    requestsLink = link.trim();
+    _requestsTaken.clear();
+    notifyListeners();
+    startSongRequests();
+  }
+
+  void _setRequestsState(RequestsState v) {
+    if (requestsState == v) return;
+    requestsState = v;
+    notifyListeners();
+  }
+
+  /// Puts the songs waiting in the request list's singing queue into
+  /// Tonight's playlist, in order, each with its singer's name.
+  Future<void> checkSongRequests() async {
+    final server = RequestServer.parse(requestsLink);
+    if (server == null || _requestsBusy) return;
+    _requestsBusy = true;
+    try {
+      final http = _requestsHttp ??= HttpClient()..connectionTimeout = const Duration(seconds: 3);
+      final waiting = await server.waiting(http);
+      _setRequestsState(RequestsState.connected);
+      for (final r in waiting) {
+        if (!_requestsTaken.containsKey(r.id)) {
+          final t = await findRequestedSong(r);
+          if (t != null) await enqueue(t, singer: r.singer.isEmpty ? null : r.singer);
+          _requestsTaken[r.id] = t != null;
+          status = t != null
+              ? '🎤 From the request list: ${r.singer.isEmpty ? '' : '${r.singer} – '}${t.title}'
+              : '⚠ Request not in the library: ${r.title} – ${r.artist}${r.singer.isEmpty ? '' : ' (${r.singer})'}';
+          notifyListeners();
+        }
+        await server.collected(http, r.id, found: _requestsTaken[r.id]!);
+      }
+    } on RequestServerRefused {
+      _setRequestsState(RequestsState.needsCode);
+    } catch (_) {
+      _setRequestsState(RequestsState.unreachable);
+    } finally {
+      _requestsBusy = false;
+    }
+  }
+
+  /// The library's copy of a requested song: the exact file when the request
+  /// list knows it, else the song with the same title (and artist).
+  Future<Track?> findRequestedSong(SongRequest r) async {
+    if (r.path.isNotEmpty) {
+      final t = await db.tracks.byPath(r.path);
+      if (t != null) return t;
+    }
+    if (r.file.isNotEmpty) {
+      final t = await db.tracks.byPathEnding(r.file);
+      if (t != null) return t;
+    }
+    final title = normalize(r.title), artist = normalize(r.artist);
+    if (title.isEmpty) return null;
+    bool sameArtist(Track t) {
+      final a = normalize(t.artist ?? '');
+      return artist.isEmpty || a == artist || (a.isNotEmpty && (a.contains(artist) || artist.contains(a)));
+    }
+
+    for (final q in ['${r.title} ${r.artist}', r.title]) {
+      for (final g in await db.search.search(q, limit: 30)) {
+        for (final t in g.versions) {
+          if (normalize(t.title) == title && sameArtist(t)) return t;
+        }
+      }
+    }
+    return null;
+  }
+
   // ------------------------------------------------------------- playing
 
   /// Plays a queue entry now.
@@ -766,6 +1232,7 @@ class AppState extends ChangeNotifier {
 
   /// Plays a track straight away, without queueing it.
   Future<void> playNow(Track t, {bool autostart = true}) async {
+    holdForReview = false;
     nowPlayingQueueId = null;
     _endFade();
     await engine.load(t, autostart: autostart, skipSilence: autocue);
@@ -796,6 +1263,7 @@ class AppState extends ChangeNotifier {
   Future<void> previous() => engine.restart();
 
   Future<void> _cue(QueueEntry e, {required bool autostart, Duration? fadeIn, Duration? fadeOutOld}) async {
+    holdForReview = false;
     if (standby != null) return _cueOnOtherDeck(e, autostart: autostart, fadeIn: fadeIn, fadeOutOld: fadeOutOld);
     nowPlayingQueueId = e.id;
     _endFade();
@@ -1120,11 +1588,22 @@ class AppState extends ChangeNotifier {
   int? queuePlaylistId;
   Playlist? get queuePlaylist => playlists.where((p) => p.id == queuePlaylistId).firstOrNull;
 
-  /// Adds a saved playlist's songs to the queue, and remembers it.
+  /// True after a playlist is loaded into the queue while nothing plays:
+  /// the players stay empty so the running order can be checked first.
+  /// Starting a song (double-click the top one) ends it; with 2 decks the
+  /// next song then waits on the other deck as usual.
+  bool holdForReview = false;
+
+  /// Adds a saved playlist's songs to the queue, and remembers it. Nothing
+  /// is loaded into the players unless a song is already playing.
   Future<void> loadPlaylistIntoQueue(int playlistId) async {
     final p = playlists.where((p) => p.id == playlistId).firstOrNull;
     if (p == null) return;
-    status = 'Added "${p.name}" to $theQueue';
+    final idle = !engine.playing && !(standby?.playing ?? false);
+    if (idle) holdForReview = true;
+    status = idle
+        ? 'Added "${p.name}" to $theQueue: check the order, then double-click the first song to start'
+        : 'Added "${p.name}" to $theQueue';
     await enqueueAll(await db.playlists.tracks(playlistId));
     queuePlaylistId = playlistId;
     notifyListeners();
@@ -1169,9 +1648,24 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _debounce?.cancel();
+    _requestsTimer?.cancel();
+    _requestsHttp?.close(force: true);
+    _vocalTicker?.cancel();
     for (final (i, d) in decks.indexed) {
       d.removeListener(_deckListeners[i]);
     }
     super.dispose();
   }
 }
+
+/// The real key and tempo analysis: decodes [media] with the libmpv the app
+/// ships, in a background isolate, so the screen never stalls.
+Future<TrackAnalysis?> analyseInBackground(String media, String tempDir) {
+  final lib = libmpvPath();
+  return Isolate.run(() => analyseMediaFile(media, tempDir: tempDir, libmpvPath: lib));
+}
+
+/// Where the app's libmpv is: beside eztiger.exe on Windows; found by name
+/// elsewhere.
+String libmpvPath() =>
+    Platform.isWindows ? p.join(p.dirname(Platform.resolvedExecutable), defaultLibmpvName()) : defaultLibmpvName();

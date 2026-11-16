@@ -5,11 +5,16 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>
+    <!-- Song requests: the tablet asks the song-request list on the DJ's PC
+         (plain http on the venue Wi-Fi, so cleartext is allowed) for the songs
+         to add to Tonight's playlist. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
 
     <application
         android:label="EZtiger"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"

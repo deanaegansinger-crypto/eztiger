@@ -1,7 +1,9 @@
 import 'package:sqflite_common/sqlite_api.dart';
 
 import '../text.dart';
+import '../audio/track_analysis.dart';
 import 'models.dart';
+import 'schema.dart' show trackAnalysisStatement;
 import 'search.dart';
 
 const String trackSelect = 'SELECT t.*, f.path AS folder_path FROM tracks t JOIN folders f ON f.id = t.folder_id';
@@ -80,6 +82,31 @@ class TrackDao {
   final Database db;
   final bool hasFts;
 
+  /// Every song in the searchable library, once each (several versions of a
+  /// song count once), for the audience songbook: by artist, then title.
+  Future<List<SongbookEntry>> songbook() async {
+    final rows = await db.rawQuery('''
+SELECT COALESCE(t.user_title, t.title) AS title, COALESCE(t.user_artist, t.artist) AS artist
+FROM tracks t JOIN folders f ON f.id = t.folder_id
+WHERE f.included = 1''');
+    final seen = <String>{};
+    final songs = <SongbookEntry>[];
+    for (final r in rows) {
+      final title = (r['title'] as String).trim();
+      final artist = (r['artist'] as String?)?.trim() ?? '';
+      if (title.isEmpty) continue;
+      if (seen.add('${normalize(artist)}|${normalize(title)}')) {
+        songs.add((title: title, artist: artist));
+      }
+    }
+    int by(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
+    songs.sort((a, b) {
+      final c = by(a.artist, b.artist);
+      return c != 0 ? c : by(a.title, b.title);
+    });
+    return songs;
+  }
+
   Future<Track?> byId(int id) async {
     final rows = await db.rawQuery('$trackSelect WHERE t.id = ?', [id]);
     return rows.isEmpty ? null : Track.fromRow(rows.first);
@@ -87,6 +114,18 @@ class TrackDao {
 
   Future<Track?> byPath(String path) async {
     final rows = await db.rawQuery('$trackSelect WHERE t.path = ?', [path]);
+    return rows.isEmpty ? null : Track.fromRow(rows.first);
+  }
+
+  /// The song whose file is [tail] inside some folder, such as
+  /// `Sunfly/SF001/SF001-01 - Abba - Waterloo.mp3`, ignoring case and `/` or
+  /// `\`: for a song named by another computer, whose library is somewhere
+  /// else. Null if there is none.
+  Future<Track?> byPathEnding(String tail) async {
+    final t = '/${tail.replaceAll('\\', '/').replaceFirst(RegExp(r'^/+'), '')}';
+    if (t.length < 2) return null;
+    final rows = await db.rawQuery(
+        "$trackSelect WHERE substr(REPLACE(LOWER(t.path), '\\', '/'), -?) = LOWER(?) LIMIT 1", [t.length, t]);
     return rows.isEmpty ? null : Track.fromRow(rows.first);
   }
 
@@ -385,4 +424,32 @@ List<T> moveBlockIn<T>(List<T> list, Iterable<int> positions, int to) {
   final before = pos.where((p) => p < to).length;
   rest.insertAll((to - before).clamp(0, rest.length), block);
   return rest;
+}
+
+/// The key and tempo saved for each song (see [trackAnalysisStatement]).
+class AnalysisDao {
+  AnalysisDao(this.db);
+  final Database db;
+
+  /// What was saved for [track], or null when it hasn't been analysed or the
+  /// file has changed since. A saved row with no key means the analysis was
+  /// tried and couldn't tell, so it isn't tried again on every load.
+  Future<({TrackAnalysis? result})?> forTrack(Track track) async {
+    final rows = await db.query('track_analysis', where: 'path = ?', whereArgs: [track.path]);
+    if (rows.isEmpty) return null;
+    final r = rows.first;
+    if (r['size'] != track.size || r['mtime'] != track.mtime) return null;
+    final key = parseKeyName(r['musical_key'] as String?);
+    final bpm = (r['bpm'] as num?)?.toDouble();
+    if (key == null || bpm == null) return (result: null);
+    return (result: TrackAnalysis(pitchClass: key.$1, minor: key.$2, bpm: bpm));
+  }
+
+  /// Saves [result] for [track] (null: it couldn't tell).
+  Future<void> save(Track track, TrackAnalysis? result) => db.rawInsert(
+    'INSERT INTO track_analysis(path, size, mtime, musical_key, bpm, analysed_at) VALUES(?, ?, ?, ?, ?, ?) '
+    'ON CONFLICT(path) DO UPDATE SET size = excluded.size, mtime = excluded.mtime, '
+    'musical_key = excluded.musical_key, bpm = excluded.bpm, analysed_at = excluded.analysed_at',
+    [track.path, track.size, track.mtime, result?.key, result?.bpm, _now()],
+  );
 }

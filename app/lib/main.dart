@@ -20,6 +20,7 @@ import 'player.dart';
 import 'second_screen.dart';
 import 'ui/android_folders.dart';
 import 'ui/app.dart';
+import 'vocal_remover.dart';
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,7 +63,14 @@ Future<void> main(List<String> args) async {
     backends[KaraokeEngine(backend)] = backend;
   }
   final decks = backends.keys.toList();
-  final state = AppState(db, decks[0], deckB: decks.length > 1 ? decks[1] : null);
+  final state = AppState(
+    db,
+    decks[0],
+    deckB: decks.length > 1 ? decks[1] : null,
+    analyseMedia: analyseInBackground, // the key and BPM on the players
+  );
+  // Pro: "Remove vocals (AI)", when its tools came with the installer.
+  if (builtAsPro) state.vocalRemover = await VocalRemover.forThisPc();
   await state.init();
   licence?.addListener(state.editionChanged);
 
@@ -77,6 +85,7 @@ Future<void> main(List<String> args) async {
   );
   WidgetsBinding.instance.addPostFrameCallback((_) {
     state.startUp();
+    state.startSongRequests();
     licence?.recheckInBackground();
   });
 }
@@ -118,7 +127,10 @@ Future<void> runOnTablet() async {
     ),
   );
   WidgetsBinding.instance.addPostFrameCallback((_) async {
-    if (!canRead && state.roots.isNotEmpty && await ensureStorageAccess()) await state.rescan();
+    if (!canRead && state.rescanOnStart && state.roots.isNotEmpty && await ensureStorageAccess()) {
+      await state.rescan();
+    }
     await state.startUp();
+    state.startSongRequests();
   });
 }

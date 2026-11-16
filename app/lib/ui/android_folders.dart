@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
 
+import '../playlist_transfer.dart' show isPackage;
 import '../theme.dart';
 
 /// Asks Android for "All files access", which the app needs to read the
@@ -62,9 +63,13 @@ Future<List<StorageRoot>> storageRoots() async {
   return roots;
 }
 
+/// The browser for "Import playlist": finds an EZTiger export (a folder or
+/// a zip) on the tablet, an SD card or a USB stick. Returns it, or null.
+Future<String?> pickAndroidExport(BuildContext context) => pickAndroidFolder(context, exports: true);
+
 /// A simple folder browser for the tablet, used by "Add folder". Returns the
 /// chosen folder, or null if cancelled.
-Future<String?> pickAndroidFolder(BuildContext context) async {
+Future<String?> pickAndroidFolder(BuildContext context, {bool exports = false}) async {
   if (!await ensureStorageAccess()) {
     if (context.mounted) {
       await showDialog<void>(
@@ -85,11 +90,15 @@ Future<String?> pickAndroidFolder(BuildContext context) async {
     return null;
   }
   if (!context.mounted) return null;
-  return showDialog<String>(context: context, builder: (_) => const _FolderBrowser());
+  return showDialog<String>(context: context, builder: (_) => _FolderBrowser(exports: exports));
 }
 
 class _FolderBrowser extends StatefulWidget {
-  const _FolderBrowser();
+  const _FolderBrowser({this.exports = false});
+
+  /// Looking for an EZTiger export: zips show too, and an export folder is
+  /// the thing to choose.
+  final bool exports;
   @override
   State<_FolderBrowser> createState() => _FolderBrowserState();
 }
@@ -98,6 +107,7 @@ class _FolderBrowserState extends State<_FolderBrowser> {
   List<StorageRoot>? roots; // null while loading
   String? dir; // null: the list of storage places
   List<Directory> subfolders = [];
+  List<File> zips = [];
 
   @override
   void initState() {
@@ -109,11 +119,16 @@ class _FolderBrowserState extends State<_FolderBrowser> {
 
   void _open(String? path) {
     var subs = <Directory>[];
+    var zipFiles = <File>[];
     if (path != null) {
       try {
-        subs =
-            Directory(path).listSync().whereType<Directory>().where((d) => !p.basename(d.path).startsWith('.')).toList()
-              ..sort((a, b) => p.basename(a.path).toLowerCase().compareTo(p.basename(b.path).toLowerCase()));
+        final all = Directory(path).listSync().where((e) => !p.basename(e.path).startsWith('.')).toList();
+        int byName(FileSystemEntity a, FileSystemEntity b) =>
+            p.basename(a.path).toLowerCase().compareTo(p.basename(b.path).toLowerCase());
+        subs = all.whereType<Directory>().toList()..sort(byName);
+        if (widget.exports) {
+          zipFiles = all.whereType<File>().where((f) => f.path.toLowerCase().endsWith('.zip')).toList()..sort(byName);
+        }
       } catch (_) {
         // Unreadable: show it empty.
       }
@@ -121,6 +136,7 @@ class _FolderBrowserState extends State<_FolderBrowser> {
     setState(() {
       dir = path;
       subfolders = subs;
+      zips = zipFiles;
     });
   }
 
@@ -133,8 +149,9 @@ class _FolderBrowserState extends State<_FolderBrowser> {
   @override
   Widget build(BuildContext context) {
     final d = dir;
+    final isExport = widget.exports && d != null && isPackage(d);
     return AlertDialog(
-      title: Text(d == null ? 'Choose your karaoke folder' : p.basename(d)),
+      title: Text(d == null ? (widget.exports ? 'Find the EZTiger export' : 'Choose your karaoke folder') : p.basename(d)),
       content: SizedBox(
         width: 520,
         height: 420,
@@ -152,21 +169,35 @@ class _FolderBrowserState extends State<_FolderBrowser> {
                   subtitle: Text(r.path),
                   onTap: () => _open(r.path),
                 )
-            else if (subfolders.isEmpty)
-              const ListTile(title: Text('No folders in here.'))
-            else
+            else if (subfolders.isEmpty && zips.isEmpty)
+              ListTile(title: Text(isExport ? 'This is an EZTiger export: press Import it.' : 'No folders in here.'))
+            else ...[
               for (final f in subfolders)
                 ListTile(
-                  leading: Icon(Icons.folder, color: EzColors.brass),
+                  leading: Icon(
+                    widget.exports && isPackage(f.path) ? Icons.queue_music : Icons.folder,
+                    color: widget.exports && isPackage(f.path) ? EzColors.cyan : EzColors.brass,
+                  ),
                   title: Text(p.basename(f.path)),
+                  subtitle: widget.exports && isPackage(f.path) ? const Text('EZTiger export') : null,
                   onTap: () => _open(f.path),
                 ),
+              for (final z in zips)
+                ListTile(
+                  leading: Icon(Icons.archive_outlined, color: EzColors.cyan),
+                  title: Text(p.basename(z.path)),
+                  subtitle: Text('${(z.lengthSync() / 1048576).toStringAsFixed(0)} MB zip · tap to import'),
+                  onTap: () => Navigator.pop(context, z.path),
+                ),
+            ],
           ],
         ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        if (d != null) FilledButton(onPressed: () => Navigator.pop(context, d), child: const Text('Use this folder')),
+        if (d != null && !widget.exports)
+          FilledButton(onPressed: () => Navigator.pop(context, d), child: const Text('Use this folder')),
+        if (isExport) FilledButton(onPressed: () => Navigator.pop(context, d), child: const Text('Import it')),
       ],
     );
   }

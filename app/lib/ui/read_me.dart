@@ -160,7 +160,8 @@ const _pro = (
   [
     'KEY, under the volume: − and + move the song down or up a semitone, as far as 3 either way. The 0 in the middle puts it back. EZTiger remembers the key for each song, and when a song loads in a changed key, "KEY +2" (or −) flashes red on the player and the Stage view.',
     'Level, under the volume: evens out the loudness, so quiet and loud MP3s and videos play at about the same level. It takes a moment to settle at the start of a song.',
-    'Vocal cut, under the volume: takes out the lead vocal on most stereo tracks (it cancels what sits in the middle, and keeps the bass). It works best on studio recordings; reverb and backing vocals can still come through.',
+    'Vocal cut, under the volume: takes out the lead vocal on most stereo tracks. It finds what sits in the middle, frequency by frequency, and takes just that out, keeping the rest of the mix, its stereo spread and the bass. It works best on studio recordings; an instrument in the middle with the singer comes down a little too, and reverb and backing vocals can still come through. A song with an AI instrumental (below) plays that instead.',
+    'Remove vocals (AI): right-click a song, or a block of songs, → 🎤 Remove vocals (AI). The Demucs AI model splits the song into its parts and mixes everything but the vocals into an instrumental, saved in your Music folder in EZVocalremoved, named like the original with EZVocrem on the end (EZVocrem is on the end of its title tag too), with its CDG lyrics beside it. It takes a minute or two a song (longer without a suitable graphics card); the bar at the bottom shows how it\'s going, and you can carry on meanwhile. The first time, the model (84 MB) downloads. After that, Vocal cut on that song plays the instrumental, and the EZVocalremoved folder is in your library to search.',
     '2 decks (☰ Menu, under Playback): deck A and deck B sit side by side across the top and share Tonight\'s playlist. The deck marked ON AIR is playing; the other shows the song waiting to come in, ready to start straight away. Its ⇄ button mixes into it now.',
     'Stage view with 2 decks: both decks run across the top of the screen, with Restart / Play / Next on the deck ON AIR and ⇄ on the next one, so the lyrics and Up next get the room below.',
     'Each deck has its own − KEY +: set the key of the song waiting on the other deck before it comes in, in the library or the Stage view. EZTiger remembers it for that song.',
@@ -175,18 +176,19 @@ const _pro = (
     'When nothing is playing (cued, paused or stopped) the lyrics screen, the Stage view and the second screen show the spinning logo and what is up next, instead of frozen lyrics.',
     'Skins (☰ Menu → Skin): six looks for the whole app.',
     'Sync PC ⇄ tablet (☰ Menu): Save sync file writes your playlists and song keys to EZtiger-sync.json. Copy it to the tablet (or put it in the library folder before you copy that), then Load sync file there. It works the other way round too. Songs are matched by where they sit in the library folder, or by file name.',
+    'A playlist with its songs, PC to tablet: right-click a playlist on the PC → 📤 Export to USB, SD card or Dropbox (as a folder, or one zip) or 📶 Send to the tablet over Wi-Fi (it shows the PC\'s address and a code). On the tablet, ☰ Menu → Import playlist… or Receive from PC…. Every song, with its CDG and lyrics, is copied into the tablet\'s EZTiger imports folder, and the playlist comes back with its keys.',
   ],
 );
 
 /// The Pro lines that apply on the tablet: no Level or Vocal cut (the
 /// tablet's sound engine doesn't have them).
-bool _onTablet(String line) => !['Level', 'Vocal cut'].any(line.startsWith);
+bool _onTablet(String line) => !['Level', 'Vocal cut', 'Remove vocals'].any(line.startsWith);
 
 const _sections = <(String, List<String>)>[
   (
     'Getting started',
     [
-      'Library tab: click Add folder and pick your karaoke folder. EZtiger scans it, and rescans it each time it starts.',
+      'Library tab: click Add folder and pick your karaoke folder. EZtiger scans it. When you add, remove or rename songs later, press 🔄 Rescan (next to Add folder, or in the ☰ Menu). To rescan every time EZtiger starts, tick "Rescan at start-up" in the Menu.',
       'The arrow at the right of the Library / Playlists tabs folds that box away, for more room for the song list. Tap a tab to bring it back.',
       'Type in the search box to find songs by title or artist. Use the type filter (CDG, MP4…) and the A–Z sort above the list.',
     ],
@@ -197,6 +199,7 @@ const _sections = <(String, List<String>)>[
       'Double-click a song in the list to load it into the player, paused. Or drag it onto the player.',
       'Space plays and pauses. ⏮ goes back to the start, ⏭ (or Ctrl+→) moves on to the next song in the queue.',
       'Drag the bar under the player to skip through a song.',
+      'KEY and BPM, top right of the player: the song\'s musical key (C, C#, D … and Am, F#m … for minor keys) and its tempo in beats a minute. EZTiger works them out the first time a song loads (about a second; "KEY … BPM …" shows meanwhile) and remembers them, so after that they show straight away. With the key moved in Pro, it shows the key the song plays in now, with its own key after it: KEY E (D+2). They are worked out by ear, so the odd song can come out at half or double its tempo, or in its relative minor or major.',
     ],
   ),
   (
@@ -228,6 +231,29 @@ const _sections = <(String, List<String>)>[
     ],
   ),
   _secondScreen,
+  (
+    'Columns',
+    [
+      'Drag the line at the right of a column heading to make that column wider or narrower (in the song list and the queue).',
+      'Right-click a column heading (press and hold on the tablet) to show or hide columns, or Reset columns to put them back.',
+    ],
+  ),
+  (
+    'Audience songbook',
+    [
+      '☰ Menu → Songbook: a web page of your songs (titles and artists only) that people search on their phones by scanning a QR code.',
+      'Give it a heading, press Save songbook page and upload the file (index.html) to a free web page such as GitHub Pages. Put that web address in the box, then Show QR code puts the code on screen; it\'s also a button in the stage view.',
+      'After adding songs or correcting titles, the Menu says the songbook "needs updating": save it again and upload the new file over the old one.',
+    ],
+  ),
+  (
+    'Song requests from phones',
+    [
+      'Singers send requests from their phones over the venue Wi-Fi to the song-request list ("Start song requests" on the PC), which needs no internet. New requests wait there until you add them to its singing queue, or reject them.',
+      'Each song you add to that singing queue comes into Tonight\'s playlist here by itself, with the singer\'s name, while EZTiger is open. The request list shows "✓ In EZTiger" beside it, or "Not found in EZTiger" if the song isn\'t in your library.',
+      '☰ Menu → Song requests: on the PC that runs the request list the link is localhost:8080 (already set). On a tablet, type the DJ link from the request list\'s window, the one ending ?key=…, and press Connect. The Menu says "connected" while it works.',
+    ],
+  ),
   (
     'Your settings',
     [

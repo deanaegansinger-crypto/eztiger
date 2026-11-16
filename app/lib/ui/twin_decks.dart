@@ -6,6 +6,7 @@ import '../app_state.dart';
 import '../player.dart';
 import '../theme.dart';
 import 'common.dart';
+import 'key_tempo.dart';
 import 'pro_sound.dart';
 
 /// EZTiger Pro, 2 decks: deck A and deck B side by side across the top.
@@ -97,7 +98,13 @@ class _DeckCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 KeyWarning(engine: e, fontSize: 9 * z),
-                const Spacer(),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: KeyTempo(engine: e, fontSize: 9 * z),
+                  ),
+                ),
+                if (t != null) SizedBox(width: 8 * z),
                 if (t != null && e.duration > Duration.zero)
                   Text(
                     '-${fmt(left.isNegative ? Duration.zero : left)}',

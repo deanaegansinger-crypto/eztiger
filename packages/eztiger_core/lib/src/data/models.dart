@@ -194,3 +194,6 @@ class HistoryEntry {
   final DateTime sungAt;
   final Track track;
 }
+
+/// One song in the audience songbook: just what the audience needs to see.
+typedef SongbookEntry = ({String title, String artist});
