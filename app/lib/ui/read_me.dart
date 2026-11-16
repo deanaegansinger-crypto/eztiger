@@ -33,8 +33,8 @@ Future<void> showReadMe(BuildContext context) => showDialog<void>(
                   in touchUi
                       ? [
                           _tablet,
-                          if (isPro) (_pro.$1, _pro.$2.where(_onTablet).toList()),
-                          ..._sections.where((x) => x != _secondScreen),
+                          if (isPro) (singerApp ? 'Singing' : _pro.$1, _pro.$2.where(_onTablet).toList()),
+                          ..._sections.where((x) => x != _secondScreen && !(singerApp && _hostOnly.contains(x))),
                         ]
                       : [if (isPro) _pro, ..._sections]) ...[
                 Padding(
@@ -182,7 +182,29 @@ const _pro = (
 
 /// The Pro lines that apply on the tablet: no Level or Vocal cut (the
 /// tablet's sound engine doesn't have them).
-bool _onTablet(String line) => !['Level', 'Vocal cut', 'Remove vocals'].any(line.startsWith);
+bool _onTablet(String line) =>
+    !['Level', 'Vocal cut', 'Remove vocals', if (singerApp) 'Sync PC'].any(line.startsWith);
+
+/// The host's sections, left out of the singer app's Read me.
+const _hostOnly = [_songbook, _requests];
+
+const _songbook = (
+  'Audience songbook',
+  [
+    '☰ Menu → Songbook: a web page of your songs (titles and artists only) that people search on their phones by scanning a QR code.',
+    'Give it a heading, press Save songbook page and upload the file (index.html) to a free web page such as GitHub Pages. Put that web address in the box, then Show QR code puts the code on screen; it\'s also a button in the stage view.',
+    'After adding songs or correcting titles, the Menu says the songbook "needs updating": save it again and upload the new file over the old one.',
+  ],
+);
+
+const _requests = (
+  'Song requests from phones',
+  [
+    'Singers send requests from their phones over the venue Wi-Fi to the song-request list ("Start song requests" on the PC), which needs no internet. New requests wait there until you add them to its singing queue, or reject them.',
+    'Each song you add to that singing queue comes into Tonight\'s playlist here by itself, with the singer\'s name, while EZTiger is open. The request list shows "✓ In EZTiger" beside it, or "Not found in EZTiger" if the song isn\'t in your library.',
+    '☰ Menu → Song requests: on the PC that runs the request list the link is localhost:8080 (already set). On a tablet, type the DJ link from the request list\'s window, the one ending ?key=…, and press Connect. The Menu says "connected" while it works.',
+  ],
+);
 
 const _sections = <(String, List<String>)>[
   (
@@ -239,22 +261,8 @@ const _sections = <(String, List<String>)>[
       'Right-click a column heading (press and hold on the tablet) to show or hide columns, or Reset columns to put them back.',
     ],
   ),
-  (
-    'Audience songbook',
-    [
-      '☰ Menu → Songbook: a web page of your songs (titles and artists only) that people search on their phones by scanning a QR code.',
-      'Give it a heading, press Save songbook page and upload the file (index.html) to a free web page such as GitHub Pages. Put that web address in the box, then Show QR code puts the code on screen; it\'s also a button in the stage view.',
-      'After adding songs or correcting titles, the Menu says the songbook "needs updating": save it again and upload the new file over the old one.',
-    ],
-  ),
-  (
-    'Song requests from phones',
-    [
-      'Singers send requests from their phones over the venue Wi-Fi to the song-request list ("Start song requests" on the PC), which needs no internet. New requests wait there until you add them to its singing queue, or reject them.',
-      'Each song you add to that singing queue comes into Tonight\'s playlist here by itself, with the singer\'s name, while EZTiger is open. The request list shows "✓ In EZTiger" beside it, or "Not found in EZTiger" if the song isn\'t in your library.',
-      '☰ Menu → Song requests: on the PC that runs the request list the link is localhost:8080 (already set). On a tablet, type the DJ link from the request list\'s window, the one ending ?key=…, and press Connect. The Menu says "connected" while it works.',
-    ],
-  ),
+  _songbook,
+  _requests,
   (
     'Your settings',
     [
@@ -281,6 +289,8 @@ const _tablet = (
     'Double-tap a song to load it into the player. Press and hold a song, then move your finger to drag it onto the queue, the player or a playlist.',
     'Press and hold and let go without moving for the menu (what right-click does on Windows): add to queue, set the singer, playlists and more.',
     'Double-tap the karaoke output panel for full screen lyrics; double-tap again or press Back to come out of it. The screen stays on while EZtiger is open.',
-    'Sync with the PC (☰ Menu): Load sync file brings in the playlists and song keys saved by EZTiger Pro on the PC; Save sync file sends yours back.',
+    'Playlists from the PC (☰ Menu): Import playlist… from a USB stick, SD card or Dropbox, or Receive from PC… over the Wi-Fi. When it\'s in, "Transfer successful" shows, with Receive another (or Import another) for the next one.',
+    'Portrait Stage view (☰ Menu → Stage tablet → Portrait): in the Stage view the tablet turns upright. The decks sit side by side at the top with the next songs scrolling under them, and the lyrics fill the bottom half. The ⟳ button in the Stage view switches between Portrait and Landscape.',
+    'Running out: when Up next is down to the last 2 songs, the Stage view says so: orange at 2 songs left, red at 1 and on the last song, so you can load more in time.',
   ],
 );

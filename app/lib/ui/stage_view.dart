@@ -5,6 +5,7 @@ import '../theme.dart';
 import 'common.dart';
 import '../app_state.dart';
 import '../edition.dart';
+import '../platform.dart';
 import 'lock.dart';
 import 'lyrics_delay.dart';
 import 'pro_sound.dart';
@@ -38,6 +39,28 @@ class StageView extends StatelessWidget {
             // lyrics are just the volume and what is next.
             final twin = isPro && s.twoDecks;
             final lyrics = _Lyrics(onFullScreen: onFullScreen);
+            // Upright (the singer app's portrait Stage view): the decks, the
+            // volume and Up next in the top half, the lyrics filling the
+            // bottom half.
+            if (c.maxHeight > c.maxWidth) {
+              return Column(
+                key: const Key('stage-portrait'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (twin) ...[const TwinDecks(stage: true, scale: 1.15), const SizedBox(height: 6)],
+                        Expanded(child: _Controls(compact: twin, portrait: true)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(child: lyrics),
+                ],
+              );
+            }
             final controls = _Controls(compact: twin);
             final sides = [Expanded(flex: 11, child: lyrics), Expanded(flex: 9, child: controls)];
             final body = side
@@ -85,10 +108,13 @@ class _Lyrics extends StatelessWidget {
 }
 
 class _Controls extends StatelessWidget {
-  const _Controls({this.compact = false});
+  const _Controls({this.compact = false, this.portrait = false});
 
   /// Pro, 2 decks: the song, time and transport are on the decks above.
   final bool compact;
+
+  /// The portrait Stage view: smaller, to leave room for Up next.
+  final bool portrait;
 
   // This widget is const, so the stage view's own rebuild skips it: listen
   // to the player here, or the time and seek bar stand still while playing.
@@ -114,8 +140,9 @@ class _Controls extends StatelessWidget {
             ),
             if (isPro) ...[const SizedBox(width: 10), KeyWarning(engine: e, fontSize: 16)],
             const Spacer(),
-            // The songbook's QR code, for the audience to scan.
-            if (s.songbookUrl.isNotEmpty) ...[
+            // The songbook's QR code, for the audience to scan (the host's
+            // tool: not in the singer app).
+            if (!singerApp && s.songbookUrl.isNotEmpty) ...[
               IconButton(
                 key: const Key('stage-qr'),
                 tooltip: 'Show the songbook QR code',
@@ -131,20 +158,38 @@ class _Controls extends StatelessWidget {
               const SizedBox(width: 10),
             ],
             if (isPro && s.lockEnabled) ...[const LockButton(big: true), const SizedBox(width: 10)],
-            // Swap the lyrics and the buttons left and right.
-            IconButton(
-              key: const Key('stage-swap'),
-              tooltip: s.stageLyricsRight ? 'Lyrics on the left' : 'Lyrics on the right',
-              iconSize: 30,
-              style: IconButton.styleFrom(
-                minimumSize: const Size(52, 52),
-                side: BorderSide(color: EzColors.cyan),
-                foregroundColor: EzColors.cyan,
+            // The singer app: turn the tablet upright, or back.
+            if (singerApp) ...[
+              IconButton(
+                key: const Key('stage-rotate'),
+                tooltip: s.stagePortrait ? 'Landscape' : 'Portrait',
+                iconSize: 30,
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(52, 52),
+                  side: BorderSide(color: EzColors.cyan),
+                  foregroundColor: EzColors.cyan,
+                ),
+                onPressed: () => s.setStagePortrait(!s.stagePortrait),
+                icon: const Icon(Icons.screen_rotation),
               ),
-              onPressed: () => s.setStageLyricsRight(!s.stageLyricsRight),
-              icon: const Icon(Icons.swap_horiz),
-            ),
-            const SizedBox(width: 10),
+              const SizedBox(width: 10),
+            ],
+            // Swap the lyrics and the buttons left and right.
+            if (!portrait) ...[
+              IconButton(
+                key: const Key('stage-swap'),
+                tooltip: s.stageLyricsRight ? 'Lyrics on the left' : 'Lyrics on the right',
+                iconSize: 30,
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(52, 52),
+                  side: BorderSide(color: EzColors.cyan),
+                  foregroundColor: EzColors.cyan,
+                ),
+                onPressed: () => s.setStageLyricsRight(!s.stageLyricsRight),
+                icon: const Icon(Icons.swap_horiz),
+              ),
+              const SizedBox(width: 10),
+            ],
             _BigButton(
               key: const Key('stage-exit'),
               icon: Icons.library_music,
@@ -157,10 +202,10 @@ class _Controls extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             e.error ?? t?.title ?? 'Pick a song to begin',
-            maxLines: 2,
+            maxLines: portrait ? 1 : 2,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 30,
+              fontSize: portrait ? 26 : 30,
               height: 1.1,
               fontWeight: FontWeight.w800,
               color: e.error != null ? EzColors.red : EzColors.brass,
@@ -192,15 +237,20 @@ class _Controls extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _RoundButton(key: const Key('stage-restart'), icon: Icons.skip_previous, size: 72, onTap: s.previous),
+              _RoundButton(
+                key: const Key('stage-restart'),
+                icon: Icons.skip_previous,
+                size: portrait ? 60 : 72,
+                onTap: s.previous,
+              ),
               _RoundButton(
                 key: const Key('stage-play'),
                 icon: e.playing ? Icons.pause : Icons.play_arrow,
-                size: 104,
+                size: portrait ? 84 : 104,
                 primary: true,
                 onTap: s.playPause,
               ),
-              _RoundButton(key: const Key('stage-next'), icon: Icons.skip_next, size: 72, onTap: s.next),
+              _RoundButton(key: const Key('stage-next'), icon: Icons.skip_next, size: portrait ? 60 : 72, onTap: s.next),
             ],
           ),
         ],
@@ -251,6 +301,20 @@ class _Controls extends StatelessWidget {
   }
 }
 
+/// The warning when Tonight's playlist is running out: the text, and true
+/// for the last song (red rather than orange). Null while there are more
+/// than [AppState.lowSongsWarning] songs to come, or nothing loaded at all.
+(String, bool)? lowSongsMessage(AppState s) {
+  final waiting = s.queue.where((q) => !q.played && q.id != s.nowPlayingQueueId).length;
+  final playing = s.nowPlayingQueueId != null && s.queue.any((q) => q.id == s.nowPlayingQueueId && !q.played);
+  if (waiting > AppState.lowSongsWarning || (waiting == 0 && !playing)) return null;
+  return switch (waiting) {
+    0 => ('Last song! Nothing after this one: load more', true),
+    1 => ('Only 1 song left after this: load more', true),
+    _ => ('Only $waiting songs left: load more soon', false),
+  };
+}
+
 /// The songs still to sing, in big type. Double-tap one to play it now.
 class _UpNext extends StatelessWidget {
   const _UpNext();
@@ -279,6 +343,32 @@ class _UpNext extends StatelessWidget {
               waiting.isEmpty ? 'UP NEXT · NOTHING QUEUED' : 'UP NEXT · ${waiting.length}',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: EzColors.brass, letterSpacing: 2),
             ),
+            // Running out: Tonight's playlist down to its last 2 songs.
+            if (lowSongsMessage(s) case (final text, final last)?)
+              Container(
+                key: const Key('stage-low-songs'),
+                margin: const EdgeInsets.only(top: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: (last ? EzColors.red : const Color(0xFFFF9800)).withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: last ? EzColors.red : const Color(0xFFFF9800), width: 2),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, size: 26, color: last ? EzColors.red : const Color(0xFFFF9800)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        text,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 4),
             Expanded(
               child: ListView(

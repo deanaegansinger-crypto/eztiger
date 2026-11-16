@@ -1,14 +1,19 @@
 /// Which edition this build is: EZTiger Basic or EZTiger Pro. Both are built
 /// from the same code, so every fix reaches both; Pro switches on the extra
 /// features. Build Pro with `--dart-define=EZ_EDITION=pro`.
+library;
+
+import 'platform.dart';
+
 const bool _builtAsPro = String.fromEnvironment('EZ_EDITION') == 'pro';
 
-/// This is the Pro build (the trial, or licensed).
-bool get builtAsPro => _builtAsPro;
+/// This is the Pro build (the trial, or licensed). The Android singer app is
+/// always one app with the Pro singing features, however it was built.
+bool get builtAsPro => _builtAsPro || singerApp;
 
 /// True while the Pro features are on: the Pro build on its trial or with a
 /// licence key. (Tests switch it on to try the Pro features.)
-bool isPro = _builtAsPro;
+bool isPro = builtAsPro;
 
 /// The app's name, as shown in the title bar and the Read me.
 String get editionName => isPro ? 'EZTiger Pro' : 'EZTiger Basic';

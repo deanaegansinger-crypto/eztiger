@@ -97,6 +97,27 @@ class AppState extends ChangeNotifier {
   /// left, instead of the other way round.
   bool stageLyricsRight = false;
 
+  /// The singer app: the tablet turns upright in the Stage view, with the
+  /// decks and Up next in the top half and the lyrics filling the bottom.
+  bool stagePortrait = false;
+
+  /// Turns the tablet: true for upright (the portrait Stage view), false
+  /// for landscape. Set by the Android app; nothing on Windows.
+  void Function(bool portrait)? onOrientation;
+
+  /// Asks for the orientation the screen should be in now.
+  void applyOrientation() => onOrientation?.call(stageView && stagePortrait);
+
+  void setStagePortrait(bool v) {
+    stagePortrait = v;
+    applyOrientation();
+    notifyListeners();
+  }
+
+  /// Up next counts down to this many songs before the Stage view warns
+  /// that Tonight's playlist is running out.
+  static const lowSongsWarning = 2;
+
   /// Rescan the library each time EZtiger starts. Off: rescan by hand with
   /// 🔄 Rescan when songs have been added or renamed.
   bool rescanOnStart = false;
@@ -313,6 +334,7 @@ class AppState extends ChangeNotifier {
       crossfade = m['crossfade'] as bool? ?? crossfade;
       stageView = m['stage'] as bool? ?? stageView;
       stageLyricsRight = m['stageLyricsRight'] as bool? ?? stageLyricsRight;
+      stagePortrait = m['stagePortrait'] as bool? ?? stagePortrait;
       rescanOnStart = m['rescanOnStart'] as bool? ?? rescanOnStart;
       columnWeights = {
         for (final e in ((m['columnWeights'] as Map?) ?? const {}).entries)
@@ -374,6 +396,7 @@ class AppState extends ChangeNotifier {
       'textScale': textScale,
       'stage': stageView,
       'stageLyricsRight': stageLyricsRight,
+      'stagePortrait': stagePortrait,
       'rescanOnStart': rescanOnStart,
       'columnWeights': columnWeights,
       'hiddenColumns': hiddenColumns.toList()..sort(),
@@ -441,6 +464,7 @@ class AppState extends ChangeNotifier {
 
   void setStageView(bool v) {
     stageView = v;
+    applyOrientation();
     notifyListeners();
   }
 
@@ -1207,7 +1231,8 @@ class AppState extends ChangeNotifier {
   void startSongRequests() {
     _requestsTimer?.cancel();
     _requestsTimer = null;
-    if (RequestServer.parse(requestsLink) == null) {
+    // The singer app takes no requests.
+    if (singerApp || RequestServer.parse(requestsLink) == null) {
       _setRequestsState(RequestsState.off);
       return;
     }

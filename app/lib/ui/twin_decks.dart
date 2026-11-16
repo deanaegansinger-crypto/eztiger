@@ -14,10 +14,14 @@ import 'pro_sound.dart';
 /// waiting to come in. Drop a song on either: on the live deck it plays
 /// now, on the other it becomes the next song.
 class TwinDecks extends StatelessWidget {
-  const TwinDecks({super.key, this.stage = false});
+  const TwinDecks({super.key, this.stage = false, this.scale});
 
   /// The Stage view's larger decks, across the top of the whole screen.
   final bool stage;
+
+  /// The decks' size, when not the usual (1, or 1.7 in the Stage view):
+  /// smaller in the portrait Stage view, side by side on an upright tablet.
+  final double? scale;
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +34,7 @@ class TwinDecks extends StatelessWidget {
           for (final i in [0, 1]) ...[
             if (i == 1) const SizedBox(width: 8),
             Expanded(
-              child: _DeckCard(index: i, z: stage ? 1.7 : 1),
+              child: _DeckCard(index: i, z: scale ?? (stage ? 1.7 : 1)),
             ),
           ],
         ],
