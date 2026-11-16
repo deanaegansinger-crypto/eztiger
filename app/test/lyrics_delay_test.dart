@@ -109,7 +109,9 @@ void main() {
 
     // Press and hold to set the time.
     await tester.longPress(find.byKey(const Key('lyrics-delay')));
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     expect(find.byKey(const Key('lyrics-delay-value')), findsOneWidget);
     await tester.tap(find.byKey(const Key('lyrics-delay-step50')));
     await tester.tap(find.byKey(const Key('lyrics-delay-step10')));
@@ -117,7 +119,9 @@ void main() {
     expect(state.lyricsDelayMs, 260);
     expect(find.text('0.26 s'), findsOneWidget);
     await tester.tap(find.text('Done'));
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     expect(find.text('+0.26s'), findsOneWidget);
 
     await tester.runAsync(() async {
