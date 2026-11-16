@@ -80,11 +80,13 @@ void main() {
   testWidgets('portrait Stage view: decks side by side on top, lyrics filling the bottom half', (tester) async {
     final turned = <bool>[];
     state.onOrientation = turned.add;
-    await pumpApp(tester, const Size(800, 1280));
+    // The library is landscape; the tablet turns upright for the Stage view.
+    await pumpApp(tester, const Size(1280, 800));
     await tester.runAsync(() => state.setTwoDecks(true));
     state.songbookUrl = 'https://example.com/songbook';
     state.setStagePortrait(true);
     state.setStageView(true);
+    tester.view.physicalSize = const Size(800, 1280);
     await tester.pump();
     expect(turned.last, isTrue, reason: 'the tablet turns upright');
     expect(find.byKey(const Key('stage-portrait')), findsOneWidget);
@@ -113,9 +115,10 @@ void main() {
   });
 
   testWidgets('portrait with one deck: the player compact, Up next and lyrics below', (tester) async {
-    await pumpApp(tester, const Size(800, 1280));
+    await pumpApp(tester, const Size(1280, 800));
     state.setStagePortrait(true);
     state.setStageView(true);
+    tester.view.physicalSize = const Size(800, 1280);
     await tester.pump();
     expect(find.byKey(const Key('stage-play')), findsOneWidget);
     expect(tester.getRect(find.byKey(const Key('stage-lyrics'))).top, closeTo(640, 20));
@@ -124,22 +127,32 @@ void main() {
 
   testWidgets('a warning when Tonight\'s playlist is down to its last 2 songs', (tester) async {
     await pumpApp(tester, const Size(1280, 800));
+    // Two more, so the list starts well above the warning.
+    await tester.runAsync(() async {
+      for (final g in state.results.take(2)) {
+        await state.enqueue(g.primary);
+      }
+    });
     state.setStageView(true);
     await tester.pump();
-    expect(lowSongsMessage(state), isNull, reason: '3 to come');
+    final q = [...state.queue];
+    expect(q, hasLength(5));
+    expect(lowSongsMessage(state), isNull, reason: '4 or 5 to come');
     expect(find.byKey(const Key('stage-low-songs')), findsNothing);
 
-    final q = [...state.queue];
-    await tester.runAsync(() => state.playEntry(q[0]));
+    // Sung in order: after the third starts, 2 are left.
+    for (final x in q.take(3)) {
+      await tester.runAsync(() => state.playEntry(x));
+    }
     await tester.pump();
     expect(lowSongsMessage(state), ('Only 2 songs left: load more soon', false));
     expect(find.byKey(const Key('stage-low-songs')), findsOneWidget);
 
-    await tester.runAsync(() => state.playEntry(q[1]));
+    await tester.runAsync(() => state.playEntry(q[3]));
     await tester.pump();
     expect(lowSongsMessage(state)?.$2, isTrue, reason: '1 left: red');
 
-    await tester.runAsync(() => state.playEntry(q[2]));
+    await tester.runAsync(() => state.playEntry(q[4]));
     await tester.pump();
     expect(lowSongsMessage(state), ('Last song! Nothing after this one: load more', true));
     expect(find.text('Last song! Nothing after this one: load more'), findsOneWidget);

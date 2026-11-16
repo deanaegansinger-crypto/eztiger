@@ -134,9 +134,13 @@ class _Controls extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(
-              t == null ? 'READY' : (e.playing ? 'NOW PLAYING' : 'CUED · PRESS PLAY'),
-              style: TextStyle(fontFamily: vfdFont, fontSize: 14, color: EzColors.vfdSub, letterSpacing: 2),
+            Flexible(
+              child: Text(
+                t == null ? 'READY' : (e.playing ? 'NOW PLAYING' : 'CUED · PRESS PLAY'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontFamily: vfdFont, fontSize: 14, color: EzColors.vfdSub, letterSpacing: 2),
+              ),
             ),
             if (isPro) ...[const SizedBox(width: 10), KeyWarning(engine: e, fontSize: 16)],
             const Spacer(),
