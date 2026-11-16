@@ -140,19 +140,20 @@ void main() {
     expect(lowSongsMessage(state), isNull, reason: '4 or 5 to come');
     expect(find.byKey(const Key('stage-low-songs')), findsNothing);
 
-    // Sung in order: after the third starts, 2 are left.
-    for (final x in q.take(3)) {
-      await tester.runAsync(() => state.playEntry(x));
-    }
+    // Sung in order, with Next: on the third song, 2 are left.
+    await tester.runAsync(() => state.playEntry(q[0]));
+    await tester.runAsync(state.next);
+    expect(lowSongsMessage(state), isNull, reason: '3 to come');
+    await tester.runAsync(state.next);
     await tester.pump();
     expect(lowSongsMessage(state), ('Only 2 songs left: load more soon', false));
     expect(find.byKey(const Key('stage-low-songs')), findsOneWidget);
 
-    await tester.runAsync(() => state.playEntry(q[3]));
+    await tester.runAsync(state.next);
     await tester.pump();
     expect(lowSongsMessage(state)?.$2, isTrue, reason: '1 left: red');
 
-    await tester.runAsync(() => state.playEntry(q[4]));
+    await tester.runAsync(state.next);
     await tester.pump();
     expect(lowSongsMessage(state), ('Last song! Nothing after this one: load more', true));
     expect(find.text('Last song! Nothing after this one: load more'), findsOneWidget);
