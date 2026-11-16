@@ -173,6 +173,36 @@ class AppState extends ChangeNotifier {
   }
 
   static final textScaleChoices = {1.0: 'Normal', 1.25: 'Large', 1.5: 'Extra large'};
+
+  /// Lyrics delay: holds the lyrics (CDG) and video back behind the sound,
+  /// for sound that is heard late, such as over Bluetooth to a mixer. It
+  /// switches on and off without losing the time set.
+  bool lyricsDelayOn = false;
+  int lyricsDelayMs = 200;
+  static const maxLyricsDelayMs = 1000;
+
+  /// The delay in use: [lyricsDelayMs] while switched on, otherwise none.
+  Duration get lyricsDelay => Duration(milliseconds: lyricsDelayOn ? lyricsDelayMs : 0);
+
+  void setLyricsDelayOn(bool on) {
+    lyricsDelayOn = on;
+    _applyLyricsDelay();
+    notifyListeners();
+  }
+
+  /// Sets the time (0 to 1 s, in milliseconds) and switches the delay on.
+  void setLyricsDelayMs(int ms) {
+    lyricsDelayMs = ms.clamp(0, maxLyricsDelayMs);
+    lyricsDelayOn = true;
+    _applyLyricsDelay();
+    notifyListeners();
+  }
+
+  void _applyLyricsDelay() {
+    for (final d in decks) {
+      unawaited(d.setLyricsDelay(lyricsDelay));
+    }
+  }
   bool autocue = true;
 
   // Library tree.
@@ -301,6 +331,10 @@ class AppState extends ChangeNotifier {
       final scale = (m['textScale'] as num?)?.toDouble();
       if (textScaleChoices.containsKey(scale)) textScale = scale!;
       autocue = m['autocue'] as bool? ?? autocue;
+      lyricsDelayOn = m['lyricsDelayOn'] as bool? ?? lyricsDelayOn;
+      final delayMs = m['lyricsDelayMs'] as int?;
+      if (delayMs != null && delayMs >= 0 && delayMs <= maxLyricsDelayMs) lyricsDelayMs = delayMs;
+      _applyLyricsDelay();
       final fadeMs = m['fadeMs'] as int?;
       fadeOutTime = fadeOutChoices.where((d) => d.inMilliseconds == fadeMs).firstOrNull ?? fadeOutTime;
       if (isPro && fadeMs != null && fadeMs >= 0 && fadeMs <= maxFade.inMilliseconds) {
@@ -353,6 +387,8 @@ class AppState extends ChangeNotifier {
       'doubleClickToQueue': doubleClickToQueue,
       'twoDecks': twoDecks,
       'autocue': autocue,
+      'lyricsDelayOn': lyricsDelayOn,
+      'lyricsDelayMs': lyricsDelayMs,
       'fadeMs': fadeOutTime.inMilliseconds,
       'fadeOverlap': fadeOverlap,
       'smoothFades': smoothFades,

@@ -27,6 +27,7 @@ import 'read_me.dart';
 import 'requests_dialog.dart';
 import '../song_requests.dart';
 import 'songbook_dialog.dart';
+import 'lyrics_delay.dart';
 import 'transfer_dialogs.dart';
 
 /// The left column of the mockup: player, settings, library, search and
@@ -911,6 +912,7 @@ class _VolumeRow extends StatelessWidget {
           ),
         ),
         Expanded(
+          flex: 4,
           child: SliderTheme(
             data: SliderTheme.of(context)
                 .copyWith(trackHeight: 3, thumbShape: RoundSliderThumbShape(enabledThumbRadius: touchUi ? 10 : 6)),
@@ -924,6 +926,11 @@ class _VolumeRow extends StatelessWidget {
             textAlign: TextAlign.right,
             style: TextStyle(fontSize: 11, color: context.ez.textDim),
           ),
+        ),
+        const SizedBox(width: 8),
+        // Shrinks rather than crowd out the volume on a narrow screen.
+        const Flexible(
+          child: FittedBox(fit: BoxFit.scaleDown, child: LyricsDelayButton()),
         ),
       ],
     );

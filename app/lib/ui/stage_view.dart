@@ -6,6 +6,7 @@ import 'common.dart';
 import '../app_state.dart';
 import '../edition.dart';
 import 'lock.dart';
+import 'lyrics_delay.dart';
 import 'pro_sound.dart';
 import 'output_panel.dart';
 import 'songbook_dialog.dart';
@@ -214,6 +215,7 @@ class _Controls extends StatelessWidget {
               icon: Icon(e.muted ? Icons.volume_off : Icons.volume_up, color: Colors.white70),
             ),
             Expanded(
+              flex: 4,
               child: SliderTheme(
                 data: SliderTheme.of(context).copyWith(
                   trackHeight: 8,
@@ -235,6 +237,10 @@ class _Controls extends StatelessWidget {
                 textAlign: TextAlign.right,
                 style: const TextStyle(fontSize: 18, color: Colors.white70),
               ),
+            ),
+            const SizedBox(width: 8),
+            const Flexible(
+              child: FittedBox(fit: BoxFit.scaleDown, child: LyricsDelayButton(big: true)),
             ),
           ],
         ),
