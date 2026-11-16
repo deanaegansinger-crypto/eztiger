@@ -8,8 +8,10 @@ import 'package:path/path.dart' as p;
 
 /// Taking a playlist, and the song files themselves, from EZTiger Pro on the
 /// PC to the tablet: as a folder or one zip (for a USB stick, an SD card or
-/// Dropbox), or straight over the Wi-Fi. The tablet copies every song into
+/// Dropbox), or straight over the Wi-Fi. The tablet copies the songs into
 /// its "EZTiger imports" folder and makes the playlist again, keys and all.
+/// A playlist it already has can be updated (only new or changed songs are
+/// copied) or kept beside the new one, under a dated name.
 ///
 /// A package is a folder (or zip) holding [manifestName] and a songs folder
 /// with each song's files: the song (MP3, zip or video) and its CDG and
@@ -198,93 +200,151 @@ bool isPackage(String path) {
   return name == manifestName.toLowerCase() || (name.endsWith('.zip') && name.startsWith('eztiger export'));
 }
 
-/// Where an imported playlist's songs go, once its name is known.
-typedef DestinationFor = String Function(PlaylistPackage pkg);
+/// Where an incoming playlist goes on the tablet, and under what name.
+class ImportPlan {
+  const ImportPlan({required this.name, required this.folder, this.update = false});
 
-/// Copies an export (a folder, its playlist file, or a zip) into a folder of
-/// its own ([destFor]) and returns what it holds and where it went. The
-/// songs end up in that folder's songs folder. Every song is copied, even
-/// one already on this device.
-Future<(PlaylistPackage, String)> importPackage(String source, DestinationFor destFor,
-    {required String workDir, TransferProgress? onProgress}) async {
-  if (source.toLowerCase().endsWith('.zip')) {
-    onProgress?.call(0, 1, p.basename(source));
-    // Straight from the zip to disk, a file at a time, then moved into place
-    // once the playlist's name is known.
-    final incoming = Directory(p.join(workDir, '.incoming-${DateTime.now().millisecondsSinceEpoch}'))
-      ..createSync(recursive: true);
-    final names = _unzip(source, incoming.path, onProgress);
-    final manifest = File(p.join(incoming.path, manifestName));
-    if (!manifest.existsSync()) {
-      incoming.deleteSync(recursive: true);
-      throw FormatException('This zip is not an EZTiger playlist export '
-          '(it holds ${names.take(4).join(', ')}${names.length > 4 ? '…' : ''}).');
-    }
-    final pkg = PlaylistPackage.fromJson(jsonDecode(manifest.readAsStringSync()) as Map<String, dynamic>);
-    final dest = destFor(pkg);
-    if (Directory(dest).existsSync()) Directory(dest).deleteSync(recursive: true);
-    Directory(p.dirname(dest)).createSync(recursive: true);
-    incoming.renameSync(dest);
-    onProgress?.call(1, 1, '');
-    return (pkg, dest);
+  /// The playlist's name on the tablet.
+  final String name;
+
+  /// Its own folder; the songs go in its songs folder.
+  final String folder;
+
+  /// True: it updates a playlist already on the tablet. Songs already there
+  /// (same name and size) aren't copied again, and ones no longer in the
+  /// playlist are taken out of its folder.
+  final bool update;
+}
+
+/// Decides, once the package's name is known, where it goes and whether it
+/// updates a playlist already there. Null cancels.
+typedef PlanFor = Future<ImportPlan?> Function(PlaylistPackage pkg);
+
+/// What an import or receive brought in.
+class ImportResult {
+  const ImportResult(this.pkg, this.plan, {this.copied = 0, this.kept = 0});
+  final PlaylistPackage pkg;
+  final ImportPlan plan;
+
+  /// Files copied, and files already on the tablet that were left as they were.
+  final int copied, kept;
+}
+
+/// The import was cancelled when asked Update or Keep both.
+class TransferCancelled implements Exception {
+  const TransferCancelled();
+}
+
+/// True if [f] is already there with [size] bytes, so it needn't be copied.
+bool _alreadyThere(File f, int? size) => size != null && f.existsSync() && f.lengthSync() == size;
+
+/// An update: takes out of the songs folder the files no longer in [pkg].
+void _tidy(String songsDir, PlaylistPackage pkg) {
+  final wanted = {for (final n in pkg.fileNames) n.toLowerCase()};
+  final dir = Directory(songsDir);
+  if (!dir.existsSync()) return;
+  for (final f in dir.listSync().whereType<File>()) {
+    if (!wanted.contains(p.basename(f.path).toLowerCase())) f.deleteSync();
   }
+}
+
+PlaylistPackage _parse(String json) => PlaylistPackage.fromJson(jsonDecode(json) as Map<String, dynamic>);
+
+/// Copies an export (a folder, its playlist file, or a zip) into the folder
+/// [planFor] picks. Songs already there with the same size aren't copied
+/// again, so updating a playlist only brings what is new or changed.
+Future<ImportResult> importPackage(String source, PlanFor planFor, {TransferProgress? onProgress}) async {
+  if (source.toLowerCase().endsWith('.zip')) return _importZip(source, planFor, onProgress);
   final folder = File(source).existsSync() ? p.dirname(source) : source;
   final manifest = File(p.join(folder, manifestName));
   if (!manifest.existsSync()) throw const FormatException('There is no EZTiger playlist export in that folder.');
-  final pkg = PlaylistPackage.fromJson(jsonDecode(manifest.readAsStringSync()) as Map<String, dynamic>);
-  final destDir = destFor(pkg);
-  final songs = Directory(p.join(destDir, songsFolder))..createSync(recursive: true);
-  var done = 0;
-  final total = pkg.fileNames.fold<int>(0, (a, n) {
-    final f = File(p.join(folder, songsFolder, n));
-    return a + (f.existsSync() ? f.lengthSync() : 0);
-  });
+  final pkg = _parse(manifest.readAsStringSync());
+  final plan = await planFor(pkg);
+  if (plan == null) throw const TransferCancelled();
+  final songs = Directory(p.join(plan.folder, songsFolder))..createSync(recursive: true);
+  var done = 0, copied = 0, kept = 0;
+  final todo = <String>[];
   for (final name in pkg.fileNames) {
     final from = File(p.join(folder, songsFolder, name));
     if (!from.existsSync()) continue;
+    if (_alreadyThere(File(p.join(songs.path, name)), from.lengthSync())) {
+      kept++;
+    } else {
+      todo.add(name);
+    }
+  }
+  final total = todo.fold<int>(0, (a, n) => a + File(p.join(folder, songsFolder, n)).lengthSync());
+  for (final name in todo) {
     final sink = File(p.join(songs.path, name)).openWrite();
-    await for (final chunk in from.openRead()) {
+    await for (final chunk in File(p.join(folder, songsFolder, name)).openRead()) {
       sink.add(chunk);
       done += chunk.length;
       onProgress?.call(done, total, name);
     }
     await sink.close();
+    copied++;
   }
-  manifest.copySync(p.join(destDir, manifestName));
+  if (plan.update) _tidy(songs.path, pkg);
+  manifest.copySync(p.join(plan.folder, manifestName));
   onProgress?.call(total, total, '');
-  return (pkg, destDir);
+  return ImportResult(pkg, plan, copied: copied, kept: kept);
 }
 
-/// Unpacks [zip] into [dir], a file at a time (a big zip never sits in
-/// memory), and returns the names in it. Names that would climb out of
-/// [dir] ("..") are skipped.
-List<String> _unzip(String zip, String dir, TransferProgress? onProgress) {
+/// A zip: reads its playlist first, then unpacks the songs straight into
+/// place, a file at a time (a big zip never sits in memory). Names that
+/// would climb out of the folder ("..") are skipped.
+Future<ImportResult> _importZip(String zip, PlanFor planFor, TransferProgress? onProgress) async {
+  onProgress?.call(0, 1, p.basename(zip));
   final input = InputFileStream(zip);
-  final names = <String>[];
   try {
     final archive = ZipDecoder().decodeStream(input);
-    final total = archive.where((f) => f.isFile).fold<int>(0, (a, f) => a + f.size);
-    var done = 0;
-    for (final f in archive) {
-      final parts = f.name.replaceAll('\\', '/').split('/').where((s) => s.isNotEmpty).toList();
-      if (parts.isEmpty || parts.contains('..')) continue;
-      names.add(parts.join('/'));
-      if (!f.isFile) continue;
-      final out = File(p.joinAll([dir, ...parts]));
-      out.parent.createSync(recursive: true);
-      final stream = OutputFileStream(out.path);
+    List<String> partsOf(ArchiveFile f) => f.name.replaceAll('\\', '/').split('/').where((s) => s.isNotEmpty).toList();
+    final manifest = archive.where((f) => f.isFile && partsOf(f).join('/') == manifestName).firstOrNull;
+    if (manifest == null) {
+      final names = [for (final f in archive) partsOf(f).join('/')];
+      throw FormatException('This zip is not an EZTiger playlist export '
+          '(it holds ${names.take(4).join(', ')}${names.length > 4 ? '…' : ''}).');
+    }
+    final bytes = OutputMemoryStream();
+    manifest.writeContent(bytes);
+    final json = utf8.decode(bytes.getBytes());
+    final pkg = _parse(json);
+    final plan = await planFor(pkg);
+    if (plan == null) throw const TransferCancelled();
+    final songs = Directory(p.join(plan.folder, songsFolder))..createSync(recursive: true);
+    final entries = [
+      for (final f in archive)
+        if (f.isFile && partsOf(f).length == 2 && partsOf(f).first == songsFolder && !partsOf(f).contains('..')) f,
+    ];
+    var copied = 0, kept = 0, done = 0;
+    final todo = <ArchiveFile>[];
+    for (final f in entries) {
+      if (_alreadyThere(File(p.join(songs.path, partsOf(f).last)), f.size)) {
+        kept++;
+      } else {
+        todo.add(f);
+      }
+    }
+    final total = todo.fold<int>(0, (a, f) => a + f.size);
+    for (final f in todo) {
+      final name = partsOf(f).last;
+      final out = OutputFileStream(p.join(songs.path, name));
       try {
-        f.writeContent(stream);
+        f.writeContent(out);
       } finally {
-        stream.closeSync();
+        out.closeSync();
       }
       done += f.size;
-      onProgress?.call(done, total, parts.last);
+      copied++;
+      onProgress?.call(done, total, name);
     }
+    if (plan.update) _tidy(songs.path, pkg);
+    File(p.join(plan.folder, manifestName)).writeAsStringSync(json);
+    onProgress?.call(1, 1, '');
+    return ImportResult(pkg, plan, copied: copied, kept: kept);
   } finally {
     input.closeSync();
   }
-  return names;
 }
 
 // ------------------------------------------------------------ over Wi-Fi
@@ -310,6 +370,9 @@ class PlaylistSender {
   /// Bytes sent so far, and the file being sent; for the PC's screen.
   int bytesSent = 0;
   String sending = '';
+
+  /// The tablet said it has everything.
+  bool finished = false;
   void Function()? onChange;
 
   Future<void> start() async {
@@ -328,6 +391,11 @@ class PlaylistSender {
       if (req.uri.queryParameters['code'] != code) {
         res.statusCode = HttpStatus.forbidden;
         res.write('Wrong code');
+      } else if (req.uri.path == '/eztiger/done') {
+        // The tablet has it all (songs it already had weren't sent).
+        finished = true;
+        bytesSent = pkg.totalBytes;
+        onChange?.call();
       } else if (req.uri.path == '/eztiger/playlist') {
         res.headers.contentType = ContentType.json;
         res.write(pkg.toJsonText());
@@ -360,9 +428,9 @@ class PlaylistSender {
 }
 
 /// The tablet's side: fetches the playlist offered by the PC at [host] with
-/// [code], copying every song into its own folder ([destFor]) and returning
-/// what it holds and where it went.
-Future<(PlaylistPackage, String)> receivePackage(String host, String code, DestinationFor destFor,
+/// [code] into the folder [planFor] picks. Songs already there with the same
+/// size aren't fetched again.
+Future<ImportResult> receivePackage(String host, String code, PlanFor planFor,
     {int port = PlaylistSender.defaultPort, TransferProgress? onProgress}) async {
   final http = HttpClient()..connectionTimeout = const Duration(seconds: 6);
   try {
@@ -374,11 +442,17 @@ Future<(PlaylistPackage, String)> receivePackage(String host, String code, Desti
     if (res.statusCode == HttpStatus.forbidden) throw const TransferException('The code is wrong: check it on the PC.');
     if (res.statusCode != HttpStatus.ok) throw TransferException('The PC answered ${res.statusCode}.');
     final pkg = PlaylistPackage.fromJson(jsonDecode(body) as Map<String, dynamic>);
-    final destDir = destFor(pkg);
-    final songs = Directory(p.join(destDir, songsFolder))..createSync(recursive: true);
-    var done = 0;
-    final total = pkg.totalBytes;
-    for (final name in pkg.fileNames) {
+    final plan = await planFor(pkg);
+    if (plan == null) throw const TransferCancelled();
+    final songs = Directory(p.join(plan.folder, songsFolder))..createSync(recursive: true);
+    var done = 0, copied = 0;
+    final todo = [
+      for (final name in pkg.fileNames)
+        if (!_alreadyThere(File(p.join(songs.path, name)), pkg.sizes[name])) name,
+    ];
+    final kept = pkg.fileNames.length - todo.length;
+    final total = todo.fold<int>(0, (a, n) => a + (pkg.sizes[n] ?? 0));
+    for (final name in todo) {
       onProgress?.call(done, total, name);
       final r = await (await http.getUrl(at('/eztiger/file', {'name': name}))).close();
       if (r.statusCode != HttpStatus.ok) {
@@ -396,10 +470,17 @@ Future<(PlaylistPackage, String)> receivePackage(String host, String code, Desti
       final target = File(p.join(songs.path, name));
       if (target.existsSync()) target.deleteSync();
       part.renameSync(target.path);
+      copied++;
     }
-    File(p.join(destDir, manifestName)).writeAsStringSync(pkg.toJsonText());
+    if (plan.update) _tidy(songs.path, pkg);
+    File(p.join(plan.folder, manifestName)).writeAsStringSync(pkg.toJsonText());
+    try {
+      await (await (await http.getUrl(at('/eztiger/done'))).close()).drain<void>();
+    } catch (_) {
+      // Only the PC's screen misses out.
+    }
     onProgress?.call(total, total, '');
-    return (pkg, destDir);
+    return ImportResult(pkg, plan, copied: copied, kept: kept);
   } on SocketException {
     throw TransferException("Can't reach the PC at $host. Is it on the same Wi-Fi, with Send to tablet open?");
   } finally {

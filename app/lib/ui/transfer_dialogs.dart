@@ -265,15 +265,8 @@ Future<void> importPlaylist(BuildContext context) async {
     barrierDismissible: false,
     builder: (_) => _CopyDialog(
       title: 'Importing the playlist',
-      run: (s, progress) async {
-        final (pkg, folder) = await importPackage(
-          source,
-          s.importFolderFor,
-          workDir: s.importsRoot,
-          onProgress: progress,
-        );
-        return s.addImportedPlaylist(pkg, folder);
-      },
+      run: (s, progress) async =>
+          s.addImportedPlaylist(await importPackage(source, askUpdateOrNew(context, s), onProgress: progress)),
     ),
   );
 }
@@ -323,13 +316,62 @@ Future<void> receivePlaylist(BuildContext context) async {
     barrierDismissible: false,
     builder: (_) => _CopyDialog(
       title: 'Receiving the playlist',
-      run: (s, progress) async {
-        final (pkg, folder) = await receivePackage(h, c, s.importFolderFor, onProgress: progress);
-        return s.addImportedPlaylist(pkg, folder);
-      },
+      run: (s, progress) async =>
+          s.addImportedPlaylist(await receivePackage(h, c, askUpdateOrNew(context, s), onProgress: progress)),
     ),
   );
 }
+
+/// When the playlist coming in has the name of one already on the tablet:
+/// update that one, or keep both (the new one under a dated name)?
+PlanFor askUpdateOrNew(BuildContext context, AppState s) => (pkg) async {
+  final plain = s.importPlan(pkg);
+  if (!plain.update) return plain;
+  if (!context.mounted) return null;
+  final both = s.labelledName(plain.name);
+  final choice = await showDialog<String>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      title: Text('You already have ★ ${plain.name}'),
+      content: SizedBox(
+        width: 460,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Update it to match the PC, or keep both?'),
+            const SizedBox(height: 12),
+            const Text(
+              'Update: the playlist takes the new order and keys. Only new or changed songs are copied; '
+              'songs taken off the list are removed from its folder.',
+            ),
+            const SizedBox(height: 8),
+            Text('Keep both: this one comes in as ★ $both, beside the one you have.'),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        OutlinedButton(
+          key: const Key('import-keep-both'),
+          onPressed: () => Navigator.pop(context, 'both'),
+          child: const Text('Keep both'),
+        ),
+        FilledButton(
+          key: const Key('import-update'),
+          onPressed: () => Navigator.pop(context, 'update'),
+          child: const Text('Update'),
+        ),
+      ],
+    ),
+  );
+  return switch (choice) {
+    'update' => plain,
+    'both' => s.importPlan(pkg, keepBoth: true),
+    _ => null,
+  };
+};
 
 String _hostOf(String link) {
   final u = Uri.tryParse(link.contains('://') ? link : 'http://$link');
@@ -366,6 +408,11 @@ class _CopyDialogState extends State<_CopyDialog> {
     }).then((r) {
       if (mounted) setState(() => result = r);
     }, onError: (Object e) {
+      // Cancelled at "Update or keep both?": nothing was copied.
+      if (e is TransferCancelled) {
+        if (mounted) Navigator.pop(context);
+        return;
+      }
       if (mounted) {
         setState(() {
           failed = true;

@@ -995,7 +995,31 @@ class AppState extends ChangeNotifier {
     return p.join(Platform.isAndroid ? '/storage/emulated/0/Music' : Directory.systemTemp.path, 'EZTiger imports');
   }
 
-  String importFolderFor(PlaylistPackage pkg) => p.join(importsRoot, safeName(pkg.name));
+  /// True if a playlist called [name] is here already (any capitals).
+  bool hasPlaylistNamed(String name) => playlists.any((pl) => pl.name.toLowerCase() == name.trim().toLowerCase());
+
+  static const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  /// [name] labelled with today's date, for keeping a playlist beside one of
+  /// the same name: "Friday Night (16 Nov)", then "(16 Nov 2)" and so on.
+  String labelledName(String name, [DateTime? now]) {
+    final d = now ?? DateTime.now();
+    final day = '${d.day} ${_months[d.month - 1]}';
+    var label = '$name ($day)';
+    for (var n = 2; hasPlaylistNamed(label); n++) {
+      label = '$name ($day $n)';
+    }
+    return label;
+  }
+
+  /// Where an incoming playlist goes. A playlist of the same name already
+  /// here is updated, unless [keepBoth]: then this one comes in beside it,
+  /// under [labelledName], in a folder of its own.
+  ImportPlan importPlan(PlaylistPackage pkg, {bool keepBoth = false, DateTime? now}) {
+    final base = pkg.name.trim().isEmpty ? 'Imported' : pkg.name.trim();
+    final name = keepBoth ? labelledName(base, now) : base;
+    return ImportPlan(name: name, folder: p.join(importsRoot, safeName(name)), update: !keepBoth && hasPlaylistNamed(base));
+  }
 
   /// The address of the PC last received from, for next time.
   String transferHost = '';
@@ -1005,10 +1029,12 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// After an import or a receive: the songs (copied into [folder]) go into
-  /// the library, and the playlist is made again (replacing one of the same
-  /// name), with its keys. Returns a line saying what happened.
-  Future<String> addImportedPlaylist(PlaylistPackage pkg, String folder) async {
+  /// After an import or a receive: the songs (in the plan's folder) go into
+  /// the library, and the playlist is made under the plan's name (replacing
+  /// one of that name, for an update), with its keys. Returns a line saying
+  /// what happened.
+  Future<String> addImportedPlaylist(ImportResult r) async {
+    final pkg = r.pkg, folder = r.plan.folder;
     final rootsNow = await db.folders.roots();
     final holder = rootsNow.where((r) => p.equals(r.path, folder) || p.isWithin(r.path, folder)).firstOrNull;
     if (holder != null) {
@@ -1032,7 +1058,7 @@ class AppState extends ChangeNotifier {
       }
     }
     if (keys > 0) await db.setMeta('key_shifts', jsonEncode(keyShifts));
-    final name = pkg.name.trim().isEmpty ? 'Imported' : pkg.name.trim();
+    final name = r.plan.name;
     for (final old in await db.playlists.all()) {
       if (old.name.toLowerCase() == name.toLowerCase()) await db.playlists.delete(old.id);
     }
@@ -1041,7 +1067,8 @@ class AppState extends ChangeNotifier {
     await _reloadFolders();
     await _reloadPlaylists();
     await refreshResults();
-    status = '✓ ★ $name: ${ids.length} song${ids.length == 1 ? '' : 's'} in your library'
+    final files = r.kept > 0 ? ' · ${r.copied} file${r.copied == 1 ? '' : 's'} copied, ${r.kept} already here' : '';
+    status = '✓ ★ $name ${r.plan.update ? 'updated' : 'added'}: ${ids.length} song${ids.length == 1 ? '' : 's'}$files'
         '${missing.isEmpty ? '' : ' (${missing.length} could not be read: ${missing.take(3).join(', ')})'}';
     notifyListeners();
     return status;
