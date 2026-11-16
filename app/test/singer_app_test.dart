@@ -5,7 +5,9 @@ import 'package:eztiger/edition.dart';
 import 'package:eztiger/platform.dart';
 import 'package:eztiger/player.dart';
 import 'package:eztiger/ui/app.dart';
+import 'package:eztiger/ui/common.dart';
 import 'package:eztiger/ui/stage_view.dart';
+import 'package:eztiger/ui/transfer_dialogs.dart';
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -158,6 +160,38 @@ void main() {
     expect(lowSongsMessage(state), ('Last song! Nothing after this one: load more', true));
     expect(find.text('Last song! Nothing after this one: load more'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('on a phone, Receive from PC fits above the keyboard', (tester) async {
+    // A phone on its side, with the keyboard up over half the screen.
+    tester.view.physicalSize = const Size(800, 380);
+    tester.view.devicePixelRatio = 1;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 190);
+    addTearDown(tester.view.reset);
+    await tester.runAsync(() => state.init(rescanLibrary: false));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppScope(
+          state: state,
+          child: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(onPressed: () => receivePlaylist(context), child: const Text('open')),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('receive-code')));
+    await settle(tester);
+    expect(tester.takeException(), isNull, reason: 'nothing squashed off the box');
+    // The code box and the Receive button are on screen above the keyboard.
+    for (final k in ['receive-code', 'receive-go']) {
+      await tester.ensureVisible(find.byKey(Key(k)));
+      await tester.pump();
+      expect(tester.getRect(find.byKey(Key(k))).bottom, lessThanOrEqualTo(380 - 190 + 1), reason: k);
+    }
   });
 
   test('the singer app is one app: the Pro singing features, however it was built', () {

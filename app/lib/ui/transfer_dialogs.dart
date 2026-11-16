@@ -291,6 +291,10 @@ Future<void> receivePlaylist(BuildContext context) async {
   final go = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
+      // On a phone the keyboard takes half the screen: the box scrolls, so
+      // the field being typed in and the Receive button can be reached.
+      scrollable: true,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       title: const Text('Receive a playlist from the PC'),
       content: SizedBox(
         width: 460,
@@ -302,12 +306,18 @@ Future<void> receivePlaylist(BuildContext context) async {
               key: const Key('receive-host'),
               controller: host,
               keyboardType: TextInputType.url,
+              textInputAction: TextInputAction.next,
+              scrollPadding: const EdgeInsets.only(bottom: 120),
               decoration: const InputDecoration(labelText: 'PC address', hintText: 'e.g. 192.168.1.20'),
             ),
             TextField(
               key: const Key('receive-code'),
               controller: code,
               keyboardType: TextInputType.number,
+              // The keyboard's ✓ receives straight away.
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => Navigator.pop(context, true),
+              scrollPadding: const EdgeInsets.only(bottom: 120),
               decoration: const InputDecoration(labelText: 'Code'),
             ),
           ],
