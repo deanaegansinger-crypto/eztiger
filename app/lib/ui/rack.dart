@@ -27,6 +27,7 @@ import 'read_me.dart';
 import 'requests_dialog.dart';
 import '../song_requests.dart';
 import 'songbook_dialog.dart';
+import 'lyrics_delay.dart';
 import 'transfer_dialogs.dart';
 
 /// The left column of the mockup: player, settings, library, search and
@@ -334,6 +335,22 @@ class _MainMenu extends StatelessWidget {
           checked: s.crossfade,
           child: const Text('Crossfade'),
         ),
+        PopupMenuItem(
+          key: const Key('menu-lyrics-delay'),
+          value: 'lyrics-delay',
+          child: Row(
+            children: [
+              const Icon(Icons.timer_outlined, size: 18),
+              const SizedBox(width: 10),
+              const Text('Lyrics delay…'),
+              const SizedBox(width: 12),
+              Text(
+                s.lyricsDelayOn ? delayLabel(s.lyricsDelayMs) : 'off',
+                style: TextStyle(fontSize: 12, color: EzColors.cyan),
+              ),
+            ],
+          ),
+        ),
         // Pro: two players fed by Tonight's playlist.
         if (s.canTwoDecks)
           CheckedPopupMenuItem(
@@ -506,6 +523,8 @@ class _MainMenu extends StatelessWidget {
           s.toggleAutocue();
         } else if (c == 'crossfade') {
           s.toggleCrossfade();
+        } else if (c == 'lyrics-delay') {
+          showLyricsDelay(context);
         } else if (c == 'sync-save') {
           saveSyncFile(context, s);
         } else if (c == 'sync-load') {
@@ -925,6 +944,8 @@ class _VolumeRow extends StatelessWidget {
             style: TextStyle(fontSize: 11, color: context.ez.textDim),
           ),
         ),
+        const SizedBox(width: 10),
+        const LyricsDelayButton(),
       ],
     );
   }

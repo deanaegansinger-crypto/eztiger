@@ -30,6 +30,10 @@ abstract class MediaBackend {
   /// Moves the pitch by [ratio] (1 = the song's own key) without changing
   /// the tempo.
   Future<void> setPitch(double ratio);
+
+  /// Holds the picture back by [delay] behind the sound (0: in step), for
+  /// sound that reaches the speakers late, such as over Bluetooth.
+  Future<void> setVideoDelay(Duration delay);
   Stream<Duration> get position;
   Stream<Duration> get duration;
   Stream<bool> get playing;
@@ -151,6 +155,45 @@ class KaraokeEngine extends ChangeNotifier {
   CdgDecoder? _cdg;
   bool _rendering = false;
 
+  /// How far the lyrics (CDG) and the video run behind the sound, to match
+  /// sound that is heard late (Bluetooth to a mixer, say). Zero: in step.
+  Duration lyricsDelay = Duration.zero;
+  Duration _appliedVideoDelay = Duration.zero;
+
+  /// The moment of the song the lyrics screen shows: [lyricsDelay] behind
+  /// the sound.
+  Duration get lyricsPosition {
+    final at = position - lyricsDelay;
+    return at < Duration.zero ? Duration.zero : at;
+  }
+
+  /// Sets [lyricsDelay] and puts the lyrics screen and video right at once.
+  Future<void> setLyricsDelay(Duration delay) async {
+    final d = delay < Duration.zero ? Duration.zero : delay;
+    if (d == lyricsDelay) return;
+    lyricsDelay = d;
+    final cdg = _cdg;
+    if (cdg != null) {
+      cdg.seek(lyricsPosition);
+      if (cdg.changed && !_rendering) await _render();
+    }
+    await _applyVideoDelay();
+    notifyListeners();
+  }
+
+  /// Only video needs the player to hold its picture back; a CDG follows
+  /// [lyricsPosition] here, and plain audio has no picture.
+  Future<void> _applyVideoDelay() async {
+    final want = isVideo ? lyricsDelay : Duration.zero;
+    if (want == _appliedVideoDelay) return;
+    _appliedVideoDelay = want;
+    try {
+      await backend.setVideoDelay(want);
+    } catch (_) {
+      // A player that can't do it still plays, in step.
+    }
+  }
+
   /// The CDG lyrics screen (300x216), or null when the track has none.
   final ValueNotifier<ui.Image?> cdgFrame = ValueNotifier(null);
 
@@ -214,6 +257,7 @@ class KaraokeEngine extends ChangeNotifier {
       keyShift = (keyShiftFor?.call(track) ?? 0).clamp(minKey, maxKey);
       keyWarningSince = keyShift != 0 ? DateTime.now() : null;
       await _applyFilter();
+      await _applyVideoDelay();
       edges = await _edgesOf(media);
       final first = edges?.start ?? Duration.zero;
       if (skipSilence && first > const Duration(milliseconds: 400)) {
@@ -430,7 +474,7 @@ class KaraokeEngine extends ChangeNotifier {
     position = pos;
     final cdg = _cdg;
     if (cdg != null) {
-      cdg.seek(pos);
+      cdg.seek(lyricsPosition);
       if (cdg.changed && !_rendering) _render();
     }
     notifyListeners();

@@ -109,7 +109,11 @@ class SecondScreen extends ChangeNotifier {
         _sentPixels = px;
       }
       if (engine.isVideo || _sentPlaying != engine.playing) {
-        await _channel.invokeMethod('clock', {'playing': engine.playing, 'ms': engine.position.inMilliseconds});
+        await _channel.invokeMethod('clock', {
+          'playing': engine.playing,
+          'ms': engine.position.inMilliseconds,
+          'delayMs': engine.lyricsDelay.inMilliseconds,
+        });
         _sentPlaying = engine.playing;
       }
     } on WindowChannelException {
@@ -176,6 +180,7 @@ class _OutputModel extends ChangeNotifier {
   bool playing = false;
   Player? _player;
   VideoController? video;
+  int _delayMs = 0;
 
   Future<dynamic> handle(MethodCall call) async {
     switch (call.method) {
@@ -220,6 +225,12 @@ class _OutputModel extends ChangeNotifier {
         }
         final p = _player;
         if (p == null || video == null) return null;
+        // The lyrics delay: hold this window's video back too.
+        final delayMs = a['delayMs'] as int? ?? 0;
+        if (delayMs != _delayMs && p.platform is NativePlayer) {
+          _delayMs = delayMs;
+          await (p.platform as NativePlayer).setProperty('audio-delay', (-delayMs / 1000).toStringAsFixed(3));
+        }
         final at = Duration(milliseconds: a['ms'] as int);
         if (playing != p.state.playing) playing ? await p.play() : await p.pause();
         if ((p.state.position - at).abs() > const Duration(milliseconds: 400)) await p.seek(at);

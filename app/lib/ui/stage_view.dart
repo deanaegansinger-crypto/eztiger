@@ -6,6 +6,7 @@ import 'common.dart';
 import '../app_state.dart';
 import '../edition.dart';
 import 'lock.dart';
+import 'lyrics_delay.dart';
 import 'pro_sound.dart';
 import 'output_panel.dart';
 import 'songbook_dialog.dart';
@@ -236,6 +237,8 @@ class _Controls extends StatelessWidget {
                 style: const TextStyle(fontSize: 18, color: Colors.white70),
               ),
             ),
+            const SizedBox(width: 10),
+            const LyricsDelayButton(big: true),
           ],
         ),
         const SizedBox(height: 6),

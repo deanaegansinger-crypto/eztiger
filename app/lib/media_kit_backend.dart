@@ -45,6 +45,15 @@ class MediaKitBackend implements MediaBackend {
     await _apply();
   }
 
+  /// mpv's audio-delay: a negative value holds the video back behind the
+  /// sound by that much.
+  @override
+  Future<void> setVideoDelay(Duration delay) async {
+    final native = player.platform;
+    if (native is! NativePlayer) return;
+    await native.setProperty('audio-delay', (-delay.inMilliseconds / 1000).toStringAsFixed(3));
+  }
+
   Future<void> _apply() async {
     final native = player.platform;
     if (native is! NativePlayer) return;

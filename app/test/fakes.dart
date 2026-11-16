@@ -55,6 +55,9 @@ class FakeBackend implements MediaBackend {
   Future<void> setPitch(double ratio) async => pitch = ratio;
   @override
   Future<void> setAudioFilter(String filter) async => audioFilter = filter;
+  Duration videoDelay = Duration.zero;
+  @override
+  Future<void> setVideoDelay(Duration delay) async => videoDelay = delay;
   void finish() => _done.add(true);
   void at(Duration d) => _pos.add(d);
 
