@@ -118,8 +118,14 @@ void main() {
     );
     out.deleteSync(recursive: true);
     out.createSync();
-    final r = await importPackage(await exportToFolder(smaller, out.path), update);
-    expect((r.copied, r.kept), (1, 2)); // just the new Waterloo
+    final exported = await exportToFolder(smaller, out.path);
+    String sizes(String dir) => [
+          for (final f in Directory(dir).listSync().whereType<File>()) '${p.basename(f.path)}=${f.lengthSync()}',
+        ].join(', ');
+    final tabletSongs = p.join(tablet.importPlan(smaller).folder, 'songs');
+    final before = 'tablet: ${sizes(tabletSongs)} | export: ${sizes(p.join(exported, 'songs'))} | pc: ${waterloo.lengthSync()}';
+    final r = await importPackage(exported, update);
+    expect((r.copied, r.kept), (1, 2), reason: before); // just the new Waterloo
     await tablet.addImportedPlaylist(r);
     final songs = Directory(p.join(r.plan.folder, 'songs'));
     expect(File(p.join(songs.path, 'Abba - Waterloo.mp3')).lengthSync(), waterloo.lengthSync());
