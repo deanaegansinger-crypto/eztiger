@@ -48,7 +48,7 @@ class LyricsDelayButton extends StatelessWidget {
                     Icon(Icons.timer_outlined, size: size + 3, color: on ? EzColors.onBrass : context.ez.textDim),
                     const SizedBox(width: 4),
                     Text(
-                      on ? 'Lyrics +${delayLabel(s.lyricsDelayMs)}' : 'Lyrics delay',
+                      on ? '+${(s.lyricsDelayMs / 1000).toStringAsFixed(2)}s' : 'Delay',
                       key: const Key('lyrics-delay-label'),
                       style: TextStyle(
                         fontSize: size,
@@ -78,13 +78,17 @@ Future<void> showLyricsDelay(BuildContext context) {
         final ms = s.lyricsDelayMs;
         Widget step(String label, int by) => OutlinedButton(
           key: Key('lyrics-delay-step$by'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 40),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
           onPressed: () => s.setLyricsDelayMs(ms + by),
-          child: Text(label),
+          child: Text(label, style: const TextStyle(fontSize: 12)),
         );
         return AlertDialog(
           title: const Text('Lyrics delay'),
           content: SizedBox(
-            width: 460,
+            width: 440,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -109,7 +113,7 @@ Future<void> showLyricsDelay(BuildContext context) {
                 Row(
                   children: [
                     step('−0.05', -50),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 4),
                     step('−0.01', -10),
                     Expanded(
                       child: Text(
@@ -117,14 +121,14 @@ Future<void> showLyricsDelay(BuildContext context) {
                         key: const Key('lyrics-delay-value'),
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 26,
+                          fontSize: 22,
                           fontWeight: FontWeight.w800,
                           color: s.lyricsDelayOn ? EzColors.brass : context.ez.textDim,
                         ),
                       ),
                     ),
                     step('+0.01', 10),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 4),
                     step('+0.05', 50),
                   ],
                 ),

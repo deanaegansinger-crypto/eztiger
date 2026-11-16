@@ -215,6 +215,7 @@ class _Controls extends StatelessWidget {
               icon: Icon(e.muted ? Icons.volume_off : Icons.volume_up, color: Colors.white70),
             ),
             Expanded(
+              flex: 4,
               child: SliderTheme(
                 data: SliderTheme.of(context).copyWith(
                   trackHeight: 8,
@@ -237,8 +238,10 @@ class _Controls extends StatelessWidget {
                 style: const TextStyle(fontSize: 18, color: Colors.white70),
               ),
             ),
-            const SizedBox(width: 10),
-            const LyricsDelayButton(big: true),
+            const SizedBox(width: 8),
+            const Flexible(
+              child: FittedBox(fit: BoxFit.scaleDown, child: LyricsDelayButton(big: true)),
+            ),
           ],
         ),
         const SizedBox(height: 6),

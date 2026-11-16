@@ -101,11 +101,11 @@ void main() {
 
   testWidgets('the button by the volume switches it, and it is remembered', (tester) async {
     await pumpApp(tester);
-    expect(find.text('Lyrics delay'), findsWidgets);
+    expect(find.text('Delay'), findsWidgets);
     await tester.tap(find.byKey(const Key('lyrics-delay')));
     await tester.pump();
     expect(state.lyricsDelayOn, isTrue);
-    expect(find.text('Lyrics +0.20 s'), findsOneWidget);
+    expect(find.text('+0.20s'), findsOneWidget);
 
     // Press and hold to set the time.
     await tester.longPress(find.byKey(const Key('lyrics-delay')));
@@ -118,7 +118,7 @@ void main() {
     expect(find.text('0.26 s'), findsOneWidget);
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
-    expect(find.text('Lyrics +0.26 s'), findsOneWidget);
+    expect(find.text('+0.26s'), findsOneWidget);
 
     await tester.runAsync(() async {
       await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -134,6 +134,6 @@ void main() {
     await tester.pump();
     expect(state.lyricsDelayOn, isFalse);
     expect(state.lyricsDelayMs, 260);
-    expect(find.text('Lyrics delay'), findsWidgets);
+    expect(find.text('Delay'), findsWidgets);
   });
 }
