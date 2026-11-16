@@ -290,6 +290,7 @@ const _tablet = (
     'Press and hold and let go without moving for the menu (what right-click does on Windows): add to queue, set the singer, playlists and more.',
     'Double-tap the karaoke output panel for full screen lyrics; double-tap again or press Back to come out of it. The screen stays on while EZtiger is open.',
     'Playlists from the PC (☰ Menu): Import playlist… from a USB stick, SD card or Dropbox, or Receive from PC… over the Wi-Fi. When it\'s in, "Transfer successful" shows, with Receive another (or Import another) for the next one.',
+    'Other music players: the songs come into the EZTiger imports folder, and each playlist also gets a playlist file (such as Friday Late.m3u) in the EZTiger playlists folder beside it. Open that in VLC, Poweramp or another player to play the songs in order. Other players play the sound of a CDG song without its lyrics, and in its own key.',
     'Portrait Stage view (☰ Menu → Stage tablet → Portrait): in the Stage view the tablet turns upright. The decks sit side by side at the top with the next songs scrolling under them, and the lyrics fill the bottom half. The ⟳ button in the Stage view switches between Portrait and Landscape.',
     'Running out: when Up next is down to the last 2 songs, the Stage view says so: orange at 2 songs left, red at 1 and on the last song, so you can load more in time.',
   ],

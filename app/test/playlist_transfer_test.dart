@@ -94,6 +94,15 @@ void main() {
     expect(await tabletPlaylist(), expected);
     // EZTiger imports is in the tablet's library now.
     expect(tablet.roots.map((r) => p.basename(r.path)), contains('EZTiger imports'));
+    // And a playlist file for other players, beside it, in running order.
+    final m3u = File(p.join(tabletDir.path, 'EZTiger playlists', 'Friday Late.m3u'));
+    expect(m3u.existsSync(), isTrue);
+    final lines = m3u.readAsLinesSync();
+    expect(lines.first, '#EXTM3U');
+    expect(lines.where((l) => !l.startsWith('#')).map(p.basename),
+        ['Bon Jovi - Livin On A Prayer.mp3', 'Abba - Waterloo.mp3', 'Queen - Bohemian Rhapsody.mp4']);
+    expect(lines, contains('#EXTINF:-1,Abba - Waterloo'));
+    expect(File(lines.last).existsSync(), isTrue, reason: 'the full path to the song');
 
     // Imported again: an update. Nothing is copied again and the playlist
     // isn't doubled.
@@ -126,6 +135,10 @@ void main() {
     expect(File(p.join(songs.path, 'Abba - Waterloo.mp3')).lengthSync(), waterloo.lengthSync());
     expect(File(p.join(songs.path, 'Queen - Bohemian Rhapsody.mp4')).existsSync(), isFalse);
     expect(await tabletPlaylist(), ['Livin On A Prayer', 'Waterloo -2']);
+    // The playlist file is rewritten to match.
+    final m3u = File(p.join(tabletDir.path, 'EZTiger playlists', 'Friday Late.m3u'));
+    expect(m3u.readAsLinesSync().where((l) => !l.startsWith('#')).map(p.basename),
+        ['Bon Jovi - Livin On A Prayer.mp3', 'Abba - Waterloo.mp3']);
   });
 
   test('keep both: the new one comes in beside it, with the date on', () async {
@@ -137,6 +150,10 @@ void main() {
     expect(r.plan.folder, p.join(tabletDir.path, 'EZTiger imports', 'Friday Late (16 Nov)'));
     expect(await tablet.addImportedPlaylist(r), contains('added'));
     expect(tablet.playlists.map((x) => x.name), containsAll(['Friday / Late', 'Friday / Late (16 Nov)']));
+    expect(
+      Directory(p.join(tabletDir.path, 'EZTiger playlists')).listSync().map((f) => p.basename(f.path)),
+      unorderedEquals(['Friday Late.m3u', 'Friday Late (16 Nov).m3u']),
+    );
     // A third the same day gets a number.
     expect(tablet.labelledName('Friday / Late', DateTime(2026, 11, 16)), 'Friday / Late (16 Nov 2)');
   });

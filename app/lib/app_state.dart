@@ -1057,6 +1057,29 @@ class AppState extends ChangeNotifier {
   /// the library, and the playlist is made under the plan's name (replacing
   /// one of that name, for an update), with its keys. Returns a line saying
   /// what happened.
+  /// "EZTiger playlists", beside "EZTiger imports": a .m3u file for each
+  /// playlist received, so other music players on the tablet can play it in
+  /// order.
+  String get playlistsRoot => p.join(p.dirname(importsRoot), 'EZTiger playlists');
+
+  /// Writes (or rewrites, on an Update) ★ name's .m3u in [playlistsRoot]:
+  /// the songs in running order, by their full path in its imports folder.
+  /// Returns the file's path.
+  String writePlaylistFile(String name, String folder, PlaylistPackage pkg) {
+    final out = File(p.join(playlistsRoot, '${safeName(name)}.m3u'));
+    out.parent.createSync(recursive: true);
+    final lines = ['#EXTM3U', '#PLAYLIST:$name'];
+    for (final s in pkg.songs) {
+      final song = File(p.join(folder, songsFolder, s.play));
+      if (!song.existsSync()) continue;
+      lines
+        ..add('#EXTINF:-1,${s.artist != null ? '${s.artist} - ' : ''}${s.title}')
+        ..add(song.path);
+    }
+    out.writeAsStringSync('${lines.join('\n')}\n');
+    return out.path;
+  }
+
   Future<String> addImportedPlaylist(ImportResult r) async {
     final pkg = r.pkg, folder = r.plan.folder;
     final rootsNow = await db.folders.roots();
@@ -1088,6 +1111,11 @@ class AppState extends ChangeNotifier {
     }
     final id = await db.playlists.create(name);
     await db.playlists.addAll(id, ids);
+    // A playlist file for other players (VLC, Poweramp…), in running order.
+    // Never a reason for the transfer to fail.
+    try {
+      writePlaylistFile(name, folder, pkg);
+    } catch (_) {}
     await _reloadFolders();
     await _reloadPlaylists();
     await refreshResults();
