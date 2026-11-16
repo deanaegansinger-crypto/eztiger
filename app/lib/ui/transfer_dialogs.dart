@@ -231,7 +231,16 @@ class _SendDialogState extends State<_SendDialog> {
                 SelectableText(x.code, key: const Key('send-code'), style: big),
               ]),
               const SizedBox(height: 12),
-              if (x.bytesSent > 0)
+              if (x.finished)
+                Row(key: const Key('send-success'), children: [
+                  Icon(Icons.check_circle, color: EzColors.green),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Transfer successful. The tablet has the playlist.',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ])
+              else if (x.bytesSent > 0)
                 _Progress(done: x.bytesSent, total: x.pkg.totalBytes, file: x.sending)
               else
                 Text(
@@ -246,7 +255,7 @@ class _SendDialogState extends State<_SendDialog> {
         TextButton(
           key: const Key('send-stop'),
           onPressed: () => Navigator.pop(context),
-          child: Text(x != null && x.bytesSent >= x.pkg.totalBytes && x.bytesSent > 0 ? 'Done' : 'Stop sending'),
+          child: Text(x != null && x.finished ? 'Close' : 'Stop sending'),
         ),
       ],
     );
@@ -260,15 +269,17 @@ class _SendDialogState extends State<_SendDialog> {
 Future<void> importPlaylist(BuildContext context) async {
   final source = await pickAndroidExport(context);
   if (source == null || !context.mounted) return;
-  await showDialog<void>(
+  final again = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
     builder: (_) => _CopyDialog(
       title: 'Importing the playlist',
+      againLabel: 'Import another',
       run: (s, progress) async =>
           s.addImportedPlaylist(await importPackage(source, askUpdateOrNew(context, s), onProgress: progress)),
     ),
   );
+  if (again == true && context.mounted) await importPlaylist(context);
 }
 
 /// "Receive playlist from PC": over the Wi-Fi from EZTiger Pro's "Send to
@@ -311,15 +322,18 @@ Future<void> receivePlaylist(BuildContext context) async {
   final h = host.text.trim(), c = code.text.trim();
   if (go != true || h.isEmpty || !context.mounted) return;
   s.setTransferHost(h);
-  await showDialog<void>(
+  final again = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
     builder: (_) => _CopyDialog(
       title: 'Receiving the playlist',
+      againLabel: 'Receive another',
       run: (s, progress) async =>
           s.addImportedPlaylist(await receivePackage(h, c, askUpdateOrNew(context, s), onProgress: progress)),
     ),
   );
+  // Receive another: back to the address and code, with the address kept.
+  if (again == true && context.mounted) await receivePlaylist(context);
 }
 
 /// When the playlist coming in has the name of one already on the tablet:
@@ -379,10 +393,12 @@ String _hostOf(String link) {
   return h == 'localhost' ? '' : h;
 }
 
-/// Runs a copy with a progress bar, then says how it went.
+/// Runs a copy with a progress bar, then says how it went. On success it
+/// offers Close or [againLabel] (e.g. "Receive another"): the dialog
+/// returns true for that one.
 class _CopyDialog extends StatefulWidget {
-  const _CopyDialog({required this.title, required this.run});
-  final String title;
+  const _CopyDialog({required this.title, required this.run, required this.againLabel});
+  final String title, againLabel;
   final Future<String> Function(AppState s, TransferProgress progress) run;
   @override
   State<_CopyDialog> createState() => _CopyDialogState();
@@ -423,16 +439,35 @@ class _CopyDialogState extends State<_CopyDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: Text(result == null ? widget.title : (failed ? 'That didn’t work' : 'Done')),
-        content: SizedBox(
-          width: 460,
-          child: result == null
-              ? _Progress(done: done, total: total, file: file.isEmpty ? 'Starting…' : file)
-              : Text(result!, key: const Key('copy-result')),
-        ),
-        actions: [
-          if (result != null) TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
-        ],
-      );
+  Widget build(BuildContext context) {
+    final ok = result != null && !failed;
+    return AlertDialog(
+      title: result == null
+          ? Text(widget.title)
+          : failed
+              ? const Text('That didn’t work')
+              : Row(children: [
+                  Icon(Icons.check_circle, color: EzColors.green, size: 30),
+                  const SizedBox(width: 10),
+                  const Expanded(child: Text('Transfer successful', key: Key('copy-success'))),
+                ]),
+      content: SizedBox(
+        width: 460,
+        child: result == null
+            ? _Progress(done: done, total: total, file: file.isEmpty ? 'Starting…' : file)
+            : Text(result!, key: const Key('copy-result')),
+      ),
+      actions: [
+        if (result != null)
+          TextButton(key: const Key('copy-close'), onPressed: () => Navigator.pop(context, false), child: const Text('Close')),
+        if (result != null)
+          FilledButton.icon(
+            key: const Key('copy-again'),
+            onPressed: () => Navigator.pop(context, true),
+            icon: Icon(ok ? Icons.download : Icons.refresh),
+            label: Text(ok ? widget.againLabel : 'Try again'),
+          ),
+      ],
+    );
+  }
 }

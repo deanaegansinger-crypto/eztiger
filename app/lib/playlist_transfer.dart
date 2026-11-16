@@ -397,6 +397,10 @@ class PlaylistSender {
         bytesSent = pkg.totalBytes;
         onChange?.call();
       } else if (req.uri.path == '/eztiger/playlist') {
+        // A tablet starting (again): the progress starts over.
+        finished = false;
+        bytesSent = 0;
+        onChange?.call();
         res.headers.contentType = ContentType.json;
         res.write(pkg.toJsonText());
       } else if (req.uri.path == '/eztiger/file') {
