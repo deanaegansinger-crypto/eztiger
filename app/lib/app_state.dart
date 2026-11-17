@@ -160,6 +160,17 @@ class AppState extends ChangeNotifier {
 
   bool get showDiscChoices => discChoice != 'off';
 
+  /// The search list: 'songbook' (the usual: bigger rows, title over artist,
+  /// a tile for each collection that has the song) or 'list' (one line a
+  /// song, more on the screen). Remembered.
+  String searchStyle = 'songbook';
+
+  void setSearchStyle(String v) {
+    if (v != 'list' && v != 'songbook') return;
+    searchStyle = v;
+    notifyListeners();
+  }
+
   void setDiscChoice(String v) {
     if (!discChoices.containsKey(v)) return;
     discChoice = v;
@@ -367,6 +378,7 @@ class AppState extends ChangeNotifier {
       doubleClickToQueue = m['doubleClickToQueue'] as bool? ?? doubleClickToQueue;
       final dc = m['discChoice'] as String?;
       if (dc != null && discChoices.containsKey(dc)) discChoice = dc;
+      if (m['searchStyle'] == 'list') searchStyle = 'list';
       twoDecks = canTwoDecks && (m['twoDecks'] as bool? ?? twoDecks);
       final scale = (m['textScale'] as num?)?.toDouble();
       if (textScaleChoices.containsKey(scale)) textScale = scale!;
@@ -427,6 +439,7 @@ class AppState extends ChangeNotifier {
       'lockEnabled': lockEnabled,
       'doubleClickToQueue': doubleClickToQueue,
       'discChoice': discChoice,
+      'searchStyle': searchStyle,
       'twoDecks': twoDecks,
       'autocue': autocue,
       'lyricsDelayOn': lyricsDelayOn,

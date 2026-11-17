@@ -126,6 +126,40 @@ void main() {
     expect(find.byKey(const Key('version-0')), findsNothing);
   });
 
+  testWidgets('the Songbook view (the usual one): a tile per collection, a click puts its disc in', (tester) async {
+    await pumpApp(tester);
+    expect(state.searchStyle, 'songbook');
+    expect(find.byKey(const Key('songbook-header')), findsOneWidget);
+    expect(find.byKey(const Key('brand-Zoom')), findsOneWidget);
+    expect(find.byKey(const Key('brand-Pop')), findsWidgets);
+    expect(tester.takeException(), isNull, reason: 'no overflow');
+    final versions = state.results[rowOf('Waterloo')].versions;
+    final zoom = versions.firstWhere((t) => t.fileName.endsWith('.mp4'));
+
+    // All: the tile asks Now, Next or Bottom.
+    await tester.tap(find.byKey(const Key('brand-Zoom')));
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('brand-bottom')));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await settle(tester);
+    expect(state.queue.last.track.id, zoom.id);
+
+    // A saved choice (Now): one click loads it.
+    state.setDiscChoice('now');
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('brand-Zoom')));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await settle(tester);
+    expect(find.byKey(const Key('brand-bottom')), findsNothing, reason: 'no menu');
+    expect(backend.calls, contains('open Abba - Waterloo.mp4'));
+
+    // The List view, the other choice.
+    state.setSearchStyle('list');
+    await settle(tester);
+    expect(find.byKey(const Key('songbook-header')), findsNothing);
+    expect(find.byKey(const Key('brand-Zoom')), findsNothing);
+  });
+
   testWidgets('☰ Menu → Versions (×5): the list of choices, and the pick is used', (tester) async {
     await pumpApp(tester);
     await tester.tap(find.byKey(const Key('main-menu')));
