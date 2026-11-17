@@ -151,6 +151,15 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// A song with other versions (×5), picked in the search, opens its discs
+  /// under it, each with Now / Next / Bottom. ☰ Menu → Versions.
+  bool showDiscChoices = true;
+
+  void setShowDiscChoices(bool v) {
+    showDiscChoices = v;
+    notifyListeners();
+  }
+
   /// The search box, so a key can jump to it.
   final searchFocus = FocusNode(debugLabel: 'search');
 
@@ -350,6 +359,7 @@ class AppState extends ChangeNotifier {
       libraryCollapsed = m['libraryCollapsed'] as bool? ?? libraryCollapsed;
       lockEnabled = m['lockEnabled'] as bool? ?? lockEnabled;
       doubleClickToQueue = m['doubleClickToQueue'] as bool? ?? doubleClickToQueue;
+      showDiscChoices = m['showDiscChoices'] as bool? ?? showDiscChoices;
       twoDecks = canTwoDecks && (m['twoDecks'] as bool? ?? twoDecks);
       final scale = (m['textScale'] as num?)?.toDouble();
       if (textScaleChoices.containsKey(scale)) textScale = scale!;
@@ -409,6 +419,7 @@ class AppState extends ChangeNotifier {
       'libraryCollapsed': libraryCollapsed,
       'lockEnabled': lockEnabled,
       'doubleClickToQueue': doubleClickToQueue,
+      'showDiscChoices': showDiscChoices,
       'twoDecks': twoDecks,
       'autocue': autocue,
       'lyricsDelayOn': lyricsDelayOn,

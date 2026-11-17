@@ -279,6 +279,16 @@ class _MainMenu extends StatelessWidget {
               onChanged: s.setDoubleClickToQueue,
             ),
           ),
+        _menuRow(
+          menu,
+          'Versions (×5)',
+          Segmented<bool>(
+            key: const Key('menu-disc-choices'),
+            options: const {true: 'Show discs', false: 'Off'},
+            value: s.showDiscChoices,
+            onChanged: s.setShowDiscChoices,
+          ),
+        ),
         if (isPro)
           CheckedPopupMenuItem(
             key: const Key('menu-lock-enabled'),
@@ -1589,7 +1599,9 @@ class _ResultsTableState extends State<ResultsTable> {
                       final rowH = listSize(context, 28);
                       // One song picked in the search with other versions (×5):
                       // its discs open under it, each a click to load.
-                      final open = s.view == ResultsView.search && n == 1 ? s.selection.first : -1;
+                      final open = s.showDiscChoices && s.view == ResultsView.search && n == 1
+                          ? s.selection.first
+                          : -1;
                       final versions = open >= 0 && open < groups.length && groups[open].versions.length > 1
                           ? groups[open].versions.length
                           : 0;
@@ -1829,14 +1841,9 @@ class _ResultRowState extends State<ResultRow> {
   }
 }
 
-/// Loads a song the way a double-click does, onto a player: with 2 decks and
-/// a song playing it goes on the other deck as the next song; otherwise it
-/// loads paused.
-Future<void> loadOnPlayer(AppState s, Track t) =>
-    isPro && s.twoDecks ? s.loadNext([t]) : s.playNow(t, autostart: false);
-
-/// One version (disc) of the picked song, under it in the search: click to
-/// load it.
+/// One version (disc) of the picked song, under it in the search, with one
+/// click to load it now, put it next, or add it to the bottom of tonight's
+/// playlist.
 class _VersionLine extends StatelessWidget {
   const _VersionLine({required this.track, required this.number});
   final Track track;
@@ -1848,12 +1855,27 @@ class _VersionLine extends StatelessWidget {
     final t = track;
     final parts = (t.folderPath ?? '').split(RegExp(r'[\\/]')).where((x) => x.isNotEmpty).toList();
     final disc = parts.length >= 2 ? '${parts[parts.length - 2]} · ${parts.last}' : parts.join();
-    return Material(
-      color: EzColors.cyan.withValues(alpha: 0.10),
+    Widget choice(String key, String label, String tip, Future<void> Function() go) => Tooltip(
+      message: tip,
       child: InkWell(
-        key: Key('version-$number'),
-        onTap: () => loadOnPlayer(s, t),
+        key: Key('version-$key-$number'),
+        onTap: go,
+        borderRadius: BorderRadius.circular(4),
         child: Container(
+          margin: const EdgeInsets.only(left: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            border: Border.all(color: EzColors.cyan),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(label, style: TextStyle(fontSize: 11, color: EzColors.cyan, fontWeight: FontWeight.w600)),
+        ),
+      ),
+    );
+    return Material(
+      key: Key('version-$number'),
+      color: EzColors.cyan.withValues(alpha: 0.10),
+      child: Container(
           padding: const EdgeInsets.only(left: 18, right: 6),
           decoration: BoxDecoration(border: Border(left: BorderSide(color: EzColors.cyan, width: 3))),
           child: Row(
@@ -1875,15 +1897,12 @@ class _VersionLine extends StatelessWidget {
                   style: const TextStyle(fontSize: 12),
                 ),
               ),
-              Text(
-                '▶ Load',
-                key: Key('version-load-$number'),
-                style: TextStyle(fontSize: 11, color: EzColors.cyan, fontWeight: FontWeight.w600),
-              ),
+              choice('now', '▶ Now', 'Load it on the player now', () => s.playNow(t, autostart: false)),
+              choice('next', '⤴ Next', 'Next in $theQueue', () => s.enqueueNext([t])),
+              choice('bottom', '⤓ Bottom', 'Add to the bottom of $theQueue', () => s.enqueue(t)),
             ],
           ),
         ),
-      ),
     );
   }
 }

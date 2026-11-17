@@ -71,16 +71,47 @@ void main() {
     await settle(tester);
     expect(find.byKey(const Key('version-0')), findsOneWidget);
     expect(find.byKey(const Key('version-1')), findsOneWidget);
-    expect(find.byKey(const Key('version-load-1')), findsOneWidget);
+    for (final k in ['now', 'next', 'bottom']) {
+      expect(find.byKey(Key('version-$k-1')), findsOneWidget);
+    }
     expect(tester.takeException(), isNull, reason: 'no overflow');
 
-    // One click on the MP4 disc loads it.
     final versions = state.results[waterloo].versions;
     final mp4 = versions.indexWhere((t) => t.fileName.endsWith('.mp4'));
-    await tester.tap(find.byKey(Key('version-load-$mp4')));
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-    await settle(tester);
+    final cdg = 1 - mp4;
+    Future<void> click(String key) async {
+      await tester.tap(find.byKey(Key(key)));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await settle(tester);
+    }
+
+    // Now: one click loads the MP4 disc on the player.
+    await click('version-now-$mp4');
     expect(backend.calls, contains('open Abba - Waterloo.mp4'));
+
+    // Bottom: the MP4 disc goes to the end of tonight's playlist.
+    await tester.runAsync(() async {
+      await state.enqueue(state.results[rowOf('Bohemian Rhapsody')].primary);
+      await state.enqueue(state.results[rowOf('Livin On A Prayer')].primary);
+    });
+    await click('version-bottom-$mp4');
+    expect(state.queue.last.track.id, versions[mp4].id);
+
+    // Next: the CDG disc goes in ahead of the others waiting.
+    await click('version-next-$cdg');
+    final at = state.queue.indexWhere((e) => e.track.id == versions[cdg].id);
+    expect(at, greaterThanOrEqualTo(0));
+    expect(at, lessThan(state.queue.indexWhere((e) => e.track.title == 'Livin On A Prayer')));
+    expect(state.queue.last.track.id, versions[mp4].id);
+
+    // ☰ Menu → Versions: Off. Picking it opens nothing.
+    state.setShowDiscChoices(false);
+    state.selectRow(waterloo);
+    await settle(tester);
+    expect(find.byKey(const Key('version-0')), findsNothing);
+    state.setShowDiscChoices(true);
+    await settle(tester);
+    expect(find.byKey(const Key('version-0')), findsOneWidget);
 
     // Two songs picked (a block): nothing opens.
     state.selectRow(rowOf('Bohemian Rhapsody'), ctrl: true);
