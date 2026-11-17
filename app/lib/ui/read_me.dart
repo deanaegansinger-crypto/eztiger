@@ -13,7 +13,11 @@ final _scroll = ScrollController();
 Future<void> showReadMe(BuildContext context) => showDialog<void>(
   context: context,
   builder: (context) => AlertDialog(
-    title: Text(touchUi ? '$editionName for Android · Read me' : '$editionName · Read me'),
+    title: Text(
+      singerApp
+          ? 'EZTiger for singers · Read me'
+          : (touchUi ? '$editionName for Android · Read me' : '$editionName · Read me'),
+    ),
     content: SizedBox(
       width: 600,
       // Tall enough to show it all on most screens, and scrolls (with a
@@ -30,7 +34,9 @@ Future<void> showReadMe(BuildContext context) => showDialog<void>(
             children: [
               if (isPro && !touchUi) const _ShortcutsMenu(),
               for (final (head, lines)
-                  in touchUi
+                  in singerApp
+                      ? _singer
+                      : touchUi
                       ? [
                           _tablet,
                           if (isPro) (singerApp ? 'Singing' : _pro.$1, _pro.$2.where(_onTablet).toList()),
@@ -155,6 +161,111 @@ class _ShortcutsMenu extends StatelessWidget {
   );
 }
 
+/// The Android app's Read me: for singers, in the order a first-time user
+/// meets things, from adding songs to singing in the Stage view.
+const _singer = <(String, List<String>)>[
+  (
+    'Welcome',
+    [
+      'EZTiger for singers plays your karaoke backing tracks (MP3 + CDG lyrics, or MP4 karaoke videos) on a tablet or phone, with the words big on screen, for singing at a gig or at home.',
+      'Plan the night on the PC with EZTiger Pro, send the playlist across, then sing from the Stage view with the tablet on the mic stand.',
+      'Everything you change is remembered: the songs, playlists, keys, volume and settings are there next time.',
+    ],
+  ),
+  (
+    '1. Add your songs',
+    [
+      'Library tab → Add folder. The first time, Android asks to let EZTiger "manage all files": switch it on and come back. It needs this to read the CDG lyric files, which Android doesn\'t count as music.',
+      'Pick where your karaoke folder is (SD card, internal storage or a USB stick), then the folder itself. EZTiger reads every song in it.',
+      'Added, removed or renamed songs later? ☰ Menu → Rescan library. Or tick Rescan at start-up to have it done each time EZTiger opens.',
+    ],
+  ),
+  (
+    '2. Bring a playlist from the PC',
+    [
+      'On the PC, in EZTiger Pro: right-click the playlist → 📶 Send to the tablet. It shows the PC\'s address and a 4-figure code.',
+      'On the tablet or phone, on the same Wi-Fi: ☰ Menu → Receive from PC…, type the address (it\'s remembered) and the code, then Receive. The keyboard\'s Next goes to the code; its ✓ starts.',
+      'No Wi-Fi? On the PC choose 📤 Export to USB, SD card or Dropbox instead, then on the tablet ☰ Menu → Import playlist… and pick it.',
+      'The songs, with their CDG lyrics, are copied into the EZTiger imports folder, and the playlist arrives with its running order and keys. "Transfer successful" shows when it\'s in, with Receive another (or Import another) for the next one.',
+      'Sent the same playlist again? Choose Update to bring it in line with the PC: only new or changed songs are copied, and songs taken off the list are removed. Or Keep both: the new one comes in beside the old, with the date on, such as ★ Friday Night (16 Nov).',
+    ],
+  ),
+  (
+    '3. Find and play a song',
+    [
+      'Type in the search box to find a song by title or artist. While you search, everything under the player folds away to give the results room; ✕ in the search box brings it back.',
+      'Double-tap a song to load it into the player, paused, ready to go. Press ▶ to start, ⏸ to pause, ⏮ to go back to the start and ⏭ for the next song. Drag the bar under the player to skip through the song.',
+      'Press and hold a song, then move your finger, to drag it onto the player, Tonight\'s playlist or a playlist. Press and hold and let go without moving for its menu: add to Tonight\'s playlist, set the singer, playlists and more.',
+      'Drag a whole folder: tap a folder in the Library box, then press and hold it and drag it into Tonight\'s playlist. All its songs go in.',
+    ],
+  ),
+  (
+    '4. Tonight\'s playlist',
+    [
+      'Tonight\'s playlist is the list of songs for the gig. 📂 Load playlist puts a saved playlist (such as one from the PC) into it.',
+      'Add songs by dragging them in, or ☰ Menu → Double-click → Tonight, so a double-tap adds a song to the end instead of loading it.',
+      'Drag songs up and down to change the order. Sung songs stay in the list with a ✓; Clear played takes them off.',
+      'Changed the order during the night? 💾 Save to <playlist> keeps it. ★ Save as playlist makes a new one.',
+      'Single stops after each song; Autoplay goes straight on to the next. ☰ Menu → Autocue gets the next song ready to start at its first note; Crossfade fades one song into the next.',
+    ],
+  ),
+  (
+    '5. Change the key',
+    [
+      'KEY − and +, under the volume, move the song down or up a semitone, as far as 3 either way. Tap the number to go back to the song\'s own key.',
+      'EZTiger remembers the key for each song. When a song loads in a changed key, "KEY +2" (or −) flashes red on the player, so it never catches you out. Keys set on the PC come across with the playlist.',
+      'With 2 decks on, each deck has its own − KEY +, so you can set the key of the next song before it comes in.',
+    ],
+  ),
+  (
+    '6. 2 decks and the crossfade',
+    [
+      '☰ Menu → 2 decks: deck A and deck B sit side by side. The deck marked ON AIR is playing; the other has the next song waiting, ready to start straight away. Its ⇄ button mixes into it now.',
+      'X-fade, under the decks, sets the crossfade from 0 (a straight cut) to 6 seconds. Overlap brings the next song in under the last one; In turn fades one out, then the next in.',
+    ],
+  ),
+  (
+    '7. Sing from the Stage view',
+    [
+      '🎤 Stage, at the top, is the view for performing: the lyrics large, the song and time left in big type, big Restart / Play / Next buttons, the volume and Up next. Library takes you back. EZTiger opens in the view you used last.',
+      'Up next: double-tap a song to sing it now; its ↑ ↓ arrows move it and ✕ takes it off. When it\'s down to the last 2 songs a warning shows, orange at 2 and red at 1 and on the last song, so you can load more in time.',
+      'Portrait: ☰ Menu → Stage tablet → Portrait, or the ⟳ button in the Stage view. The tablet turns upright, with the decks and Up next at the top and the lyrics filling the bottom half. ⟳ again for landscape.',
+      'Double-tap the lyrics for full screen lyrics; double-tap again or press Back to come out. The ⇄ button swaps the lyrics to the other side in landscape.',
+      'When nothing is playing, the lyrics screen shows the spinning logo and what\'s up next instead of frozen words. The screen stays on while EZTiger is open.',
+    ],
+  ),
+  (
+    '8. Lock the screen',
+    [
+      'Press 🔒 (top bar, or in the Stage view) and every tap is ignored, so a bump on the mic stand can\'t stop or skip a song; the song plays on.',
+      'Press and hold the lock for a moment to unlock. ☰ Menu → Screen lock button hides the 🔒 if you don\'t want it.',
+    ],
+  ),
+  (
+    '9. Sound over Bluetooth: the lyrics delay',
+    [
+      'Sound sent over Bluetooth to a mixer or speaker reaches the room late, so the words run ahead of the music. ⏱ Delay, by the volume (and in the Stage view), holds the lyrics and video back to match.',
+      'Tap it to switch it on (it shows the time, such as +0.20s); tap again to switch it off. Press and hold it to set the time, from 0 to 1 second: play a song and move it until the words change with the singing. EZTiger remembers it.',
+    ],
+  ),
+  (
+    '10. Make it yours',
+    [
+      '☰ Menu → Skin: six looks for the whole app. Screen: Dark or Light, on the skins that have both.',
+      '☰ Menu → Text size makes the song lists larger (Normal, Large or Extra large) for reading at a glance.',
+      'The arrow at the right of the Library / Playlists tabs folds that box away for more room for the songs; tap a tab to bring it back.',
+      'Columns: press and hold a column heading to show or hide columns; drag the line at its right to make it wider or narrower.',
+    ],
+  ),
+  (
+    'Your playlists in other music apps',
+    [
+      'Every playlist that comes from the PC also gets a playlist file (such as Friday Night.m3u) in the EZTiger playlists folder, beside EZTiger imports. Open it in VLC, Poweramp or another player to play the songs in order.',
+      'Other players play the sound of a CDG song without its lyrics, and in its own key: the lyrics and keys are EZTiger\'s.',
+    ],
+  ),
+];
+
 const _pro = (
   'EZTiger Pro',
   [
@@ -175,8 +286,8 @@ const _pro = (
     'Double-click (☰ Menu): Player loads a double-clicked song into the player (or the next deck); Tonight adds it to the end of Tonight\'s playlist instead.',
     'When nothing is playing (cued, paused or stopped) the lyrics screen, the Stage view and the second screen show the spinning logo and what is up next, instead of frozen lyrics.',
     'Skins (☰ Menu → Skin): six looks for the whole app.',
-    'Sync PC ⇄ tablet (☰ Menu): Save sync file writes your playlists and song keys to EZtiger-sync.json. Copy it to the tablet (or put it in the library folder before you copy that), then Load sync file there. It works the other way round too. Songs are matched by where they sit in the library folder, or by file name.',
-    'A playlist with its songs, PC to tablet: right-click a playlist on the PC → 📤 Export to USB, SD card or Dropbox (as a folder, or one zip) or 📶 Send to the tablet over Wi-Fi (it shows the PC\'s address and a code). On the tablet, ☰ Menu → Import playlist… or Receive from PC…. The songs, with their CDG and lyrics, are copied into the tablet\'s EZTiger imports folder, and the playlist comes back with its keys. If the tablet already has a playlist of that name it asks: Update (the playlist takes the new order and keys, only new or changed songs are copied, and songs taken off the list are removed from its folder) or Keep both (the new one comes in beside it with the date on, such as ★ Friday Night (16 Nov)).',
+    'Sync file (☰ Menu): Save sync file writes your playlists and song keys to EZtiger-sync.json; Load sync file on another PC brings them in. Songs are matched by where they sit in the library folder, or by file name. For the tablet or phone, send the playlist with its songs instead (below).',
+    'A playlist with its songs, PC to tablet: right-click a playlist on the PC → 📤 Export to USB, SD card or Dropbox (as a folder, or one zip) or 📶 Send to the tablet over Wi-Fi (it shows the PC\'s address and a code). On the tablet, ☰ Menu → Import playlist… or Receive from PC…. The songs, with their CDG and lyrics, are copied into the tablet\'s EZTiger imports folder, and the playlist comes back with its keys. If the tablet already has a playlist of that name it asks: Update (the playlist takes the new order and keys, only new or changed songs are copied, and songs taken off the list are removed from its folder) or Keep both (the new one comes in beside it with the date on, such as ★ Friday Night (16 Nov)). The PC\'s window says "Transfer successful" when the tablet has it all; the tablet offers Receive another. The tablet also writes a playlist file (Friday Night.m3u) in its EZTiger playlists folder, for other music apps.',
   ],
 );
 
@@ -266,7 +377,7 @@ const _sections = <(String, List<String>)>[
   (
     'Your settings',
     [
-      '🎤 Stage, top right: the view for performing, with the tablet on the mic stand. Lyrics large on the left; the song, time left, big Restart / Play / Next buttons, the volume and the next songs on the right. Double-tap a song in Up next to play it now; its ↑ ↓ arrows move it up or down and ✕ takes it out of the queue. Single / Autoplay sits by the volume. Double-tap the lyrics for full screen. The ⇄ button (or the Menu) swaps the lyrics to the other side. Library goes back. EZtiger opens in the view you used last.',
+      '🎤 Stage, top right: the view for performing, with the tablet on the mic stand. Lyrics large on the left; the song, time left, big Restart / Play / Next buttons, the volume and the next songs on the right. Double-tap a song in Up next to play it now; its ↑ ↓ arrows move it up or down and ✕ takes it out of the queue. Single / Autoplay sits by the volume. Double-tap the lyrics for full screen. The ⇄ button (or the Menu) swaps the lyrics to the other side. Library goes back. EZtiger opens in the view you used last. When Up next is down to its last 2 songs a warning shows (orange at 2, red at 1 and on the last song), so you can load more in time.',
       '☰ Menu, top right: the Read me, Dark or Light screen, and Text size, which makes the song lists larger (Normal, Large or Extra large). The player and lyrics stay as they are.',
       'EZtiger remembers your settings, volume and the loaded song for next time.',
     ],

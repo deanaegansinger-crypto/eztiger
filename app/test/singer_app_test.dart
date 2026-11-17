@@ -197,6 +197,23 @@ void main() {
     }
   });
 
+  testWidgets('the Read me: for singers, step by step, without the host\'s tools', (tester) async {
+    await pumpApp(tester, const Size(1280, 800));
+    await tester.tap(find.byKey(const Key('main-menu')));
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('read-me')));
+    await settle(tester);
+    expect(find.text('EZTiger for singers · Read me'), findsOneWidget);
+    for (final head in ['1. Add your songs', '2. Bring a playlist from the PC', '7. Sing from the Stage view']) {
+      expect(find.text(head, skipOffstage: false), findsOneWidget, reason: head);
+    }
+    expect(find.textContaining('Songbook', skipOffstage: false), findsNothing);
+    expect(find.textContaining('Song requests', skipOffstage: false), findsNothing);
+    expect(find.textContaining('Vocal cut', skipOffstage: false), findsNothing);
+    expect(find.textContaining('sync file', skipOffstage: false), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   test('the singer app is one app: the Pro singing features, however it was built', () {
     expect(builtAsPro, isTrue);
   });
