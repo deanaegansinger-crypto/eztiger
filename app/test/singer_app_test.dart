@@ -205,7 +205,7 @@ void main() {
     await settle(tester);
     expect(find.text('EZTiger for singers · Read me'), findsOneWidget);
     for (final head in ['1. Add your songs', '2. Bring a playlist from the PC', '7. Sing from the Stage view']) {
-      expect(find.text(head, skipOffstage: false), findsOneWidget, reason: head);
+      expect(find.text(head.toUpperCase(), skipOffstage: false), findsOneWidget, reason: head);
     }
     expect(find.textContaining('Songbook', skipOffstage: false), findsNothing);
     expect(find.textContaining('Song requests', skipOffstage: false), findsNothing);
