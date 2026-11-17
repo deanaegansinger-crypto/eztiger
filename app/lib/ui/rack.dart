@@ -1926,13 +1926,10 @@ class _ResultRowState extends State<ResultRow> {
       if (brand == null) return box;
       // A click on a collection: its disc goes in, the saved way (☰ Menu →
       // Versions), or with All / Off a quick Now / Next / Bottom menu.
-      return MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          key: Key('brand-$brand'),
-          onTapUp: (d) => _brandPicked(context, s, brands[brand]!.first, d.globalPosition),
-          child: box,
-        ),
+      return _BrandTile(
+        key: Key('brand-$brand'),
+        onClick: (at) => _brandPicked(context, s, brands[brand]!.first, at),
+        child: box,
       );
     }
     return ColumnsRow(
@@ -1982,6 +1979,35 @@ class _ResultRowState extends State<ResultRow> {
       },
     );
   }
+}
+
+/// A collection tile: a press and release in place is a click. Raw pointer
+/// events, so the row's double-click and drag can't swallow it.
+class _BrandTile extends StatefulWidget {
+  const _BrandTile({super.key, required this.onClick, required this.child});
+  final void Function(Offset at) onClick;
+  final Widget child;
+  @override
+  State<_BrandTile> createState() => _BrandTileState();
+}
+
+class _BrandTileState extends State<_BrandTile> {
+  Offset? _down;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    cursor: SystemMouseCursors.click,
+    child: Listener(
+      onPointerDown: (e) => _down = e.buttons == kPrimaryButton ? e.position : null,
+      onPointerCancel: (_) => _down = null,
+      onPointerUp: (e) {
+        final d = _down;
+        _down = null;
+        if (d != null && (e.position - d).distance < 8) widget.onClick(e.position);
+      },
+      child: widget.child,
+    ),
+  );
 }
 
 /// A collection tile clicked in the Songbook view: its disc goes in the way
