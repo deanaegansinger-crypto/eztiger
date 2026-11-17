@@ -1585,11 +1585,27 @@ class _ResultsTableState extends State<ResultsTable> {
                 : DragTarget<SongDrag>(
                     onWillAcceptWithDetails: (_) => s.view == ResultsView.playlist && s.selectedPlaylistId != null,
                     onAcceptWithDetails: (d) => s.dropIntoPlaylist(s.selectedPlaylistId!, d.data, groups.length),
-                    builder: (context, _, _) => ListView.builder(
-                      itemCount: groups.length,
-                      itemExtent: listSize(context, 28),
-                      itemBuilder: (context, i) => ResultRow(group: groups[i], index: i, focus: focus),
-                    ),
+                    builder: (context, _, _) {
+                      final rowH = listSize(context, 28);
+                      // One song picked in the search with other versions (×5):
+                      // its discs open under it, each a click to load.
+                      final open = s.view == ResultsView.search && n == 1 ? s.selection.first : -1;
+                      final versions = open >= 0 && open < groups.length && groups[open].versions.length > 1
+                          ? groups[open].versions.length
+                          : 0;
+                      return ListView.builder(
+                        itemCount: groups.length,
+                        itemExtentBuilder: (i, _) =>
+                            i >= groups.length ? null : (i == open && versions > 0 ? rowH * (1 + versions) : rowH),
+                        itemBuilder: (context, i) => ResultRow(
+                          group: groups[i],
+                          index: i,
+                          focus: focus,
+                          showVersions: i == open && versions > 0,
+                          rowHeight: rowH,
+                        ),
+                      );
+                    },
                   ),
           ),
         ],
@@ -1679,10 +1695,21 @@ class _ResultsHeader extends StatelessWidget {
 }
 
 class ResultRow extends StatefulWidget {
-  const ResultRow({super.key, required this.group, required this.index, this.focus});
+  const ResultRow({
+    super.key,
+    required this.group,
+    required this.index,
+    this.focus,
+    this.showVersions = false,
+    this.rowHeight = 28,
+  });
   final SearchGroup group;
   final int index;
   final FocusNode? focus;
+
+  /// Its other versions (discs) open under it, each with a Load button.
+  final bool showVersions;
+  final double rowHeight;
   @override
   State<ResultRow> createState() => _ResultRowState();
 }
@@ -1753,7 +1780,7 @@ class _ResultRowState extends State<ResultRow> {
     final rows = s.selectedRows(orRow: index);
     final inPlaylist = s.view == ResultsView.playlist ? s.selectedPlaylistId : null;
     final dragging = SongDrag([for (final r in rows) s.results[r].primary], playlistId: inPlaylist, positions: rows);
-    return Listener(
+    final listened = Listener(
       onPointerDown: (e) {
         widget.focus?.requestFocus();
         _dragged = false;
@@ -1788,6 +1815,74 @@ class _ResultRowState extends State<ResultRow> {
         child: inPlaylist == null
             ? row
             : InsertTarget(index: index, onDrop: (d, at) => s.dropIntoPlaylist(inPlaylist, d, at), child: row),
+      ),
+    );
+    if (!widget.showVersions) return listened;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(height: widget.rowHeight, child: listened),
+        for (final (k, v) in group.versions.indexed)
+          SizedBox(height: widget.rowHeight, child: _VersionLine(track: v, number: k)),
+      ],
+    );
+  }
+}
+
+/// Loads a song the way a double-click does, onto a player: with 2 decks and
+/// a song playing it goes on the other deck as the next song; otherwise it
+/// loads paused.
+Future<void> loadOnPlayer(AppState s, Track t) =>
+    isPro && s.twoDecks ? s.loadNext([t]) : s.playNow(t, autostart: false);
+
+/// One version (disc) of the picked song, under it in the search: click to
+/// load it.
+class _VersionLine extends StatelessWidget {
+  const _VersionLine({required this.track, required this.number});
+  final Track track;
+  final int number;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final t = track;
+    final parts = (t.folderPath ?? '').split(RegExp(r'[\\/]')).where((x) => x.isNotEmpty).toList();
+    final disc = parts.length >= 2 ? '${parts[parts.length - 2]} · ${parts.last}' : parts.join();
+    return Material(
+      color: EzColors.cyan.withValues(alpha: 0.10),
+      child: InkWell(
+        key: Key('version-$number'),
+        onTap: () => loadOnPlayer(s, t),
+        child: Container(
+          padding: const EdgeInsets.only(left: 18, right: 6),
+          decoration: BoxDecoration(border: Border(left: BorderSide(color: EzColors.cyan, width: 3))),
+          child: Row(
+            children: [
+              TypeChip(t.type),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(text: disc.isEmpty ? t.fileName : disc),
+                      if (t.version != null)
+                        TextSpan(text: '  ${t.version}', style: TextStyle(color: context.ez.textDim)),
+                      TextSpan(text: '  ${t.fileName}', style: TextStyle(color: context.ez.textDim, fontSize: 10)),
+                    ],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+              Text(
+                '▶ Load',
+                key: Key('version-load-$number'),
+                style: TextStyle(fontSize: 11, color: EzColors.cyan, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
