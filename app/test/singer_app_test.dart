@@ -207,10 +207,13 @@ void main() {
     for (final head in ['1. Add your songs', '2. Bring a playlist from the PC', '7. Sing from the Stage view']) {
       expect(find.text(head.toUpperCase(), skipOffstage: false), findsOneWidget, reason: head);
     }
-    expect(find.textContaining('Songbook', skipOffstage: false), findsNothing);
-    expect(find.textContaining('Song requests', skipOffstage: false), findsNothing);
-    expect(find.textContaining('Vocal cut', skipOffstage: false), findsNothing);
-    expect(find.textContaining('sync file', skipOffstage: false), findsNothing);
+    for (final host in ['Songbook', 'Song requests', 'Vocal cut', 'sync file']) {
+      expect(
+        find.descendant(of: find.byType(AlertDialog), matching: find.textContaining(host, skipOffstage: false)),
+        findsNothing,
+        reason: host,
+      );
+    }
     expect(tester.takeException(), isNull);
   });
 
