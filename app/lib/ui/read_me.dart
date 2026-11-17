@@ -267,7 +267,7 @@ const _singer = <(String, List<String>)>[
 ];
 
 const _pro = (
-  'EZTiger Pro',
+  'Keys, sound and 2 decks',
   [
     'KEY, under the volume: − and + move the song down or up a semitone, as far as 3 either way. The 0 in the middle puts it back. EZTiger remembers the key for each song, and when a song loads in a changed key, "KEY +2" (or −) flashes red on the player and the Stage view.',
     'Level, under the volume: evens out the loudness, so quiet and loud MP3s and videos play at about the same level. It takes a moment to settle at the start of a song.',
@@ -278,8 +278,8 @@ const _pro = (
     'Each deck has its own − KEY +: set the key of the song waiting on the other deck before it comes in, in the library or the Stage view. EZTiger remembers it for that song.',
     'With 2 decks on, double-click a song (or drop it on the deck that is not playing) to make it the next song. Whatever was waiting moves back to second in the queue, where you can leave it or take it off. Drop a song on the ON AIR deck to play it now.',
     'X-fade, under the decks: the slider sets the crossfade from 0 (a straight cut) to 6 seconds. Overlap brings the next song in under the last one; In turn fades one out, then the next in. Smooth fades sound even all the way through; Linear is the plain fade.',
-    "Tonight's playlist is the list of songs to sing (Basic calls it the queue). Save changes to a playlist: after Load playlist, change Tonight's playlist as you go (add, move or take songs off), then press 💾 Save to <playlist> above it. The Save menu can also replace any playlist with Tonight's playlist.",
-    if (trialEnabled) 'Trial: the Pro installer gives every Pro feature for 14 days (the days left show by the PRO badge). After that EZTiger carries on as Basic, with everything kept, until a licence key is entered in ☰ Menu → Enter licence key. The key is checked online once; after that it works without the internet.',
+    "Tonight's playlist is the list of songs to sing tonight. Save changes to a playlist: after Load playlist, change Tonight's playlist as you go (add, move or take songs off), then press 💾 Save to <playlist> above it. The Save menu can also replace any playlist with Tonight's playlist.",
+    if (trialEnabled) 'Trial: the Pro installer gives every Pro feature for 14 days (the days left show by the PRO badge). After that those features pause, with everything kept, until a licence key is entered in ☰ Menu → Enter licence key. The key is checked online once; after that it works without the internet.',
     'Screen lock: press 🔒 (top bar, or by Library in the Stage view) and every tap is ignored, so a bump on the mic stand can\'t stop or skip a song; the song plays on. Press and hold the lock at the top for a moment to unlock. ☰ Menu → Screen lock button switches the 🔒 off if you don\'t want it.',
     'Searching: click (or tap) the search box and everything under the player folds away, so the results get the room. Press ✕ in the search box to bring it all back.',
     'Drag a whole folder: click a folder in the Library box to highlight it, then drag it into Tonight\'s playlist, a playlist or the player. All its songs, as listed, go in.',
