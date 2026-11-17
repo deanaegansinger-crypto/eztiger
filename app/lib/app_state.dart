@@ -163,7 +163,10 @@ class AppState extends ChangeNotifier {
   /// The search list: 'songbook' (the usual: bigger rows, title over artist,
   /// a tile for each collection that has the song) or 'list' (one line a
   /// song, more on the screen). Remembered.
-  String searchStyle = 'songbook';
+  String searchStyle = defaultSearchStyle;
+
+  /// The view a new EZTiger starts in; the older tests use 'list'.
+  static String defaultSearchStyle = 'songbook';
 
   void setSearchStyle(String v) {
     if (v != 'list' && v != 'songbook') return;

@@ -1887,13 +1887,15 @@ class _ResultRowState extends State<ResultRow> {
             : InsertTarget(index: index, onDrop: (d, at) => s.dropIntoPlaylist(inPlaylist, d, at), child: row),
       ),
     );
-    if (!widget.showVersions) return listened;
+    // The same shape open or closed, so a click that opens the discs isn't
+    // lost when the row is rebuilt under it.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(height: widget.rowHeight, child: listened),
-        for (final (k, v) in group.versions.indexed)
-          SizedBox(height: widget.discHeight, child: _VersionLine(track: v, number: k)),
+        if (widget.showVersions)
+          for (final (k, v) in group.versions.indexed)
+            SizedBox(height: widget.discHeight, child: _VersionLine(track: v, number: k)),
       ],
     );
   }
