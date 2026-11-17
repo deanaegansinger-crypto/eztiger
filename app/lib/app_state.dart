@@ -97,6 +97,27 @@ class AppState extends ChangeNotifier {
   /// left, instead of the other way round.
   bool stageLyricsRight = false;
 
+  /// The singer app: the tablet turns upright in the Stage view, with the
+  /// decks and Up next in the top half and the lyrics filling the bottom.
+  bool stagePortrait = false;
+
+  /// Turns the tablet: true for upright (the portrait Stage view), false
+  /// for landscape. Set by the Android app; nothing on Windows.
+  void Function(bool portrait)? onOrientation;
+
+  /// Asks for the orientation the screen should be in now.
+  void applyOrientation() => onOrientation?.call(stageView && stagePortrait);
+
+  void setStagePortrait(bool v) {
+    stagePortrait = v;
+    applyOrientation();
+    notifyListeners();
+  }
+
+  /// Up next counts down to this many songs before the Stage view warns
+  /// that Tonight's playlist is running out.
+  static const lowSongsWarning = 2;
+
   /// Rescan the library each time EZtiger starts. Off: rescan by hand with
   /// 🔄 Rescan when songs have been added or renamed.
   bool rescanOnStart = false;
@@ -313,6 +334,7 @@ class AppState extends ChangeNotifier {
       crossfade = m['crossfade'] as bool? ?? crossfade;
       stageView = m['stage'] as bool? ?? stageView;
       stageLyricsRight = m['stageLyricsRight'] as bool? ?? stageLyricsRight;
+      stagePortrait = m['stagePortrait'] as bool? ?? stagePortrait;
       rescanOnStart = m['rescanOnStart'] as bool? ?? rescanOnStart;
       columnWeights = {
         for (final e in ((m['columnWeights'] as Map?) ?? const {}).entries)
@@ -374,6 +396,7 @@ class AppState extends ChangeNotifier {
       'textScale': textScale,
       'stage': stageView,
       'stageLyricsRight': stageLyricsRight,
+      'stagePortrait': stagePortrait,
       'rescanOnStart': rescanOnStart,
       'columnWeights': columnWeights,
       'hiddenColumns': hiddenColumns.toList()..sort(),
@@ -441,6 +464,7 @@ class AppState extends ChangeNotifier {
 
   void setStageView(bool v) {
     stageView = v;
+    applyOrientation();
     notifyListeners();
   }
 
@@ -1033,6 +1057,29 @@ class AppState extends ChangeNotifier {
   /// the library, and the playlist is made under the plan's name (replacing
   /// one of that name, for an update), with its keys. Returns a line saying
   /// what happened.
+  /// "EZTiger playlists", beside "EZTiger imports": a .m3u file for each
+  /// playlist received, so other music players on the tablet can play it in
+  /// order.
+  String get playlistsRoot => p.join(p.dirname(importsRoot), 'EZTiger playlists');
+
+  /// Writes (or rewrites, on an Update) ★ name's .m3u in [playlistsRoot]:
+  /// the songs in running order, by their full path in its imports folder.
+  /// Returns the file's path.
+  String writePlaylistFile(String name, String folder, PlaylistPackage pkg) {
+    final out = File(p.join(playlistsRoot, '${safeName(name)}.m3u'));
+    out.parent.createSync(recursive: true);
+    final lines = ['#EXTM3U', '#PLAYLIST:$name'];
+    for (final s in pkg.songs) {
+      final song = File(p.join(folder, songsFolder, s.play));
+      if (!song.existsSync()) continue;
+      lines
+        ..add('#EXTINF:-1,${s.artist != null ? '${s.artist} - ' : ''}${s.title}')
+        ..add(song.path);
+    }
+    out.writeAsStringSync('${lines.join('\n')}\n');
+    return out.path;
+  }
+
   Future<String> addImportedPlaylist(ImportResult r) async {
     final pkg = r.pkg, folder = r.plan.folder;
     final rootsNow = await db.folders.roots();
@@ -1064,6 +1111,11 @@ class AppState extends ChangeNotifier {
     }
     final id = await db.playlists.create(name);
     await db.playlists.addAll(id, ids);
+    // A playlist file for other players (VLC, Poweramp…), in running order.
+    // Never a reason for the transfer to fail.
+    try {
+      writePlaylistFile(name, folder, pkg);
+    } catch (_) {}
     await _reloadFolders();
     await _reloadPlaylists();
     await refreshResults();
@@ -1207,7 +1259,8 @@ class AppState extends ChangeNotifier {
   void startSongRequests() {
     _requestsTimer?.cancel();
     _requestsTimer = null;
-    if (RequestServer.parse(requestsLink) == null) {
+    // The singer app takes no requests.
+    if (singerApp || RequestServer.parse(requestsLink) == null) {
       _setRequestsState(RequestsState.off);
       return;
     }

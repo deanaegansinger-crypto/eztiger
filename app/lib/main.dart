@@ -90,8 +90,8 @@ Future<void> main(List<String> args) async {
   });
 }
 
-/// The Android tablet: one screen, landscape, kept awake, and the library on
-/// the SD card.
+/// The Android singer app: one screen, landscape (or upright in the portrait
+/// Stage view), kept awake, and the library on the SD card.
 Future<void> runOnTablet() async {
   MediaKit.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
@@ -116,6 +116,13 @@ Future<void> runOnTablet() async {
   // would look empty.
   final canRead = await hasStorageAccess();
   await state.init(rescanLibrary: canRead);
+  // Landscape, or upright in the Stage view when that's set to Portrait.
+  state.onOrientation = (portrait) => SystemChrome.setPreferredOrientations(
+    portrait
+        ? [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]
+        : [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight],
+  );
+  state.applyOrientation();
 
   runApp(
     EztigerApp(
@@ -131,6 +138,5 @@ Future<void> runOnTablet() async {
       await state.rescan();
     }
     await state.startUp();
-    state.startSongRequests();
   });
 }

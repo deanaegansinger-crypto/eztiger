@@ -256,6 +256,18 @@ class _MainMenu extends StatelessWidget {
             onChanged: s.setStageLyricsRight,
           ),
         ),
+        // The singer app: the tablet upright in the Stage view, lyrics below.
+        if (singerApp)
+          _menuRow(
+            menu,
+            'Stage tablet',
+            Segmented<bool>(
+              key: const Key('menu-stage-portrait'),
+              options: const {false: 'Landscape', true: 'Portrait'},
+              value: s.stagePortrait,
+              onChanged: s.setStagePortrait,
+            ),
+          ),
         if (isPro)
           _menuRow(
             menu,
@@ -275,6 +287,7 @@ class _MainMenu extends StatelessWidget {
             child: const Text('Screen lock button 🔒'),
           ),
         const PopupMenuDivider(),
+        if (!singerApp)
         PopupMenuItem(
           key: const Key('menu-songbook'),
           value: 'songbook',
@@ -365,16 +378,19 @@ class _MainMenu extends StatelessWidget {
             height: 28,
             child: Text('SYNC PC ⇄ TABLET', style: TextStyle(fontSize: 11, letterSpacing: 1)),
           ),
-          const PopupMenuItem(
-            key: Key('sync-save'),
-            value: 'sync-save',
-            child: Row(children: [Icon(Icons.upload_file, size: 18), SizedBox(width: 10), Text('Save sync file…')]),
-          ),
-          const PopupMenuItem(
-            key: Key('sync-load'),
-            value: 'sync-load',
-            child: Row(children: [Icon(Icons.download, size: 18), SizedBox(width: 10), Text('Load sync file…')]),
-          ),
+          // The old sync file: the singer app has Import and Receive instead.
+          if (!singerApp) ...[
+            const PopupMenuItem(
+              key: Key('sync-save'),
+              value: 'sync-save',
+              child: Row(children: [Icon(Icons.upload_file, size: 18), SizedBox(width: 10), Text('Save sync file…')]),
+            ),
+            const PopupMenuItem(
+              key: Key('sync-load'),
+              value: 'sync-load',
+              child: Row(children: [Icon(Icons.download, size: 18), SizedBox(width: 10), Text('Load sync file…')]),
+            ),
+          ],
           // The tablet: a playlist and its songs, exported by EZTiger Pro.
           if (touchUi) ...[
             const PopupMenuItem(
@@ -462,7 +478,8 @@ class _MainMenu extends StatelessWidget {
             checked: s.textScale == scale,
             child: Text(label, style: TextStyle(fontSize: 14 * scale)),
           ),
-        const PopupMenuDivider(),
+        if (!singerApp) const PopupMenuDivider(),
+        if (!singerApp)
         PopupMenuItem(
           key: const Key('menu-requests'),
           value: 'requests',
