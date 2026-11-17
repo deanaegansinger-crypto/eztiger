@@ -353,6 +353,9 @@ void main() {
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
+    // The menu is taller than the window: it scrolls.
+    await tester.ensureVisible(find.text('Light'));
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.text('Light'));
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 100));
