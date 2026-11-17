@@ -267,6 +267,7 @@ class _SendDialogState extends State<_SendDialog> {
 /// "Import playlist": from an EZTiger export on the tablet, an SD card or a
 /// USB stick (a folder or a zip). Every song is copied into EZTiger imports.
 Future<void> importPlaylist(BuildContext context) async {
+  if (!await _canSaveSongs(context) || !context.mounted) return;
   final source = await pickAndroidExport(context);
   if (source == null || !context.mounted) return;
   final again = await showDialog<bool>(
@@ -285,6 +286,7 @@ Future<void> importPlaylist(BuildContext context) async {
 /// "Receive playlist from PC": over the Wi-Fi from EZTiger Pro's "Send to
 /// the tablet", with the PC's address and code.
 Future<void> receivePlaylist(BuildContext context) async {
+  if (!await _canSaveSongs(context) || !context.mounted) return;
   final s = AppScope.of(context);
   final host = TextEditingController(text: s.transferHost.isNotEmpty ? s.transferHost : _hostOf(s.requestsLink));
   final code = TextEditingController();
@@ -344,6 +346,39 @@ Future<void> receivePlaylist(BuildContext context) async {
   );
   // Receive another: back to the address and code, with the address kept.
   if (again == true && context.mounted) await receivePlaylist(context);
+}
+
+/// Android: the songs, their CDGs and the half-copied ".part" files go in
+/// EZTiger imports, which needs "All files access" (without it Android lets
+/// the app save only music files there, so the copy fails). A phone that
+/// has never had a karaoke folder added hasn't been asked yet: ask now.
+Future<bool> _canSaveSongs(BuildContext context) async {
+  if (!Platform.isAndroid || await hasStorageAccess()) return true;
+  if (!context.mounted) return false;
+  final go = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      scrollable: true,
+      title: const Text('Allow EZTiger to save the songs'),
+      content: const Text(
+        'The songs, with their CDG lyrics, are copied into the EZTiger imports folder. '
+        'Android needs you to allow that once: on the next screen, switch on '
+        '"Allow access to manage all files" for EZTiger, then come back.',
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Allow')),
+      ],
+    ),
+  );
+  if (go != true) return false;
+  if (await ensureStorageAccess()) return true;
+  if (context.mounted) {
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(content: Text('Without "manage all files" EZTiger can\'t save the songs. Try again to allow it.')),
+    );
+  }
+  return false;
 }
 
 /// When the playlist coming in has the name of one already on the tablet:
