@@ -194,6 +194,7 @@ const _singer = <(String, List<String>)>[
     '3. Find and play a song',
     [
       'Type in the search box to find a song by title or artist. While you search, everything under the player folds away to give the results room; ✕ in the search box brings it back.',
+      'View, above the list: Songbook (the usual) shows each song once on a bigger row, with a tile for each collection that has it. Tap a tile to put that disc in: ☰ Menu → Versions (×5) sets whether it goes on Now, Next or at the Bottom of Tonight\'s playlist. Tap the song to see all its discs. List fits more songs on the screen.',
       'Double-tap a song to load it into the player, paused, ready to go. Press ▶ to start, ⏸ to pause, ⏮ to go back to the start and ⏭ for the next song. Drag the bar under the player to skip through the song.',
       'Press and hold a song, then move your finger, to drag it onto the player, Tonight\'s playlist or a playlist. Press and hold and let go without moving for its menu: add to Tonight\'s playlist, set the singer, playlists and more.',
       'Drag a whole folder: tap a folder in the Library box, then press and hold it and drag it into Tonight\'s playlist. All its songs go in.',
@@ -324,7 +325,16 @@ const _sections = <(String, List<String>)>[
     [
       'Library tab: click Add folder and pick your karaoke folder. EZtiger scans it. When you add, remove or rename songs later, press 🔄 Rescan (next to Add folder, or in the ☰ Menu). To rescan every time EZtiger starts, tick "Rescan at start-up" in the Menu.',
       'The arrow at the right of the Library / Playlists tabs folds that box away, for more room for the song list. Tap a tab to bring it back.',
-      'Type in the search box to find songs by title or artist. Use the type filter (CDG, MP4…) and the A–Z sort above the list.',
+      'Type in the search box to find songs by title or artist. Above the list: Type (CDG, MP4…), Sort (best match or A–Z) and View.',
+      'View: Songbook (the usual) shows each song once on a bigger row, the title over the artist, with a tile for each collection that has it, such as Sunfly ×2 · Zoom · +1. List shows one line a song, so more fit on the screen. EZTiger remembers which you chose.',
+    ],
+  ),
+  (
+    'Songs on more than one disc',
+    [
+      'A song you have on several discs shows a tile for each collection (Songbook view), or ×5 after its title (List view).',
+      'Click a tile to put that collection\'s disc in. ☰ Menu → Versions (×5) sets what a click does: Now loads it on the player, paused; Next makes it the next song in Tonight\'s playlist (cued on the other deck with 2 decks); Bottom adds it to the end of Tonight\'s playlist. With All (or Off), the tile asks which.',
+      'Click the song itself and all its discs open underneath it: the collection, disc and file name, with Now, Next and Bottom (or just the one you chose in Versions). Off keeps them closed. Right-click → 🎚 Other versions… lists them too.',
     ],
   ),
   (
@@ -369,7 +379,7 @@ const _sections = <(String, List<String>)>[
   (
     'Columns',
     [
-      'Drag the line at the right of a column heading to make that column wider or narrower (in the song list and the queue).',
+      'Drag the line at the right of a column heading to make that column wider or narrower (in the song list and the queue). The Songbook and List views keep their own widths.',
       'Right-click a column heading (press and hold on the tablet) to show or hide columns, or Reset columns to put them back.',
     ],
   ),
