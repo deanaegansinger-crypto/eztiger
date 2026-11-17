@@ -162,6 +162,86 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  // The test devices: a Galaxy Tab A8 and a Galaxy A52 phone, in the sizes
+  // Flutter sees (less the status bar).
+  const tabA8 = Size(1280, 752), tabA8Up = Size(800, 1232);
+  const a52 = Size(914, 387), a52Up = Size(411, 890);
+
+  Future<void> playFirst(WidgetTester tester) async {
+    await tester.runAsync(() => state.playEntry(state.queue.first));
+    await tester.pump();
+  }
+
+  Future<void> keyUp(WidgetTester tester, String key) async {
+    await tester.ensureVisible(find.byKey(Key(key)));
+    await tester.pump();
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(Key(key)));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pump();
+  }
+
+  for (final (label, size) in [('Tab A8', tabA8), ('A52 on its side', a52)]) {
+    testWidgets('$label, library, 2 decks: play/pause and the key on deck A, and the key changes', (tester) async {
+      await pumpApp(tester, size);
+      await tester.runAsync(() => state.setTwoDecks(true));
+      await playFirst(tester);
+      expect(tester.takeException(), isNull, reason: 'nothing cut off');
+      final screen = Offset.zero & size;
+      for (final k in ['deck-A-play', 'deck-A-key', 'deck-A-key-up']) {
+        expect(find.byKey(Key(k)), findsOneWidget, reason: k);
+        final r = tester.getRect(find.byKey(Key(k)));
+        expect(screen.contains(r.center), isTrue, reason: '$k on screen');
+      }
+      final deckA = tester.getRect(find.byKey(const Key('deck-A')));
+      expect(deckA.contains(tester.getRect(find.byKey(const Key('deck-A-play'))).centerRight), isTrue,
+          reason: 'play/pause inside the deck, not cut off');
+      await keyUp(tester, 'deck-A-key-up');
+      expect(state.decks[0].keyShift, 1);
+      expect((state.decks[0].backend as FakeBackend).pitch, isNot(1.0), reason: 'the sound moves too');
+      expect(tester.widget<Text>(find.byKey(const Key('deck-A-key'))).data, 'KEY +1');
+    });
+  }
+
+  for (final (label, size, up) in [
+    ('Tab A8', tabA8, false),
+    ('Tab A8 upright', tabA8Up, true),
+    ('A52 upright', a52Up, true),
+  ]) {
+    testWidgets('$label, Stage view, 1 deck: play/pause and KEY − +, and the key changes', (tester) async {
+      await pumpApp(tester, const Size(1280, 752));
+      state.setStagePortrait(up);
+      state.setStageView(true);
+      tester.view.physicalSize = size;
+      await playFirst(tester);
+      expect(tester.takeException(), isNull, reason: 'nothing squashed');
+      for (final k in ['stage-play', 'stage-key', 'stage-key-up', 'stage-key-down']) {
+        expect(find.byKey(Key(k)), findsOneWidget, reason: k);
+      }
+      await keyUp(tester, 'stage-key-up');
+      expect(state.engine.keyShift, 1);
+      expect(find.text('+1'), findsWidgets);
+      expect((state.engine.backend as FakeBackend).pitch, isNot(1.0));
+    });
+  }
+
+  testWidgets('A52 upright, Stage view, 2 decks: deck A keeps play/pause and its key', (tester) async {
+    await pumpApp(tester, const Size(1280, 752));
+    await tester.runAsync(() => state.setTwoDecks(true));
+    state.setStagePortrait(true);
+    state.setStageView(true);
+    tester.view.physicalSize = a52Up;
+    await playFirst(tester);
+    expect(tester.takeException(), isNull);
+    final deckA = tester.getRect(find.byKey(const Key('deck-A')));
+    for (final k in ['deck-A-play', 'deck-A-key-up']) {
+      expect(deckA.contains(tester.getRect(find.byKey(Key(k))).center), isTrue, reason: k);
+    }
+    await keyUp(tester, 'deck-A-key-up');
+    expect(state.decks[0].keyShift, 1);
+  });
+
   testWidgets('on a phone, Receive from PC fits above the keyboard', (tester) async {
     // A phone on its side, with the keyboard up over half the screen.
     tester.view.physicalSize = const Size(800, 380);

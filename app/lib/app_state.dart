@@ -1053,10 +1053,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// After an import or a receive: the songs (in the plan's folder) go into
-  /// the library, and the playlist is made under the plan's name (replacing
-  /// one of that name, for an update), with its keys. Returns a line saying
-  /// what happened.
   /// "EZTiger playlists", beside "EZTiger imports": a .m3u file for each
   /// playlist received, so other music players on the tablet can play it in
   /// order.
@@ -1080,6 +1076,10 @@ class AppState extends ChangeNotifier {
     return out.path;
   }
 
+  /// After an import or a receive: the songs (in the plan's folder) go into
+  /// the library, and the playlist is made under the plan's name (replacing
+  /// one of that name, for an update), with its keys. Returns a line saying
+  /// what happened.
   Future<String> addImportedPlaylist(ImportResult r) async {
     final pkg = r.pkg, folder = r.plan.folder;
     final rootsNow = await db.folders.roots();
