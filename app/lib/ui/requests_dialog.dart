@@ -9,8 +9,16 @@ import 'common.dart';
 Future<void> startSongRequestList(BuildContext context) async {
   final s = AppScope.of(context);
   final messenger = ScaffoldMessenger.maybeOf(context);
+  messenger?.showSnackBar(
+    const SnackBar(
+      key: Key('requests-starting'),
+      duration: Duration(seconds: 30),
+      content: Text('Starting song requests: making the singers\' page from your songs…'),
+    ),
+  );
   try {
     final n = await s.startRequestList();
+    messenger?.hideCurrentSnackBar();
     messenger?.showSnackBar(
       SnackBar(
         key: const Key('requests-started'),
@@ -22,6 +30,7 @@ Future<void> startSongRequestList(BuildContext context) async {
       ),
     );
   } catch (e) {
+    messenger?.hideCurrentSnackBar();
     messenger?.showSnackBar(
       SnackBar(content: Text(e is StateError ? e.message : 'Could not start song requests: $e')),
     );

@@ -65,8 +65,20 @@ void main() {
     });
     await s.init(rescanLibrary: false);
     s.findPcAddress = () async => '192.168.1.20';
+    // A pretend request list: running or not, started by launching powershell.
+    var running = false;
+    final asked = <String>[];
+    s.requestListTick = Duration.zero;
+    s.askRequestList = (method, path) async {
+      asked.add('$method $path');
+      if (path == '/dj/quit') running = false;
+      return running;
+    };
     final launched = <List<String>>[];
-    s.launch = (exe, args) async => launched.add([exe, ...args]);
+    s.launch = (exe, args) async {
+      launched.add([exe, ...args]);
+      if (exe == 'powershell') running = true;
+    };
     s.requestTools = () => p.absolute('requests');
 
     // No songs yet: it says so, and starts nothing.
@@ -76,12 +88,30 @@ void main() {
     await s.addRootFolder(lib.path);
     final n = await s.startRequestList();
     expect(n, 3);
-    expect(launched.single.first, 'powershell');
-    final args = launched.single;
+    expect(launched.map((l) => l.first), ['powershell', 'explorer'], reason: 'starts the list, then opens the DJ list');
+    final args = launched.first;
     expect(args[args.indexOf('-File') + 1], endsWith('request-server.ps1'));
+    expect(args, contains('-NoBrowser'), reason: 'EZTiger opens the DJ list itself');
+    expect(launched.last.last, 'http://localhost:8080/dj');
     final page = File(args[args.indexOf('-Page') + 1]).readAsStringSync();
     expect(page, contains('Bohemian Rhapsody'));
+    expect(asked, isNot(contains('POST /dj/quit')), reason: 'nothing was running to stop');
     expect(s.requestsLink, 'localhost:8080');
     expect(s.songbookUrl, 'http://192.168.1.20:8080/', reason: 'the QR code opens the request page');
+
+    // Again, with a list already running (an older page): it is stopped and
+    // started again with the new page.
+    launched.clear();
+    asked.clear();
+    expect(await s.startRequestList(), 3);
+    expect(asked, contains('POST /dj/quit'));
+    expect(launched.map((l) => l.first), ['powershell', 'explorer']);
+
+    // The list never comes up: it says so, and opens nothing.
+    launched.clear();
+    running = false;
+    s.launch = (exe, args) async => launched.add([exe, ...args]);
+    await expectLater(s.startRequestList(), throwsA(isA<StateError>()));
+    expect(launched.map((l) => l.first), ['powershell']);
   });
 }
