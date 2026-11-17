@@ -104,18 +104,39 @@ void main() {
     expect(at, lessThan(state.queue.indexWhere((e) => e.track.title == 'Livin On A Prayer')));
     expect(state.queue.last.track.id, versions[mp4].id);
 
-    // ☰ Menu → Versions: Off. Picking it opens nothing.
-    state.setShowDiscChoices(false);
+    // ☰ Menu → Versions: one saved choice. Only that button shows.
     state.selectRow(waterloo);
+    state.setDiscChoice('bottom');
+    await settle(tester);
+    expect(find.byKey(const Key('version-bottom-0')), findsOneWidget);
+    expect(find.byKey(const Key('version-now-0')), findsNothing);
+    expect(find.byKey(const Key('version-next-0')), findsNothing);
+
+    // Off: picking it opens nothing.
+    state.setDiscChoice('off');
     await settle(tester);
     expect(find.byKey(const Key('version-0')), findsNothing);
-    state.setShowDiscChoices(true);
+    state.setDiscChoice('all');
     await settle(tester);
-    expect(find.byKey(const Key('version-0')), findsOneWidget);
+    expect(find.byKey(const Key('version-now-0')), findsOneWidget);
 
     // Two songs picked (a block): nothing opens.
     state.selectRow(rowOf('Bohemian Rhapsody'), ctrl: true);
     await settle(tester);
     expect(find.byKey(const Key('version-0')), findsNothing);
+  });
+
+  testWidgets('☰ Menu → Versions (×5): the list of choices, and the pick is used', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('main-menu')));
+    await settle(tester);
+    expect(find.text('Versions (×5): All…'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('menu-disc-choices')));
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('menu-disc-choices')));
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('disc-choice-next')));
+    await settle(tester);
+    expect(state.discChoice, 'next');
   });
 }

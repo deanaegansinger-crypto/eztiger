@@ -152,11 +152,17 @@ class AppState extends ChangeNotifier {
   }
 
   /// A song with other versions (×5), picked in the search, opens its discs
-  /// under it, each with Now / Next / Bottom. ☰ Menu → Versions.
-  bool showDiscChoices = true;
+  /// under it. ☰ Menu → Versions: 'all' (Now, Next and Bottom on each disc),
+  /// just one of 'now' / 'next' / 'bottom' (a click on the disc does it), or
+  /// 'off'. Remembered.
+  String discChoice = 'all';
+  static const discChoices = {'all': 'All', 'now': 'Now', 'next': 'Next', 'bottom': 'Bottom', 'off': 'Off'};
 
-  void setShowDiscChoices(bool v) {
-    showDiscChoices = v;
+  bool get showDiscChoices => discChoice != 'off';
+
+  void setDiscChoice(String v) {
+    if (!discChoices.containsKey(v)) return;
+    discChoice = v;
     notifyListeners();
   }
 
@@ -359,7 +365,8 @@ class AppState extends ChangeNotifier {
       libraryCollapsed = m['libraryCollapsed'] as bool? ?? libraryCollapsed;
       lockEnabled = m['lockEnabled'] as bool? ?? lockEnabled;
       doubleClickToQueue = m['doubleClickToQueue'] as bool? ?? doubleClickToQueue;
-      showDiscChoices = m['showDiscChoices'] as bool? ?? showDiscChoices;
+      final dc = m['discChoice'] as String?;
+      if (dc != null && discChoices.containsKey(dc)) discChoice = dc;
       twoDecks = canTwoDecks && (m['twoDecks'] as bool? ?? twoDecks);
       final scale = (m['textScale'] as num?)?.toDouble();
       if (textScaleChoices.containsKey(scale)) textScale = scale!;
@@ -419,7 +426,7 @@ class AppState extends ChangeNotifier {
       'libraryCollapsed': libraryCollapsed,
       'lockEnabled': lockEnabled,
       'doubleClickToQueue': doubleClickToQueue,
-      'showDiscChoices': showDiscChoices,
+      'discChoice': discChoice,
       'twoDecks': twoDecks,
       'autocue': autocue,
       'lyricsDelayOn': lyricsDelayOn,

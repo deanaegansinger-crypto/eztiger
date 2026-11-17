@@ -279,15 +279,10 @@ class _MainMenu extends StatelessWidget {
               onChanged: s.setDoubleClickToQueue,
             ),
           ),
-        _menuRow(
-          menu,
-          'Versions (×5)',
-          Segmented<bool>(
-            key: const Key('menu-disc-choices'),
-            options: const {true: 'Show discs', false: 'Off'},
-            value: s.showDiscChoices,
-            onChanged: s.setShowDiscChoices,
-          ),
+        PopupMenuItem(
+          key: const Key('menu-disc-choices'),
+          value: 'disc-choices',
+          child: Text('Versions (×5): ${AppState.discChoices[s.discChoice]}…'),
         ),
         if (isPro)
           CheckedPopupMenuItem(
@@ -539,6 +534,8 @@ class _MainMenu extends StatelessWidget {
           showSongRequests(context);
         } else if (c == 'start-requests') {
           startSongRequestList(context);
+        } else if (c == 'disc-choices') {
+          _pickDiscChoice(context, s);
         } else if (c == 'rescan') {
           s.rescan();
         } else if (c == 'rescanOnStart') {
@@ -720,6 +717,38 @@ class _SkinSwatch extends StatelessWidget {
 }
 
 /// A menu row with a label and a choice of buttons; picking one closes the menu.
+/// ☰ Menu → Versions (×5): what each disc under a picked song offers.
+Future<void> _pickDiscChoice(BuildContext context, AppState s) async {
+  const help = {
+    'all': 'Now, Next and Bottom on each disc',
+    'now': 'Click a disc: load it on the player now',
+    'next': 'Click a disc: next in tonight\'s playlist',
+    'bottom': 'Click a disc: bottom of tonight\'s playlist',
+    'off': 'Don\'t show the discs',
+  };
+  final v = await showDialog<String>(
+    context: context,
+    builder: (context) => SimpleDialog(
+      title: const Text('Songs with other versions (×5)'),
+      children: [
+        for (final MapEntry(:key, :value) in AppState.discChoices.entries)
+          SimpleDialogOption(
+            key: Key('disc-choice-$key'),
+            onPressed: () => Navigator.pop(context, key),
+            child: Row(
+              children: [
+                Icon(s.discChoice == key ? Icons.radio_button_checked : Icons.radio_button_off, size: 18),
+                const SizedBox(width: 10),
+                Expanded(child: Text('$value  ·  ${help[key]}')),
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
+  if (v != null) s.setDiscChoice(v);
+}
+
 PopupMenuItem<String> _menuRow<T>(BuildContext menu, String label, Segmented<T> choice) => PopupMenuItem<String>(
   child: Row(
     children: [
@@ -1872,10 +1901,19 @@ class _VersionLine extends StatelessWidget {
         ),
       ),
     );
+    final actions = {
+      'now': ('▶ Now', 'Load it on the player now', () => s.playNow(t, autostart: false)),
+      'next': ('⤴ Next', 'Next in $theQueue', () => s.enqueueNext([t])),
+      'bottom': ('⤓ Bottom', 'Add to the bottom of $theQueue', () => s.enqueue(t)),
+    };
+    // One saved choice: the whole line does it. 'all': a button each.
+    final only = actions[s.discChoice];
     return Material(
       key: Key('version-$number'),
       color: EzColors.cyan.withValues(alpha: 0.10),
-      child: Container(
+      child: InkWell(
+        onTap: only?.$3,
+        child: Container(
           padding: const EdgeInsets.only(left: 18, right: 6),
           decoration: BoxDecoration(border: Border(left: BorderSide(color: EzColors.cyan, width: 3))),
           child: Row(
@@ -1897,12 +1935,12 @@ class _VersionLine extends StatelessWidget {
                   style: const TextStyle(fontSize: 12),
                 ),
               ),
-              choice('now', '▶ Now', 'Load it on the player now', () => s.playNow(t, autostart: false)),
-              choice('next', '⤴ Next', 'Next in $theQueue', () => s.enqueueNext([t])),
-              choice('bottom', '⤓ Bottom', 'Add to the bottom of $theQueue', () => s.enqueue(t)),
+              for (final MapEntry(:key, value: (label, tip, go)) in actions.entries)
+                if (only == null || s.discChoice == key) choice(key, label, tip, go),
             ],
           ),
         ),
+      ),
     );
   }
 }
