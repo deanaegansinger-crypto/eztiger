@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Directory, File, HttpClient, Platform;
+import 'dart:io' show Directory, File, HttpClient, Platform, Process, ProcessStartMode;
 import 'dart:isolate';
 
 import 'package:eztiger_core/eztiger_core.dart';
@@ -13,6 +13,7 @@ import 'local_address.dart';
 import 'platform.dart';
 import 'player.dart';
 import 'playlist_transfer.dart';
+import 'request_page.dart';
 import 'song_requests.dart';
 import 'sync.dart';
 import 'vocal_remover.dart';
@@ -1267,6 +1268,61 @@ class AppState extends ChangeNotifier {
     _setRequestsState(RequestsState.connecting);
     _requestsTimer = Timer.periodic(const Duration(seconds: 3), (_) => checkSongRequests());
     unawaited(checkSongRequests());
+  }
+
+  /// Where the request list's files are installed; replaced in tests.
+  String Function() requestTools = requestToolsDir;
+
+  /// Starts a program in the background; replaced in tests.
+  Future<void> Function(String exe, List<String> args) launch =
+      (exe, args) => Process.start(exe, args, mode: ProcessStartMode.detached);
+
+  /// ☰ Menu → Start song requests (Windows): builds the singers' page from
+  /// this library, starts the request list in the background (its DJ list
+  /// opens in the browser), connects EZTiger to it, and points the songbook
+  /// QR code at the singers' page on this PC. Returns how many songs are on
+  /// the page.
+  Future<int> startRequestList() async {
+    final tools = requestTools();
+    final template = File(p.join(tools, 'request-template.html'));
+    final server = File(p.join(tools, 'request-server.ps1'));
+    if (!template.existsSync() || !server.existsSync()) {
+      throw StateError("The song-request list isn't installed with this copy of EZTiger. Reinstall EZTiger Pro.");
+    }
+    final logo = File(p.join(tools, 'eztiger-logo.png'));
+    final rootPaths = roots.map((r) => r.path).toList();
+    final songs = [
+      for (final r in await db.tracks.requestSongs())
+        (title: r.title, artist: r.artist, brand: brandOf(r.folder, rootPaths), code: p.basename(r.folder)),
+    ];
+    if (songs.isEmpty) throw StateError('Add your karaoke folder first: the request page lists its songs.');
+    final page = requestPageHtml(
+      template: template.readAsStringSync(),
+      name: songbookTitle.trim().isEmpty ? 'EZTiger Karaoke' : songbookTitle.trim(),
+      logoBase64: logo.existsSync() ? base64Encode(logo.readAsBytesSync()) : '',
+      skin: skin,
+      lightScreen: !dark,
+      songs: songs,
+    );
+    final data = Directory(requestDataDir())..createSync(recursive: true);
+    final pagePath = p.join(data.path, 'request-songs.html');
+    File(pagePath).writeAsStringSync(page.html);
+    await launch('powershell', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-WindowStyle',
+      'Hidden',
+      '-File',
+      server.path,
+      '-Page',
+      pagePath,
+      '-Folder',
+      p.join(data.path, 'list'),
+    ]);
+    setRequestsLink('localhost:8080');
+    if (await detectPcAddress() != null) useThisPcForQr();
+    return page.count;
   }
 
   void setRequestsLink(String link) {

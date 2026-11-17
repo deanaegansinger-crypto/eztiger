@@ -311,9 +311,10 @@ const _songbook = (
 const _requests = (
   'Song requests from phones',
   [
-    'Singers send requests from their phones over the venue Wi-Fi to the song-request list ("Start song requests" on the PC), which needs no internet. New requests wait there until you add them to its singing queue, or reject them.',
-    'Each song you add to that singing queue comes into Tonight\'s playlist here by itself, with the singer\'s name, while EZTiger is open. The request list shows "✓ In EZTiger" beside it, or "Not found in EZTiger" if the song isn\'t in your library.',
-    '☰ Menu → Song requests: on the PC that runs the request list the link is localhost:8080 (already set). On a tablet, type the DJ link from the request list\'s window, the one ending ?key=…, and press Connect. The Menu says "connected" while it works.',
+    '☰ Menu → Start song requests: EZTiger makes a request page of your songs and starts the request list on this PC, over the venue Wi-Fi, with no internet needed. The first time, Windows asks whether PowerShell may use the network: tick Private networks and Allow (and set the venue Wi-Fi to Private in Windows settings).',
+    'Singers join the Wi-Fi and scan the QR code (☰ Menu → Songbook → Show QR code, now pointing at the request page), pick their name and a song, and press Send. The DJ list opens in your browser: new requests wait there until you press ✓ Add to queue, or ✕ Reject. 🔒 Close requests stops new ones; Print poster makes an A4 poster with the QR code.',
+    'Each song you add to the singing queue comes into Tonight\'s playlist here by itself, with the singer\'s name, while EZTiger is open (☰ Menu → Song requests says "connected"). The DJ list shows "✓ In EZTiger" beside it, or "Not found in EZTiger" if the song isn\'t in your library.',
+    'Next time, Start song requests on the desktop (or in ☰ Menu) starts it again. Stop it with ⏻ Stop the request list at the bottom of the DJ list. The list is kept until you press Clear whole list. Added songs? Start song requests in the Menu again to update the page.',
   ],
 );
 

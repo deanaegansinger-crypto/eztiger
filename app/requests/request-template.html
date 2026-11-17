@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="{{BG}}">
+<title>{{NAME}} · Request a Song</title>
+<link rel="icon" type="image/png" href="data:image/png;base64,{{LOGO}}">
+<style>
+  /* Colours come from branding.json: --brass is the accent, --cyan the highlight, --orange the button. */
+  :root { --bg:{{BG}}; --panel:{{PANEL}}; --raised:{{RAISED}}; --line:{{LINE}}; --text:{{TEXT}}; --dim:{{DIM}};
+          --brass:{{ACCENT}}; --cyan:{{HIGHLIGHT}}; --orange:{{BUTTON}}; --button-top:{{BUTTON_TOP}};
+          --on-brass:{{ON_ACCENT}}; --on-cyan:{{ON_HIGHLIGHT}}; --on-orange:{{ON_BUTTON}};
+          --green:#5fd38a; --red:#ff6b6b; }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:17px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+  .wrap { max-width:640px; margin:0 auto; padding:0 16px 200px; }
+
+  header { text-align:center; padding:22px 0 10px; }
+  header img { width:112px; height:112px; object-fit:contain; filter:drop-shadow(0 6px 18px color-mix(in srgb, var(--orange) 35%, transparent)); }
+  h1 { margin:8px 0 0; font-size:28px; letter-spacing:.5px; color:var(--brass); }
+  .tag { color:var(--dim); font-size:15px; margin-top:2px; }
+  .steps { display:flex; justify-content:center; gap:8px; margin:14px 0 4px; flex-wrap:wrap; }
+  .steps span { font-size:13px; color:var(--dim); border:1px solid var(--line); border-radius:20px; padding:4px 10px; }
+  .steps b { color:var(--orange); }
+
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:14px; margin-top:14px; }
+  .card h2 { margin:0 0 10px; font-size:15px; letter-spacing:1px; text-transform:uppercase; color:var(--brass); }
+  .card h2 .n { display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%;
+                background:var(--orange); color:var(--on-orange); font-size:13px; margin-right:6px; }
+  label.small { display:block; color:var(--dim); font-size:13px; margin:0 0 6px; }
+  input, textarea { width:100%; font:inherit; font-size:18px; padding:12px 14px; border-radius:12px;
+                    border:1px solid var(--line); background:var(--bg); color:var(--text); outline:none; }
+  input:focus, textarea:focus { border-color:var(--cyan); }
+  .search { position:relative; }
+  .search input { padding-right:46px; }
+  .clear { position:absolute; right:6px; top:50%; transform:translateY(-50%); border:0; background:none;
+           color:var(--dim); font-size:26px; width:38px; height:38px; display:none; cursor:pointer; }
+  .hint { color:var(--dim); font-size:14px; margin-top:8px; }
+
+  .results { list-style:none; margin:10px 0 0; padding:0; }
+  .results li { display:flex; align-items:center; gap:10px; padding:11px 10px; border-radius:12px; cursor:pointer;
+                border:1px solid transparent; }
+  .results li + li { border-top-color:var(--line); border-top-left-radius:0; border-top-right-radius:0; }
+  .results li:hover { background:var(--raised); }
+  .results li.on { background:color-mix(in srgb, var(--cyan) 12%, transparent); border-color:var(--cyan); border-radius:12px; }
+  .results .t { font-weight:600; }
+  .results .a { color:var(--dim); font-size:15px; }
+  .results .grow { flex:1; min-width:0; }
+  .results .pick { flex:none; font-size:14px; font-weight:700; color:var(--cyan); border:1px solid var(--cyan);
+                   border-radius:20px; padding:5px 12px; }
+  .results li.on .pick { background:var(--cyan); color:var(--on-cyan); }
+  mark { background:none; color:var(--cyan); }
+  .more { color:var(--dim); font-size:14px; text-align:center; padding:10px 0 2px; }
+
+  .bar { position:fixed; left:0; right:0; bottom:0; background:color-mix(in srgb, var(--bg) 97%, transparent); border-top:1px solid var(--line);
+         padding:12px 16px calc(12px + env(safe-area-inset-bottom)); transform:translateY(110%);
+         transition:transform .2s ease-out; z-index:5; backdrop-filter:blur(6px); }
+  .bar.up { transform:none; }
+  .bar .in { max-width:640px; margin:0 auto; }
+  .chosen { display:flex; align-items:center; gap:10px; }
+  .chosen .grow { flex:1; min-width:0; }
+  .chosen .t { font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chosen .a { color:var(--dim); font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chosen button { flex:none; background:none; border:0; color:var(--dim); font-size:24px; cursor:pointer; }
+  .vers { margin-top:10px; }
+  .vers .lbl { color:var(--dim); font-size:13px; margin-bottom:6px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { flex:none; font:inherit; font-size:14px; padding:6px 12px; border-radius:20px; cursor:pointer;
+          border:1px solid var(--line); background:var(--panel); color:var(--text); }
+  .chip.on { background:var(--brass); border-color:var(--brass); color:var(--on-brass); font-weight:700; }
+  .results .b { color:var(--brass); font-size:12px; margin-top:1px; opacity:.85; }
+  .bar textarea { margin-top:8px; font-size:16px; padding:9px 12px; height:42px; resize:none; }
+  .send { width:100%; margin-top:10px; border:0; border-radius:14px; padding:15px; font:inherit; font-size:19px;
+          font-weight:800; letter-spacing:.5px; color:var(--on-orange); background:linear-gradient(180deg,var(--button-top),var(--orange));
+          cursor:pointer; box-shadow:0 6px 20px color-mix(in srgb, var(--orange) 30%, transparent); }
+  .send:disabled { opacity:.55; cursor:default; }
+  .err { color:var(--red); font-size:14px; margin-top:8px; display:none; }
+
+  .done { position:fixed; inset:0; background:color-mix(in srgb, var(--bg) 92%, black); display:none; place-items:center; z-index:9; padding:24px; }
+  .done.show { display:grid; }
+  .done .box { background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:26px 22px;
+               text-align:center; max-width:420px; width:100%; }
+  .done img { width:84px; height:84px; }
+  .done h3 { margin:10px 0 4px; font-size:24px; color:var(--green); }
+  .done p { margin:6px 0; color:var(--dim); }
+  .done .song { color:var(--text); font-weight:700; font-size:18px; }
+  .done button { margin-top:16px; border:1px solid var(--cyan); background:none; color:var(--cyan); font:inherit;
+                 font-weight:700; border-radius:14px; padding:12px 20px; cursor:pointer; }
+
+  .mine { list-style:none; padding:0; margin:0; }
+  .mine li { padding:8px 0; border-top:1px solid var(--line); color:var(--dim); font-size:15px; }
+  .mine li:first-child { border-top:0; }
+  .mine b { color:var(--text); font-weight:600; }
+  footer { color:var(--dim); text-align:center; font-size:13px; padding:26px 0 8px; }
+  .shut { margin-top:14px; border:1px solid color-mix(in srgb, var(--red) 55%, var(--line)); border-radius:16px; padding:16px;
+          text-align:center; background:color-mix(in srgb, var(--red) 12%, var(--panel)); }
+  .shut b { display:block; font-size:20px; color:var(--text); margin-bottom:4px; }
+  .shut span { color:var(--dim); font-size:15px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="data:image/png;base64,{{LOGO}}" alt="{{NAME}}">
+    <h1>{{NAME}}</h1>
+    <div class="tag">Request a song · {{COUNT}} songs to choose from</div>
+    <div class="steps"><span><b>1</b> Your name</span><span><b>2</b> Find a song</span><span><b>3</b> Send to the DJ</span></div>
+  </header>
+
+  <div class="shut" id="shut" hidden><b>Sorry, no more requests tonight</b><span>The DJ has closed the list. You can still look through the songs.</span></div>
+
+  <section class="card">
+    <h2><span class="n">1</span>Your name</h2>
+    <input id="singer" maxlength="40" autocomplete="nickname" placeholder="The name the DJ will call out">
+  </section>
+
+  <section class="card">
+    <h2><span class="n">2</span>Find your song</h2>
+    <div class="search">
+      <input id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Song title or artist…">
+      <button class="clear" id="clear" aria-label="Clear the search">×</button>
+    </div>
+    <div class="hint" id="hint">Type a few letters of the song or the artist.</div>
+    <ul class="results" id="results"></ul>
+    <div class="more" id="more"></div>
+  </section>
+
+  <section class="card" id="mineCard" hidden>
+    <h2>Your requests tonight</h2>
+    <ul class="mine" id="mine"></ul>
+  </section>
+
+  <footer>Can't find it? Ask the DJ – there may be another version.<br>Powered by EZTiger</footer>
+</div>
+
+<div class="bar" id="bar">
+  <div class="in">
+    <div class="chosen">
+      <div class="grow"><div class="t" id="cTitle"></div><div class="a" id="cArtist"></div></div>
+      <button id="unpick" aria-label="Choose another song">×</button>
+    </div>
+    <div class="vers" id="vers">
+      <div class="lbl" id="versLbl">Got a favourite version?</div>
+      <div class="chips" id="chips"></div>
+    </div>
+    <textarea id="note" maxlength="140" placeholder="Note for the DJ (optional)"></textarea>
+    <button class="send" id="send">Send to the DJ 🎤</button>
+    <div class="err" id="err"></div>
+  </div>
+</div>
+
+<div class="done" id="done">
+  <div class="box">
+    <img src="data:image/png;base64,{{LOGO}}" alt="">
+    <h3>You're on the list!</h3>
+    <p class="song" id="dSong"></p>
+    <p id="dMsg">The DJ has your request. Listen out for your name.</p>
+    <button id="again">Request another song</button>
+  </div>
+</div>
+
+<script>
+// ===================== SETTINGS =====================
+// Where requests go. Blank: the request server on the DJ's PC that this page
+// came from (request-server.ps1, on the venue Wi-Fi). Or a Google Sheet web
+// app link (see SETUP.txt), which ends in /exec.
+const REQUESTS_URL = '{{SCRIPT_URL}}' || 'request';
+// One request per phone in this many seconds, to stop accidental repeats.
+const WAIT_SECONDS = 60;
+// ====================================================
+
+// Brands, biggest collection first: the order the version buttons come in.
+const BRANDS = {{BRANDS}};
+// Each song: [title, artist, versions] – versions is "1~SF001-03|0~SC7201-02"
+// (brand number in BRANDS ~ disc-track).
+const SONGS = {{SONGS}};
+
+/** A song's versions, one per brand: [[brand, [disc, disc…]], …] in brand order. */
+function versionsOf(i) {
+  const by = new Map();
+  for (const v of SONGS[i][2].split('|')) {
+    const [b, d] = v.split('~');
+    if (!by.has(+b)) by.set(+b, []);
+    by.get(+b).push(d);
+  }
+  return [...by].sort((x, y) => x[0] - y[0]).map(([b, ds]) => [BRANDS[b], ds]);
+}
+
+const $ = id => document.getElementById(id);
+const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/&/g, ' and ')
+  .replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('ezt.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('ezt.' + k, JSON.stringify(v)); } catch {} },
+};
+
+const index = SONGS.map(s => [norm(s[0]), norm(s[1])]);
+let picked = null, brand = null, shown = [];
+
+const singer = $('singer');
+singer.value = store.get('singer', '');
+singer.addEventListener('input', () => store.set('singer', singer.value.trim()));
+
+function mark(text, words) {
+  let out = esc(text);
+  for (const w of words) {
+    if (w.length < 2) continue;
+    out = out.replace(new RegExp('(' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig'), '<mark>$1</mark>');
+  }
+  return out;
+}
+
+function search() {
+  const raw = $('q').value;
+  const q = norm(raw);
+  $('clear').style.display = raw ? 'block' : 'none';
+  const list = $('results');
+  if (q.length < 2) {
+    list.innerHTML = ''; $('more').textContent = '';
+    $('hint').style.display = 'block';
+    $('hint').textContent = 'Type a few letters of the song or the artist.';
+    return;
+  }
+  const words = q.split(' ');
+  const hits = [];
+  for (let i = 0; i < index.length; i++) {
+    const [t, a] = index[i];
+    const both = t + ' ' + a;
+    if (!words.every(w => both.includes(w))) continue;
+    // Best first: "title artist" starts with it, then the title does, then the
+    // title has it, then the artist; songs with no artist after the rest.
+    const score = (both.startsWith(q) ? 0 : t.startsWith(q) ? 1 : t.includes(q) ? 2 : a.startsWith(q) ? 3
+      : words.every(w => t.includes(w)) ? 4 : 5) + (a ? 0 : 0.5);
+    hits.push([score, i]);
+  }
+  hits.sort((x, y) => x[0] - y[0] || SONGS[x[1]][0].localeCompare(SONGS[y[1]][0]));
+  shown = hits.slice(0, 60).map(h => h[1]);
+  $('hint').style.display = hits.length ? 'none' : 'block';
+  $('hint').textContent = 'Nothing found. Try fewer words, or just the artist.';
+  list.innerHTML = shown.map(i => {
+    const [t, a] = SONGS[i];
+    const bs = versionsOf(i).map(v => v[0]);
+    const tags = bs.length > 3 ? bs.slice(0, 3).join(' · ') + ` · +${bs.length - 3}` : bs.join(' · ');
+    return `<li data-i="${i}" class="${picked === i ? 'on' : ''}"><div class="grow"><div class="t">${mark(t, words)}</div>` +
+      `<div class="a">${mark(a || 'Unknown artist', words)}</div><div class="b">${esc(tags)}</div></div>` +
+      `<span class="pick">${picked === i ? 'Chosen' : 'Choose'}</span></li>`;
+  }).join('');
+  $('more').textContent = hits.length > 60 ? `Showing 60 of ${hits.length.toLocaleString()} – type more to narrow it down.` : '';
+}
+
+let timer;
+$('q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 120); });
+$('clear').addEventListener('click', () => { $('q').value = ''; search(); $('q').focus(); });
+$('results').addEventListener('click', e => {
+  const li = e.target.closest('li'); if (!li) return;
+  pick(+li.dataset.i);
+});
+
+function pick(i) {
+  picked = i;
+  const [t, a] = SONGS[i];
+  $('cTitle').textContent = t;
+  $('cArtist').textContent = a || 'Unknown artist';
+  $('err').style.display = 'none';
+  brand = null;
+  showVersions();
+  $('bar').classList.add('up');
+  document.activeElement && document.activeElement.blur();
+  search();
+}
+$('unpick').addEventListener('click', () => { picked = null; $('bar').classList.remove('up'); search(); });
+
+/** The version buttons: "Any" (the DJ picks) and one per brand that has the song. */
+function showVersions() {
+  const vs = versionsOf(picked);
+  if (vs.length < 2) {
+    // Only one brand has it: nothing to choose, just say which.
+    $('versLbl').textContent = `Version: ${vs[0][0]}`;
+    $('chips').innerHTML = '';
+    return;
+  }
+  $('versLbl').textContent = `Got a favourite version? ${vs.length} to choose from`;
+  $('chips').innerHTML = [['', 'Any – DJ’s choice'], ...vs.map(v => [v[0], v[0]])].map(([b, label]) =>
+    `<button class="chip ${(brand || '') === b ? 'on' : ''}" data-b="${esc(b)}">${esc(label)}</button>`).join('');
+}
+$('chips').addEventListener('click', e => {
+  const c = e.target.closest('.chip'); if (!c) return;
+  brand = c.dataset.b || null;
+  showVersions();
+});
+
+function fail(msg) { $('err').textContent = msg; $('err').style.display = 'block'; }
+
+$('send').addEventListener('click', async () => {
+  const name = singer.value.trim();
+  if (!name) { fail('Please put your name in step 1.'); singer.focus(); return; }
+  if (picked == null) { fail('Please choose a song.'); return; }
+  const wait = Math.ceil((store.get('lastSent', 0) + WAIT_SECONDS * 1000 - Date.now()) / 1000);
+  if (wait > 0) { fail(`Just sent one – you can send another in ${wait} seconds.`); return; }
+  if (REQUESTS_URL.includes('{{') || location.protocol === 'file:') { fail("Requests aren't switched on yet – please ask the DJ."); return; }
+
+  const [title, artist] = SONGS[picked];
+  // The chosen brand's disc first; the other versions follow for the DJ.
+  const vs = versionsOf(picked);
+  const mine1 = vs.find(v => v[0] === brand) || vs[0];
+  const others = vs.filter(v => v !== mine1).map(v => `${v[0]} ${v[1][0]}`);
+  const body = new URLSearchParams({
+    singer: name, title, artist,
+    version: brand || (vs.length > 1 ? 'Any' : vs[0][0]),
+    disc: `${mine1[0]} ${mine1[1][0]}`,
+    brand: mine1[0], code: mine1[1][0],   // so the DJ's EZTiger can find the exact file
+    others: others.slice(0, 6).join(', '),
+    note: $('note').value.trim(),
+  });
+  const btn = $('send');
+  btn.disabled = true; btn.textContent = 'Sending…'; $('err').style.display = 'none';
+  let ok = false, info = null;
+  try {
+    const r = await fetch(REQUESTS_URL, { method: 'POST', body });
+    info = await r.json().catch(() => null);
+    ok = r.ok && (!info || info.ok !== false);
+    if (info && info.closed) showClosed(true);
+    if (info && info.ok === false) fail(info.error || 'The DJ list said no. Please try again.');
+  } catch {
+    // Some phones block reading the reply; the request still goes through.
+    try { await fetch(REQUESTS_URL, { method: 'POST', body, mode: 'no-cors' }); ok = true; } catch {}
+  }
+  btn.disabled = false; btn.textContent = 'Send to the DJ 🎤';
+  if (closed) showClosed(true);
+  // (A second send after a blocked reply is counted once by the sheet.)
+  if (!ok) { if ($('err').style.display !== 'block') fail("Couldn't reach the DJ. Check your signal and try again."); return; }
+
+  store.set('lastSent', Date.now());
+  const mine = store.get('mine', []).filter(m => Date.now() - m.at < 12 * 3600 * 1000);
+  mine.unshift({ title, artist, at: Date.now() });
+  store.set('mine', mine.slice(0, 20));
+  showMine();
+  $('dSong').textContent = `${title} – ${artist || 'Unknown artist'}` + (brand ? ` (${brand})` : '');
+  // No queue position (the DJ sets the order); just a word when it's busy.
+  const before = info && info.waiting ? info.waiting - 1 : 0;
+  $('dMsg').textContent = before >= 10
+    ? "The DJ has your request. It's a busy night, so please bear with us – we'll get to you as soon as we can. Listen out for your name."
+    : before >= 5
+      ? 'The DJ has your request. There are quite a few singers tonight, so bear with us – listen out for your name.'
+      : 'The DJ has your request. Listen out for your name.';
+  $('done').classList.add('show');
+});
+
+$('again').addEventListener('click', () => {
+  $('done').classList.remove('show');
+  picked = null; $('note').value = ''; $('bar').classList.remove('up');
+  $('q').value = ''; search();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+function showMine() {
+  const mine = store.get('mine', []).filter(m => Date.now() - m.at < 12 * 3600 * 1000);
+  $('mineCard').hidden = !mine.length;
+  $('mine').innerHTML = mine.map(m => `<li><b>${esc(m.title)}</b> – ${esc(m.artist || '')} · ` +
+    new Date(m.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '</li>').join('');
+}
+showMine();
+
+// The DJ can close requests for the night (on the DJ's own request server).
+let closed = false;
+function showClosed(c) {
+  closed = c;
+  $('shut').hidden = !c;
+  const btn = $('send');
+  btn.disabled = c;
+  btn.textContent = c ? 'Requests are closed' : 'Send to the DJ 🎤';
+}
+async function checkOpen() {
+  if (REQUESTS_URL !== 'request' || location.protocol === 'file:') return;
+  try { const s = await (await fetch('status', { cache: 'no-store' })).json(); showClosed(s.open === false); } catch {}
+}
+checkOpen(); setInterval(checkOpen, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkOpen(); });
+</script>
+</body>
+</html>

@@ -4,6 +4,30 @@ import '../song_requests.dart';
 import '../theme.dart';
 import 'common.dart';
 
+/// ☰ Menu → Start song requests (the PC): starts the request list with this
+/// library's songs and says how it went.
+Future<void> startSongRequestList(BuildContext context) async {
+  final s = AppScope.of(context);
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  try {
+    final n = await s.startRequestList();
+    messenger?.showSnackBar(
+      SnackBar(
+        key: const Key('requests-started'),
+        duration: const Duration(seconds: 10),
+        content: Text(
+          'Song requests are on: $n songs on the singers\' page. The DJ list opens in your browser. '
+          'If Windows asks, allow PowerShell on Private networks. The songbook QR code now opens the request page.',
+        ),
+      ),
+    );
+  } catch (e) {
+    messenger?.showSnackBar(
+      SnackBar(content: Text(e is StateError ? e.message : 'Could not start song requests: $e')),
+    );
+  }
+}
+
 /// ☰ Menu → Song requests: the link to the song-request list, so the songs
 /// the DJ adds to its singing queue come into Tonight's playlist.
 Future<void> showSongRequests(BuildContext context) =>
@@ -38,7 +62,7 @@ class _RequestsDialogState extends State<_RequestsDialog> {
               EzColors.green
             ),
           RequestsState.unreachable => (
-              'Can\'t reach the request list. Is "Start song requests" running, and is this device on the same Wi-Fi?',
+              'Can\'t reach the request list. Start it on the PC (☰ Menu → Start song requests), and check this device is on the same Wi-Fi.',
               EzColors.brass
             ),
           RequestsState.needsCode => (
@@ -57,7 +81,7 @@ class _RequestsDialogState extends State<_RequestsDialog> {
                 children: [
                   const Text(
                     'Singers send requests from their phones to the song-request list '
-                    '("Start song requests" on the PC). Each song you add to its singing queue '
+                    '(☰ Menu → Start song requests on the PC). Each song you add to its singing queue '
                     'comes into Tonight\'s playlist here, with the singer\'s name.',
                   ),
                   const SizedBox(height: 14),

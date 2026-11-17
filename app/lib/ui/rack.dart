@@ -504,6 +504,19 @@ class _MainMenu extends StatelessWidget {
             ],
           ),
         ),
+        // The PC: the request list, started from here with this library.
+        if (!touchUi)
+          const PopupMenuItem(
+            key: Key('menu-start-requests'),
+            value: 'start-requests',
+            child: Row(
+              children: [
+                Icon(Icons.wifi_tethering, size: 18),
+                SizedBox(width: 10),
+                Flexible(child: Text('Start song requests')),
+              ],
+            ),
+          ),
       ],
       onSelected: (c) {
         if (c == 'skins') {
@@ -514,6 +527,8 @@ class _MainMenu extends StatelessWidget {
           showSongbook(context);
         } else if (c == 'requests') {
           showSongRequests(context);
+        } else if (c == 'start-requests') {
+          startSongRequestList(context);
         } else if (c == 'rescan') {
           s.rescan();
         } else if (c == 'rescanOnStart') {
