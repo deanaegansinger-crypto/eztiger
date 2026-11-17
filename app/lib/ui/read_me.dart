@@ -267,7 +267,7 @@ const _singer = <(String, List<String>)>[
 ];
 
 const _pro = (
-  'EZTiger Pro',
+  'Keys, sound and 2 decks',
   [
     'KEY, under the volume: − and + move the song down or up a semitone, as far as 3 either way. The 0 in the middle puts it back. EZTiger remembers the key for each song, and when a song loads in a changed key, "KEY +2" (or −) flashes red on the player and the Stage view.',
     'Level, under the volume: evens out the loudness, so quiet and loud MP3s and videos play at about the same level. It takes a moment to settle at the start of a song.',
@@ -278,8 +278,8 @@ const _pro = (
     'Each deck has its own − KEY +: set the key of the song waiting on the other deck before it comes in, in the library or the Stage view. EZTiger remembers it for that song.',
     'With 2 decks on, double-click a song (or drop it on the deck that is not playing) to make it the next song. Whatever was waiting moves back to second in the queue, where you can leave it or take it off. Drop a song on the ON AIR deck to play it now.',
     'X-fade, under the decks: the slider sets the crossfade from 0 (a straight cut) to 6 seconds. Overlap brings the next song in under the last one; In turn fades one out, then the next in. Smooth fades sound even all the way through; Linear is the plain fade.',
-    "Tonight's playlist is the list of songs to sing (Basic calls it the queue). Save changes to a playlist: after Load playlist, change Tonight's playlist as you go (add, move or take songs off), then press 💾 Save to <playlist> above it. The Save menu can also replace any playlist with Tonight's playlist.",
-    if (trialEnabled) 'Trial: the Pro installer gives every Pro feature for 14 days (the days left show by the PRO badge). After that EZTiger carries on as Basic, with everything kept, until a licence key is entered in ☰ Menu → Enter licence key. The key is checked online once; after that it works without the internet.',
+    "Tonight's playlist is the list of songs to sing tonight. Save changes to a playlist: after Load playlist, change Tonight's playlist as you go (add, move or take songs off), then press 💾 Save to <playlist> above it. The Save menu can also replace any playlist with Tonight's playlist.",
+    if (trialEnabled) 'Trial: the Pro installer gives every Pro feature for 14 days (the days left show by the PRO badge). After that those features pause, with everything kept, until a licence key is entered in ☰ Menu → Enter licence key. The key is checked online once; after that it works without the internet.',
     'Screen lock: press 🔒 (top bar, or by Library in the Stage view) and every tap is ignored, so a bump on the mic stand can\'t stop or skip a song; the song plays on. Press and hold the lock at the top for a moment to unlock. ☰ Menu → Screen lock button switches the 🔒 off if you don\'t want it.',
     'Searching: click (or tap) the search box and everything under the player folds away, so the results get the room. Press ✕ in the search box to bring it all back.',
     'Drag a whole folder: click a folder in the Library box to highlight it, then drag it into Tonight\'s playlist, a playlist or the player. All its songs, as listed, go in.',
@@ -311,9 +311,10 @@ const _songbook = (
 const _requests = (
   'Song requests from phones',
   [
-    'Singers send requests from their phones over the venue Wi-Fi to the song-request list ("Start song requests" on the PC), which needs no internet. New requests wait there until you add them to its singing queue, or reject them.',
-    'Each song you add to that singing queue comes into Tonight\'s playlist here by itself, with the singer\'s name, while EZTiger is open. The request list shows "✓ In EZTiger" beside it, or "Not found in EZTiger" if the song isn\'t in your library.',
-    '☰ Menu → Song requests: on the PC that runs the request list the link is localhost:8080 (already set). On a tablet, type the DJ link from the request list\'s window, the one ending ?key=…, and press Connect. The Menu says "connected" while it works.',
+    '☰ Menu → Start song requests: EZTiger makes a request page of your songs and starts the request list on this PC, over the venue Wi-Fi, with no internet needed. The first time, Windows asks whether PowerShell may use the network: tick Private networks and Allow (and set the venue Wi-Fi to Private in Windows settings).',
+    'Singers join the Wi-Fi and scan the QR code (☰ Menu → Songbook → Show QR code, now pointing at the request page), pick their name and a song, and press Send. The DJ list opens in your browser: new requests wait there until you press ✓ Add to queue, or ✕ Reject. 🔒 Close requests stops new ones; Print poster makes an A4 poster with the QR code.',
+    'Each song you add to the singing queue comes into Tonight\'s playlist here by itself, with the singer\'s name, while EZTiger is open (☰ Menu → Song requests says "connected"). The DJ list shows "✓ In EZTiger" beside it, or "Not found in EZTiger" if the song isn\'t in your library.',
+    'Next time, Start song requests on the desktop (or in ☰ Menu) starts it again. Stop it with ⏻ Stop the request list at the bottom of the DJ list. The list is kept until you press Clear whole list. Added songs? Start song requests in the Menu again to update the page.',
   ],
 );
 

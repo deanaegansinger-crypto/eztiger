@@ -45,9 +45,13 @@ WizardStyle=modern
 
 [Tasks]
 Name: "desktopicon"; Description: "Put an EZtiger icon on the desktop"; GroupDescription: "Shortcuts:"
+Name: "requestsicon"; Description: "Put a Start song requests icon on the desktop"; GroupDescription: "Shortcuts:"
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; The song-request list (Menu > Start song requests): the server, the
+; singers' page design and the logo. Its data goes in %LOCALAPPDATA%\EZTiger.
+Source: "..\app\requests\*"; DestDir: "{app}\requests"; Flags: ignoreversion
 
 #if Edition == "Pro"
 [InstallDelete]
@@ -58,6 +62,8 @@ Type: filesandordirs; Name: "{autoprograms}\EZTiger Basic"
 [Icons]
 Name: "{group}\EZtiger"; Filename: "{app}\eztiger.exe"
 Name: "{autodesktop}\EZtiger"; Filename: "{app}\eztiger.exe"; Tasks: desktopicon
+Name: "{group}\Start song requests"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\requests\Start song requests.vbs"""; IconFilename: "{app}\eztiger.exe"
+Name: "{autodesktop}\Start song requests"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\requests\Start song requests.vbs"""; IconFilename: "{app}\eztiger.exe"; Tasks: requestsicon
 
 [Run]
 Filename: "{app}\eztiger.exe"; Description: "Start EZtiger now"; Flags: nowait postinstall skipifsilent

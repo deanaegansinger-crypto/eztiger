@@ -39,6 +39,9 @@ void main() {
     // The tests try EZTiger Pro, which has everything Basic has and more;
     // the Basic tests switch it off.
     isPro = true;
+    // These tests work in the one-line List view (the Songbook view has its
+    // own tests in versions_test.dart).
+    AppState.defaultSearchStyle = 'list';
     edges.clear();
     lib = makeLibrary();
     db = await EztigerDatabase.open(databaseFactoryFfiNoIsolate, inMemoryDatabasePath);
@@ -353,6 +356,9 @@ void main() {
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
+    // The menu is taller than the window: it scrolls.
+    await tester.ensureVisible(find.text('Light'));
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.text('Light'));
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 100));

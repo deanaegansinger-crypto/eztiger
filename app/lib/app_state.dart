@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Directory, File, HttpClient, Platform;
+import 'dart:io' show Directory, File, HttpClient, Platform, Process, ProcessStartMode;
 import 'dart:isolate';
 
 import 'package:eztiger_core/eztiger_core.dart';
@@ -13,6 +13,7 @@ import 'local_address.dart';
 import 'platform.dart';
 import 'player.dart';
 import 'playlist_transfer.dart';
+import 'request_page.dart';
 import 'song_requests.dart';
 import 'sync.dart';
 import 'vocal_remover.dart';
@@ -147,6 +148,35 @@ class AppState extends ChangeNotifier {
 
   void setDoubleClickToQueue(bool v) {
     doubleClickToQueue = v;
+    notifyListeners();
+  }
+
+  /// A song with other versions (×5), picked in the search, opens its discs
+  /// under it. ☰ Menu → Versions: 'all' (Now, Next and Bottom on each disc),
+  /// just one of 'now' / 'next' / 'bottom' (a click on the disc does it), or
+  /// 'off'. Remembered.
+  String discChoice = 'all';
+  static const discChoices = {'all': 'All', 'now': 'Now', 'next': 'Next', 'bottom': 'Bottom', 'off': 'Off'};
+
+  bool get showDiscChoices => discChoice != 'off';
+
+  /// The search list: 'songbook' (the usual: bigger rows, title over artist,
+  /// a tile for each collection that has the song) or 'list' (one line a
+  /// song, more on the screen). Remembered.
+  String searchStyle = defaultSearchStyle;
+
+  /// The view a new EZTiger starts in; the older tests use 'list'.
+  static String defaultSearchStyle = 'songbook';
+
+  void setSearchStyle(String v) {
+    if (v != 'list' && v != 'songbook') return;
+    searchStyle = v;
+    notifyListeners();
+  }
+
+  void setDiscChoice(String v) {
+    if (!discChoices.containsKey(v)) return;
+    discChoice = v;
     notifyListeners();
   }
 
@@ -349,6 +379,9 @@ class AppState extends ChangeNotifier {
       libraryCollapsed = m['libraryCollapsed'] as bool? ?? libraryCollapsed;
       lockEnabled = m['lockEnabled'] as bool? ?? lockEnabled;
       doubleClickToQueue = m['doubleClickToQueue'] as bool? ?? doubleClickToQueue;
+      final dc = m['discChoice'] as String?;
+      if (dc != null && discChoices.containsKey(dc)) discChoice = dc;
+      if (m['searchStyle'] == 'list') searchStyle = 'list';
       twoDecks = canTwoDecks && (m['twoDecks'] as bool? ?? twoDecks);
       final scale = (m['textScale'] as num?)?.toDouble();
       if (textScaleChoices.containsKey(scale)) textScale = scale!;
@@ -408,6 +441,8 @@ class AppState extends ChangeNotifier {
       'libraryCollapsed': libraryCollapsed,
       'lockEnabled': lockEnabled,
       'doubleClickToQueue': doubleClickToQueue,
+      'discChoice': discChoice,
+      'searchStyle': searchStyle,
       'twoDecks': twoDecks,
       'autocue': autocue,
       'lyricsDelayOn': lyricsDelayOn,
@@ -1267,6 +1302,102 @@ class AppState extends ChangeNotifier {
     _setRequestsState(RequestsState.connecting);
     _requestsTimer = Timer.periodic(const Duration(seconds: 3), (_) => checkSongRequests());
     unawaited(checkSongRequests());
+  }
+
+  /// Where the request list's files are installed; replaced in tests.
+  String Function() requestTools = requestToolsDir;
+
+  /// Starts a program in the background; replaced in tests.
+  Future<void> Function(String exe, List<String> args) launch =
+      (exe, args) => Process.start(exe, args, mode: ProcessStartMode.detached);
+
+  /// Asks the request list on this PC something ('GET /status',
+  /// 'POST /dj/quit'); true when it answered. Replaced in tests.
+  Future<bool> Function(String method, String path) askRequestList = _askLocalRequestList;
+
+  static Future<bool> _askLocalRequestList(String method, String path) async {
+    final http = HttpClient()..connectionTimeout = const Duration(seconds: 2);
+    try {
+      final rq = await http.open(method, 'localhost', 8080, path);
+      final rs = await rq.close().timeout(const Duration(seconds: 3));
+      await rs.drain<void>();
+      return rs.statusCode == 200;
+    } catch (_) {
+      return false;
+    } finally {
+      http.close(force: true);
+    }
+  }
+
+  /// How long to wait between checks while the request list starts or stops.
+  Duration requestListTick = const Duration(milliseconds: 250);
+
+  Future<bool> _waitForRequestList({required bool up, required int tries}) async {
+    for (var i = 0; i < tries; i++) {
+      if (await askRequestList('GET', '/status') == up) return true;
+      await Future<void>.delayed(requestListTick);
+    }
+    return false;
+  }
+
+  /// ☰ Menu → Start song requests (Windows): builds the singers' page from
+  /// this library, stops any request list already running (it may be serving
+  /// an older page), starts it again in the background, opens its DJ list in
+  /// the browser, connects EZTiger to it, and points the songbook QR code at
+  /// the singers' page on this PC. Returns how many songs are on the page.
+  Future<int> startRequestList() async {
+    final tools = requestTools();
+    final template = File(p.join(tools, 'request-template.html'));
+    final server = File(p.join(tools, 'request-server.ps1'));
+    if (!template.existsSync() || !server.existsSync()) {
+      throw StateError("The song-request list isn't installed with this copy of EZTiger. Reinstall EZTiger Pro.");
+    }
+    final logo = File(p.join(tools, 'eztiger-logo.png'));
+    final rootPaths = roots.map((r) => r.path).toList();
+    final songs = [
+      for (final r in await db.tracks.requestSongs())
+        (title: r.title, artist: r.artist, brand: brandOf(r.folder, rootPaths), code: p.basename(r.folder)),
+    ];
+    if (songs.isEmpty) throw StateError('Add your karaoke folder first: the request page lists its songs.');
+    final page = requestPageHtml(
+      template: template.readAsStringSync(),
+      name: songbookTitle.trim().isEmpty ? 'EZTiger Karaoke' : songbookTitle.trim(),
+      logoBase64: logo.existsSync() ? base64Encode(logo.readAsBytesSync()) : '',
+      skin: skin,
+      lightScreen: !dark,
+      songs: songs,
+    );
+    final data = Directory(requestDataDir())..createSync(recursive: true);
+    final pagePath = p.join(data.path, 'request-songs.html');
+    File(pagePath).writeAsStringSync(page.html);
+    if (await askRequestList('GET', '/status')) {
+      await askRequestList('POST', '/dj/quit');
+      if (!await _waitForRequestList(up: false, tries: 40)) {
+        throw StateError('Another request list is still running on this PC. Stop it from its DJ list ("Stop the request list"), then try again.');
+      }
+    }
+    await launch('powershell', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-WindowStyle',
+      'Hidden',
+      '-File',
+      server.path,
+      '-Page',
+      pagePath,
+      '-Folder',
+      p.join(data.path, 'list'),
+      '-NoBrowser',
+    ]);
+    // A big library makes a big page: give it time to load.
+    if (!await _waitForRequestList(up: true, tries: 120)) {
+      throw StateError("The request list didn't start. If Windows asked about PowerShell and the network, choose Allow, then try again.");
+    }
+    await launch('explorer', ['http://localhost:8080/dj']);
+    setRequestsLink('localhost:8080');
+    if (await detectPcAddress() != null) useThisPcForQr();
+    return page.count;
   }
 
   void setRequestsLink(String link) {

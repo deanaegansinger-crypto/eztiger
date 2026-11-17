@@ -82,6 +82,24 @@ class TrackDao {
   final Database db;
   final bool hasFts;
 
+  /// Every song in the searchable library with the folder it's in, for the
+  /// song-request page (which shows each collection as a version).
+  Future<List<({String title, String artist, String folder})>> requestSongs() async {
+    final rows = await db.rawQuery('''
+SELECT COALESCE(t.user_title, t.title) AS title, COALESCE(t.user_artist, t.artist) AS artist, f.path AS folder
+FROM tracks t JOIN folders f ON f.id = t.folder_id
+WHERE f.included = 1''');
+    return [
+      for (final r in rows)
+        if ((r['title'] as String).trim().isNotEmpty)
+          (
+            title: (r['title'] as String).trim(),
+            artist: ((r['artist'] as String?) ?? '').trim(),
+            folder: r['folder'] as String,
+          ),
+    ];
+  }
+
   /// Every song in the searchable library, once each (several versions of a
   /// song count once), for the audience songbook: by artist, then title.
   Future<List<SongbookEntry>> songbook() async {

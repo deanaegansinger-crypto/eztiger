@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 
 import '../app_state.dart';
 import '../edition.dart';
+import '../request_page.dart' show brandOf;
 import '../platform.dart';
 import '../sync.dart';
 import 'android_folders.dart';
@@ -279,6 +280,11 @@ class _MainMenu extends StatelessWidget {
               onChanged: s.setDoubleClickToQueue,
             ),
           ),
+        PopupMenuItem(
+          key: const Key('menu-disc-choices'),
+          value: 'disc-choices',
+          child: Text('Versions (×5): ${AppState.discChoices[s.discChoice]}…'),
+        ),
         if (isPro)
           CheckedPopupMenuItem(
             key: const Key('menu-lock-enabled'),
@@ -504,6 +510,19 @@ class _MainMenu extends StatelessWidget {
             ],
           ),
         ),
+        // The PC: the request list, started from here with this library.
+        if (!touchUi)
+          const PopupMenuItem(
+            key: Key('menu-start-requests'),
+            value: 'start-requests',
+            child: Row(
+              children: [
+                Icon(Icons.wifi_tethering, size: 18),
+                SizedBox(width: 10),
+                Flexible(child: Text('Start song requests')),
+              ],
+            ),
+          ),
       ],
       onSelected: (c) {
         if (c == 'skins') {
@@ -514,6 +533,10 @@ class _MainMenu extends StatelessWidget {
           showSongbook(context);
         } else if (c == 'requests') {
           showSongRequests(context);
+        } else if (c == 'start-requests') {
+          startSongRequestList(context);
+        } else if (c == 'disc-choices') {
+          _pickDiscChoice(context, s);
         } else if (c == 'rescan') {
           s.rescan();
         } else if (c == 'rescanOnStart') {
@@ -695,6 +718,38 @@ class _SkinSwatch extends StatelessWidget {
 }
 
 /// A menu row with a label and a choice of buttons; picking one closes the menu.
+/// ☰ Menu → Versions (×5): what each disc under a picked song offers.
+Future<void> _pickDiscChoice(BuildContext context, AppState s) async {
+  const help = {
+    'all': 'Now, Next and Bottom on each disc',
+    'now': 'Click a disc: load it on the player now',
+    'next': 'Click a disc: next in tonight\'s playlist',
+    'bottom': 'Click a disc: bottom of tonight\'s playlist',
+    'off': 'Don\'t show the discs',
+  };
+  final v = await showDialog<String>(
+    context: context,
+    builder: (context) => SimpleDialog(
+      title: const Text('Songs with other versions (×5)'),
+      children: [
+        for (final MapEntry(:key, :value) in AppState.discChoices.entries)
+          SimpleDialogOption(
+            key: Key('disc-choice-$key'),
+            onPressed: () => Navigator.pop(context, key),
+            child: Row(
+              children: [
+                Icon(s.discChoice == key ? Icons.radio_button_checked : Icons.radio_button_off, size: 18),
+                const SizedBox(width: 10),
+                Expanded(child: Text('$value  ·  ${help[key]}')),
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
+  if (v != null) s.setDiscChoice(v);
+}
+
 PopupMenuItem<String> _menuRow<T>(BuildContext menu, String label, Segmented<T> choice) => PopupMenuItem<String>(
   child: Row(
     children: [
@@ -1570,11 +1625,33 @@ class _ResultsTableState extends State<ResultsTable> {
                 : DragTarget<SongDrag>(
                     onWillAcceptWithDetails: (_) => s.view == ResultsView.playlist && s.selectedPlaylistId != null,
                     onAcceptWithDetails: (d) => s.dropIntoPlaylist(s.selectedPlaylistId!, d.data, groups.length),
-                    builder: (context, _, _) => ListView.builder(
-                      itemCount: groups.length,
-                      itemExtent: listSize(context, 28),
-                      itemBuilder: (context, i) => ResultRow(group: groups[i], index: i, focus: focus),
-                    ),
+                    builder: (context, _, _) {
+                      final book = songbookView(s);
+                      final discH = listSize(context, 28);
+                      final rowH = book ? listSize(context, 50) : discH;
+                      // One song picked in the search with other versions (×5):
+                      // its discs open under it, each a click to load.
+                      final open = s.showDiscChoices && s.view == ResultsView.search && n == 1
+                          ? s.selection.first
+                          : -1;
+                      final versions = open >= 0 && open < groups.length && groups[open].versions.length > 1
+                          ? groups[open].versions.length
+                          : 0;
+                      return ListView.builder(
+                        itemCount: groups.length,
+                        itemExtentBuilder: (i, _) =>
+                            i >= groups.length ? null : (i == open && versions > 0 ? rowH + discH * versions : rowH),
+                        itemBuilder: (context, i) => ResultRow(
+                          group: groups[i],
+                          index: i,
+                          focus: focus,
+                          showVersions: i == open && versions > 0,
+                          rowHeight: rowH,
+                          discHeight: discH,
+                          songbook: book,
+                        ),
+                      );
+                    },
                   ),
           ),
         ],
@@ -1628,6 +1705,18 @@ class _FilterBar extends StatelessWidget {
                 ),
               ],
             ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('View ', style: label),
+                Segmented<String>(
+                  key: const Key('search-style'),
+                  options: const {'songbook': 'Songbook', 'list': 'List'},
+                  value: s.searchStyle,
+                  onChanged: s.setSearchStyle,
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -1654,20 +1743,43 @@ class _ResultsHeader extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: context.ez.border)),
       ),
-      child: ColumnsHeader(
-        table: 'results',
-        columns: resultColumns,
-        headings: {'title': sortable('Title', SearchSort.title), 'artist': sortable('Artist', SearchSort.artist)},
-      ),
+      child: songbookView(s)
+          ? ColumnsHeader(
+              key: const Key('songbook-header'),
+              table: 'songbook',
+              columns: songbookColumns,
+              headings: {'song': sortable('Song', SearchSort.title)},
+            )
+          : ColumnsHeader(
+              table: 'results',
+              columns: resultColumns,
+              headings: {'title': sortable('Title', SearchSort.title), 'artist': sortable('Artist', SearchSort.artist)},
+            ),
     );
   }
 }
 
 class ResultRow extends StatefulWidget {
-  const ResultRow({super.key, required this.group, required this.index, this.focus});
+  const ResultRow({
+    super.key,
+    required this.group,
+    required this.index,
+    this.focus,
+    this.showVersions = false,
+    this.rowHeight = 28,
+    this.discHeight = 28,
+    this.songbook = false,
+  });
   final SearchGroup group;
   final int index;
   final FocusNode? focus;
+
+  /// Its other versions (discs) open under it, each with Now / Next / Bottom.
+  final bool showVersions;
+  final double rowHeight, discHeight;
+
+  /// The Songbook view: a bigger row, title over artist, and its collections.
+  final bool songbook;
   @override
   State<ResultRow> createState() => _ResultRowState();
 }
@@ -1694,7 +1806,7 @@ class _ResultRowState extends State<ResultRow> {
             ? EzColors.brass.withValues(alpha: 0.28)
             : (index.isOdd ? context.ez.raised.withValues(alpha: 0.4) : null),
         padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: ColumnsRow(
+        child: widget.songbook ? _songbookCells(context, s, group) : ColumnsRow(
           table: 'results',
           columns: resultColumns,
           cells: {
@@ -1738,7 +1850,7 @@ class _ResultRowState extends State<ResultRow> {
     final rows = s.selectedRows(orRow: index);
     final inPlaylist = s.view == ResultsView.playlist ? s.selectedPlaylistId : null;
     final dragging = SongDrag([for (final r in rows) s.results[r].primary], playlistId: inPlaylist, positions: rows);
-    return Listener(
+    final listened = Listener(
       onPointerDown: (e) {
         widget.focus?.requestFocus();
         _dragged = false;
@@ -1773,6 +1885,228 @@ class _ResultRowState extends State<ResultRow> {
         child: inPlaylist == null
             ? row
             : InsertTarget(index: index, onDrop: (d, at) => s.dropIntoPlaylist(inPlaylist, d, at), child: row),
+      ),
+    );
+    // The same shape open or closed, so a click that opens the discs isn't
+    // lost when the row is rebuilt under it.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(height: widget.rowHeight, child: listened),
+        if (widget.showVersions)
+          for (final (k, v) in group.versions.indexed)
+            SizedBox(height: widget.discHeight, child: _VersionLine(track: v, number: k)),
+      ],
+    );
+  }
+
+  /// The Songbook view's row: the title (big) over the artist, a chip for
+  /// each collection that has it (as on the singers' request page), the type
+  /// and the location.
+  Widget _songbookCells(BuildContext context, AppState s, SearchGroup group) {
+    final t = group.primary;
+    final roots = [for (final r in s.roots) r.path];
+    // Each collection that has it, best match first, with its discs.
+    final brands = <String, List<Track>>{};
+    for (final v in group.versions) {
+      brands.putIfAbsent(brandOf(v.folderPath ?? '', roots), () => []).add(v);
+    }
+    final names = brands.keys.toList();
+    final shown = names.length > 3 ? names.take(3).toList() : names;
+    Widget chip(String text, {String? brand}) {
+      final box = Container(
+        margin: const EdgeInsets.only(right: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: brand == null ? context.ez.border : EzColors.brass.withValues(alpha: 0.7)),
+        ),
+        child: Text(text, style: TextStyle(fontSize: 11, color: brand == null ? context.ez.textDim : EzColors.brass)),
+      );
+      if (brand == null) return box;
+      // A click on a collection: its disc goes in, the saved way (☰ Menu →
+      // Versions), or with All / Off a quick Now / Next / Bottom menu.
+      return _BrandTile(
+        key: Key('brand-$brand'),
+        onClick: (at) => _brandPicked(context, s, brands[brand]!.first, at),
+        child: box,
+      );
+    }
+    return ColumnsRow(
+      table: 'songbook',
+      columns: songbookColumns,
+      cells: {
+        'song': Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              t.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            Text(
+              t.artist ?? 'Unknown artist',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, color: context.ez.textDim),
+            ),
+          ],
+        ),
+        // One line of chips; any that don't fit are cut off, not wrapped.
+        'versions': ClipRect(
+          child: OverflowBox(
+            alignment: Alignment.centerLeft,
+            maxWidth: double.infinity,
+            child: Row(
+              key: const Key('songbook-brands'),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final b in shown) chip(brands[b]!.length > 1 ? '$b ×${brands[b]!.length}' : b, brand: b),
+                if (names.length > shown.length) chip('+${names.length - shown.length}'),
+              ],
+            ),
+          ),
+        ),
+        'type': Align(alignment: Alignment.centerLeft, child: TypeChip(t.type)),
+        'location': Text(
+          locationOf(t),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 10, fontFamily: vfdFont, color: context.ez.textDim),
+        ),
+      },
+    );
+  }
+}
+
+/// A collection tile: a press and release in place is a click. Raw pointer
+/// events, so the row's double-click and drag can't swallow it.
+class _BrandTile extends StatefulWidget {
+  const _BrandTile({super.key, required this.onClick, required this.child});
+  final void Function(Offset at) onClick;
+  final Widget child;
+  @override
+  State<_BrandTile> createState() => _BrandTileState();
+}
+
+class _BrandTileState extends State<_BrandTile> {
+  Offset? _down;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    cursor: SystemMouseCursors.click,
+    child: Listener(
+      onPointerDown: (e) => _down = e.buttons == kPrimaryButton ? e.position : null,
+      onPointerCancel: (_) => _down = null,
+      onPointerUp: (e) {
+        final d = _down;
+        _down = null;
+        if (d != null && (e.position - d).distance < 8) widget.onClick(e.position);
+      },
+      child: widget.child,
+    ),
+  );
+}
+
+/// A collection tile clicked in the Songbook view: its disc goes in the way
+/// ☰ Menu → Versions says; with All (or Off) a menu asks Now, Next or Bottom.
+Future<void> _brandPicked(BuildContext context, AppState s, Track t, Offset at) async {
+  var how = s.discChoice;
+  if (how == 'all' || how == 'off') {
+    final c = await showMenuAt<String>(context, at, [
+      const PopupMenuItem(key: Key('brand-now'), value: 'now', child: Text('▶ Now: load it on the player')),
+      PopupMenuItem(key: const Key('brand-next'), value: 'next', child: Text('⤴ Next in $theQueue')),
+      PopupMenuItem(key: const Key('brand-bottom'), value: 'bottom', child: Text('⤓ Bottom of $theQueue')),
+    ]);
+    if (c == null) return;
+    how = c;
+  }
+  switch (how) {
+    case 'now':
+      await s.playNow(t, autostart: false);
+    case 'next':
+      await s.enqueueNext([t]);
+    case 'bottom':
+      await s.enqueue(t);
+  }
+}
+
+/// The search list shows as a songbook: bigger rows (the search only, not a
+/// playlist or the songs sung).
+bool songbookView(AppState s) => s.searchStyle == 'songbook' && s.view == ResultsView.search;
+
+/// One version (disc) of the picked song, under it in the search, with one
+/// click to load it now, put it next, or add it to the bottom of tonight's
+/// playlist.
+class _VersionLine extends StatelessWidget {
+  const _VersionLine({required this.track, required this.number});
+  final Track track;
+  final int number;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final t = track;
+    final parts = (t.folderPath ?? '').split(RegExp(r'[\\/]')).where((x) => x.isNotEmpty).toList();
+    final disc = parts.length >= 2 ? '${parts[parts.length - 2]} · ${parts.last}' : parts.join();
+    Widget choice(String key, String label, String tip, Future<void> Function() go) => Tooltip(
+      message: tip,
+      child: InkWell(
+        key: Key('version-$key-$number'),
+        onTap: go,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          margin: const EdgeInsets.only(left: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            border: Border.all(color: EzColors.cyan),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(label, style: TextStyle(fontSize: 11, color: EzColors.cyan, fontWeight: FontWeight.w600)),
+        ),
+      ),
+    );
+    final actions = {
+      'now': ('▶ Now', 'Load it on the player now', () => s.playNow(t, autostart: false)),
+      'next': ('⤴ Next', 'Next in $theQueue', () => s.enqueueNext([t])),
+      'bottom': ('⤓ Bottom', 'Add to the bottom of $theQueue', () => s.enqueue(t)),
+    };
+    // One saved choice: the whole line does it. 'all': a button each.
+    final only = actions[s.discChoice];
+    return Material(
+      key: Key('version-$number'),
+      color: EzColors.cyan.withValues(alpha: 0.10),
+      child: InkWell(
+        onTap: only?.$3,
+        child: Container(
+          padding: const EdgeInsets.only(left: 18, right: 6),
+          decoration: BoxDecoration(border: Border(left: BorderSide(color: EzColors.cyan, width: 3))),
+          child: Row(
+            children: [
+              TypeChip(t.type),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(text: disc.isEmpty ? t.fileName : disc),
+                      if (t.version != null)
+                        TextSpan(text: '  ${t.version}', style: TextStyle(color: context.ez.textDim)),
+                      TextSpan(text: '  ${t.fileName}', style: TextStyle(color: context.ez.textDim, fontSize: 10)),
+                    ],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+              for (final MapEntry(:key, value: (label, tip, go)) in actions.entries)
+                if (only == null || s.discChoice == key) choice(key, label, tip, go),
+            ],
+          ),
+        ),
       ),
     );
   }

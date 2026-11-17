@@ -25,6 +25,15 @@ const resultColumns = [
   TableCol('location', 'Location', weight: 3),
 ];
 
+/// The song list's columns in the Songbook view: title over artist, then
+/// each collection that has the song.
+const songbookColumns = [
+  TableCol('song', 'Song', weight: 6, canHide: false),
+  TableCol('versions', 'Versions', weight: 4),
+  TableCol('type', 'Type', fixed: 44),
+  TableCol('location', 'Location', weight: 2),
+];
+
 /// The queue's columns.
 const queueColumns = [
   TableCol('num', '#', fixed: 28, canHide: false),
