@@ -6,7 +6,6 @@ import 'common.dart';
 import '../app_state.dart';
 import '../edition.dart';
 import '../platform.dart';
-import '../player.dart';
 import 'lock.dart';
 import 'lyrics_delay.dart';
 import 'pro_sound.dart';
@@ -62,8 +61,7 @@ class StageView extends StatelessWidget {
                 ],
               );
             }
-            // A short screen (a phone on its side) gets the slimmer controls.
-            final controls = _Controls(compact: twin, small: c.maxHeight < 640);
+            final controls = _Controls(compact: twin);
             final sides = [Expanded(flex: 11, child: lyrics), Expanded(flex: 9, child: controls)];
             final body = side
                 ? Row(
@@ -110,11 +108,7 @@ class _Lyrics extends StatelessWidget {
 }
 
 class _Controls extends StatelessWidget {
-  const _Controls({this.compact = false, this.portrait = false, bool small = false}) : small = small || portrait;
-
-  /// A short screen (a phone on its side) or the portrait view: the title on
-  /// one line, the transport and the key on one line.
-  final bool small;
+  const _Controls({this.compact = false, this.portrait = false});
 
   /// Pro, 2 decks: the song, time and transport are on the decks above.
   final bool compact;
@@ -212,10 +206,10 @@ class _Controls extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             e.error ?? t?.title ?? 'Pick a song to begin',
-            maxLines: small ? 1 : 2,
+            maxLines: portrait ? 1 : 2,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: small ? 26 : 30,
+              fontSize: portrait ? 26 : 30,
               height: 1.1,
               fontWeight: FontWeight.w800,
               color: e.error != null ? EzColors.red : EzColors.brass,
@@ -244,25 +238,25 @@ class _Controls extends StatelessWidget {
             _StageSeek(position: e.position, total: total, onSeek: e.seek),
           ],
           const SizedBox(height: 8),
-          if (small)
-            // Upright, or a short screen: the transport and the key share one line, shrinking
-            // to fit a phone's width, so Up next keeps its room.
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ..._transport(s, e, small: true),
-                  if (isPro) ...[const SizedBox(width: 28), _StageKey(engine: e)],
-                ],
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _RoundButton(
+                key: const Key('stage-restart'),
+                icon: Icons.skip_previous,
+                size: portrait ? 60 : 72,
+                onTap: s.previous,
               ),
-            )
-          else ...[
-            Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: _transport(s, e)),
-            // The key, big enough to hit on the mic stand (with 2 decks it
-            // is on each deck instead).
-            if (isPro) ...[const SizedBox(height: 8), _StageKey(engine: e)],
-          ],
+              _RoundButton(
+                key: const Key('stage-play'),
+                icon: e.playing ? Icons.pause : Icons.play_arrow,
+                size: portrait ? 84 : 104,
+                primary: true,
+                onTap: s.playPause,
+              ),
+              _RoundButton(key: const Key('stage-next'), icon: Icons.skip_next, size: portrait ? 60 : 72, onTap: s.next),
+            ],
+          ),
         ],
         const SizedBox(height: 8),
         Row(
@@ -513,74 +507,6 @@ class _StageSeekState extends State<_StageSeek> {
           if (mounted) setState(() => _dragMs = null);
         },
       ),
-    );
-  }
-}
-
-/// Restart, Play / Pause and Next: smaller in the portrait Stage view.
-List<Widget> _transport(AppState s, KaraokeEngine e, {bool small = false}) => [
-  _RoundButton(key: const Key('stage-restart'), icon: Icons.skip_previous, size: small ? 60 : 72, onTap: s.previous),
-  if (small) const SizedBox(width: 14),
-  _RoundButton(
-    key: const Key('stage-play'),
-    icon: e.playing ? Icons.pause : Icons.play_arrow,
-    size: small ? 84 : 104,
-    primary: true,
-    onTap: s.playPause,
-  ),
-  if (small) const SizedBox(width: 14),
-  _RoundButton(key: const Key('stage-next'), icon: Icons.skip_next, size: small ? 60 : 72, onTap: s.next),
-];
-
-/// KEY − +2 + in the Stage view: the song on the player down or up a
-/// semitone (remembered for the song); tap the number to put it back.
-class _StageKey extends StatelessWidget {
-  const _StageKey({required this.engine});
-  final KaraokeEngine engine;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = AppScope.of(context);
-    final k = engine.keyShift;
-    final loaded = engine.current != null;
-    Widget step(String key, IconData icon, VoidCallback? onTap) => IconButton(
-      key: Key(key),
-      iconSize: 30,
-      style: IconButton.styleFrom(
-        minimumSize: const Size(56, 52),
-        side: BorderSide(color: onTap == null ? const Color(0xFF2A2F36) : EzColors.cyan),
-        foregroundColor: EzColors.cyan,
-        disabledForegroundColor: Colors.white24,
-      ),
-      onPressed: onTap,
-      icon: Icon(icon),
-    );
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text('KEY', style: TextStyle(fontSize: 16, color: EzColors.vfdSub, letterSpacing: 2)),
-        const SizedBox(width: 12),
-        step('stage-key-down', Icons.remove, loaded && k > KaraokeEngine.minKey ? s.keyDown : null),
-        InkWell(
-          onTap: loaded && k != 0 ? s.keyReset : null,
-          child: SizedBox(
-            width: 72,
-            child: Text(
-              keyLabel(k),
-              key: const Key('stage-key'),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: vfdFont,
-                fontSize: 26,
-                fontWeight: FontWeight.w800,
-                color: k == 0 ? Colors.white70 : EzColors.red,
-              ),
-            ),
-          ),
-        ),
-        step('stage-key-up', Icons.add, loaded && k < KaraokeEngine.maxKey ? s.keyUp : null),
-      ],
     );
   }
 }

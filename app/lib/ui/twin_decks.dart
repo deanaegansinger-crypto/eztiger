@@ -1,4 +1,3 @@
-import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/material.dart';
 
 import '../platform.dart';
@@ -92,18 +91,13 @@ class _DeckCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                // Gives way first on a narrow deck, so the time stays.
-                Flexible(
-                  child: Text(
-                    cand.isNotEmpty ? (live ? 'DROP TO PLAY NOW' : 'DROP FOR NEXT') : status,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: vfdFont,
-                      fontSize: 9 * z,
-                      letterSpacing: 1.5,
-                      color: live && e.playing ? EzColors.red : EzColors.vfdSub,
-                    ),
+                Text(
+                  cand.isNotEmpty ? (live ? 'DROP TO PLAY NOW' : 'DROP FOR NEXT') : status,
+                  style: TextStyle(
+                    fontFamily: vfdFont,
+                    fontSize: 9 * z,
+                    letterSpacing: 1.5,
+                    color: live && e.playing ? EzColors.red : EzColors.vfdSub,
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -133,87 +127,45 @@ class _DeckCard extends StatelessWidget {
                 color: e.error != null ? EzColors.red : (t == null ? EzColors.vfdSub : EzColors.brass),
               ),
             ),
-            ..._controlRows(context, s, e, t, name, live, waiting),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    [if (t?.artist != null) t!.artist!, if (e.singer != null) '🎤 ${e.singer}'].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontFamily: vfdFont, fontSize: 10 * z, color: EzColors.cyan),
+                  ),
+                ),
+                if (t != null) _DeckKey(engine: e, name: name, z: z),
+                if (live) ...[
+                  _Mini(z: z, icon: Icons.skip_previous, tooltip: 'Back to the start', onTap: s.previous),
+                  _Mini(
+                    z: z,
+                    key: Key('deck-$name-play'),
+                    icon: e.playing ? Icons.pause : Icons.play_arrow,
+                    tooltip: e.playing ? 'Pause' : 'Play',
+                    primary: true,
+                    onTap: s.playPause,
+                  ),
+                  _Mini(z: z, icon: Icons.skip_next, tooltip: 'Next singer', onTap: s.next),
+                ] else if (waiting)
+                  _Mini(
+                    z: z,
+                    key: Key('deck-$name-mix'),
+                    icon: Icons.swap_horiz,
+                    tooltip: 'Mix into this song now',
+                    primary: true,
+                    onTap: s.mixNow,
+                  ),
+              ],
+            ),
             SizedBox(height: 3 * z),
             _DeckProgress(engine: e, z: z),
           ],
         ),
       ),
     );
-  }
-
-  /// The artist, the key and the transport. With a mouse they share one
-  /// line; on a touch screen the key and the buttons get a line of their
-  /// own, bigger, and shrink to fit rather than go off the edge of a narrow
-  /// deck (a phone, or the portrait Stage view).
-  List<Widget> _controlRows(
-    BuildContext context,
-    AppState s,
-    KaraokeEngine e,
-    Track? t,
-    String name,
-    bool live,
-    bool waiting,
-  ) {
-    final artist = Text(
-      [if (t?.artist != null) t!.artist!, if (e.singer != null) '🎤 ${e.singer}'].join(' · '),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(fontFamily: vfdFont, fontSize: 10 * z, color: EzColors.cyan),
-    );
-    List<Widget> buttons(double zz) => [
-      if (live) ...[
-        _Mini(z: zz, icon: Icons.skip_previous, tooltip: 'Back to the start', onTap: s.previous),
-        _Mini(
-          z: zz,
-          key: Key('deck-$name-play'),
-          icon: e.playing ? Icons.pause : Icons.play_arrow,
-          tooltip: e.playing ? 'Pause' : 'Play',
-          primary: true,
-          onTap: s.playPause,
-        ),
-        _Mini(z: zz, icon: Icons.skip_next, tooltip: 'Next singer', onTap: s.next),
-      ] else if (waiting)
-        _Mini(
-          z: zz,
-          key: Key('deck-$name-mix'),
-          icon: Icons.swap_horiz,
-          tooltip: 'Mix into this song now',
-          primary: true,
-          onTap: s.mixNow,
-        ),
-    ];
-    if (touchUi) {
-      final tz = z * 1.3;
-      return [
-        artist,
-        SizedBox(height: 2 * z),
-        SizedBox(
-          height: 36 * tz,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (t != null) _DeckKey(engine: e, name: name, z: tz),
-                SizedBox(width: 10 * z),
-                ...buttons(tz),
-              ],
-            ),
-          ),
-        ),
-      ];
-    }
-    return [
-      Row(
-        children: [
-          Expanded(child: artist),
-          if (t != null) _DeckKey(engine: e, name: name, z: z),
-          ...buttons(z),
-        ],
-      ),
-    ];
   }
 }
 
@@ -236,8 +188,7 @@ class _DeckKey extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: Padding(
-          // A finger needs more room than a mouse pointer.
-          padding: EdgeInsets.all((touchUi ? 6 : 3) * z),
+          padding: EdgeInsets.all(3 * z),
           child: Icon(icon, size: 14 * z, color: onTap == null ? Colors.white24 : EzColors.cyan),
         ),
       ),
