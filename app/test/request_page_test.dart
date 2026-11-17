@@ -56,8 +56,9 @@ void main() {
     final db = await EztigerDatabase.open(databaseFactoryFfiNoIsolate, inMemoryDatabasePath);
     final s = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: (_) async => null));
     addTearDown(() async {
+      // Stops checking the request list (a check may still be finishing).
       s.setRequestsLink('');
-      s.dispose();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       await db.close();
       lib.deleteSync(recursive: true);
       data.deleteSync(recursive: true);
