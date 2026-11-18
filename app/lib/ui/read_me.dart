@@ -32,7 +32,8 @@ Future<void> showReadMe(BuildContext context) => showDialog<void>(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (isPro && !touchUi) const _ShortcutsMenu(),
+              // On the tablet too: a Bluetooth keyboard, footswitch or remote.
+              if (isPro) const _ShortcutsMenu(),
               for (final (head, lines)
                   in singerApp
                       ? _singer
@@ -106,6 +107,15 @@ const _shortcuts = <(String, List<(String, String)>)>[
     ],
   ),
   (
+    'Footswitch or Bluetooth remote',
+    [
+      ('Page Down', 'Next song'),
+      ('Page Up', 'Back to the start of the song'),
+      ('Media ⏯ ⏭ ⏮', 'Play / pause, next song, back to the start'),
+      ('Any key above', 'Set the footswitch to send it: Space, N, R, K, L…'),
+    ],
+  ),
+  (
     'Screen',
     [
       ('S', 'Stage view on / off'),
@@ -132,7 +142,7 @@ class _ShortcutsMenu extends StatelessWidget {
         style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: EzColors.brass),
       ),
       subtitle: const Text(
-        'Single keys, one hand. They wait while you type in the search box, and while the screen is locked.',
+        'Single keys, one hand, on a keyboard, footswitch or Bluetooth remote (on the tablet too). They wait while you type in the search box. With the screen locked, only the playing keys work (Space, R, N, X, Z, C, U, D, M, K, L, 0 and the footswitch keys), so a footswitch still works on the mic stand.',
         style: TextStyle(fontSize: 12),
       ),
       children: [

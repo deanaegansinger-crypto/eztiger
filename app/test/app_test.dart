@@ -591,8 +591,21 @@ void main() {
     expect(state.engine.keyShift, 0);
     await key(LogicalKeyboardKey.keyB);
     expect(state.locked, isTrue);
-    await key(LogicalKeyboardKey.keyU);
-    expect(state.engine.volume, (vol + 5 > 100 ? 100 : vol + 5) - 10, reason: 'keys wait while locked');
+    // Locked: the screen keys wait; the playing keys (a footswitch) still work.
+    final stage = state.stageView;
+    await key(LogicalKeyboardKey.keyS);
+    expect(state.stageView, stage, reason: 'S waits while locked');
+    await key(LogicalKeyboardKey.keyK);
+    expect(state.engine.keyShift, 1, reason: 'K still works while locked');
+    await key(LogicalKeyboardKey.digit0);
+    backend.calls.clear();
+    await key(LogicalKeyboardKey.mediaPlayPause);
+    expect(backend.calls, contains('play'), reason: 'a media play/pause key, locked');
+    await key(LogicalKeyboardKey.mediaPause);
+    expect(backend.calls, contains('pause'));
+    final before = state.engine.current?.id;
+    await key(LogicalKeyboardKey.pageDown);
+    expect(state.engine.current?.id, isNot(before), reason: 'Page Down: the next song');
     state.setLocked(false);
     await tester.pump(const Duration(seconds: 3));
   });

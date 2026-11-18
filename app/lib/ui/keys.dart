@@ -19,9 +19,12 @@ import 'read_me.dart';
 /// * U / D volume up / down.
 /// * K / L key up / down a semitone, 0 back to the song's own key.
 /// * B locks the screen (hold the lock to unlock).
+/// * For a footswitch or Bluetooth remote: Page Down next song, Page Up back
+///   to the start, and the media keys (play/pause, next, previous).
 ///
-/// They do nothing while typing in a box (the search box gets its letters),
-/// or while the screen is locked.
+/// They do nothing while typing in a box (the search box gets its letters).
+/// With the screen locked only the playing keys work, so a footswitch still
+/// plays, skips and changes key with the tablet locked on the mic stand.
 class ProKeys extends StatefulWidget {
   const ProKeys({super.key, required this.state, required this.child});
   final AppState state;
@@ -47,6 +50,33 @@ class ProKeys extends StatefulWidget {
     const SingleActivator(LogicalKeyboardKey.digit0): ProKey.keyReset,
     const SingleActivator(LogicalKeyboardKey.numpad0): ProKey.keyReset,
     const SingleActivator(LogicalKeyboardKey.keyB): ProKey.lock,
+    // Footswitches and Bluetooth remotes.
+    const SingleActivator(LogicalKeyboardKey.pageDown): ProKey.next,
+    const SingleActivator(LogicalKeyboardKey.pageUp): ProKey.restart,
+    const SingleActivator(LogicalKeyboardKey.mediaPlayPause): ProKey.playPause,
+    const SingleActivator(LogicalKeyboardKey.mediaPlay): ProKey.play,
+    const SingleActivator(LogicalKeyboardKey.mediaPause): ProKey.pause,
+    const SingleActivator(LogicalKeyboardKey.mediaTrackNext): ProKey.next,
+    const SingleActivator(LogicalKeyboardKey.mediaTrackPrevious): ProKey.restart,
+  };
+
+  /// The keys that still work with the screen locked: playing the songs,
+  /// not changing what's on screen.
+  static const whileLocked = {
+    ProKey.playPause,
+    ProKey.play,
+    ProKey.pause,
+    ProKey.mute,
+    ProKey.restart,
+    ProKey.next,
+    ProKey.mix,
+    ProKey.back,
+    ProKey.forward,
+    ProKey.louder,
+    ProKey.quieter,
+    ProKey.keyUp,
+    ProKey.keyDown,
+    ProKey.keyReset,
   };
 
   @override
@@ -103,6 +133,9 @@ enum ProKey {
   keyDown,
   keyReset,
   lock,
+  playPause,
+  play,
+  pause,
 }
 
 class _KeyIntent extends Intent {
@@ -120,7 +153,7 @@ class _KeyAction extends Action<_KeyIntent> {
       FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<EditableText>() != null;
 
   @override
-  bool isEnabled(_KeyIntent intent) => !_typing && !s.locked;
+  bool isEnabled(_KeyIntent intent) => !_typing && (!s.locked || ProKeys.whileLocked.contains(intent.key));
 
   @override
   Object? invoke(_KeyIntent intent) {
@@ -163,6 +196,12 @@ class _KeyAction extends Action<_KeyIntent> {
         if (s.engine.current != null) s.keyReset();
       case ProKey.lock:
         if (s.lockEnabled) s.setLocked(true);
+      case ProKey.playPause:
+        s.playPause();
+      case ProKey.play:
+        if (!s.engine.playing) s.playPause();
+      case ProKey.pause:
+        if (s.engine.playing) s.playPause();
     }
     return null;
   }
