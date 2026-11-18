@@ -36,9 +36,15 @@ class Folder {
     required this.trackCount,
     required this.totalCount,
     this.hasChildren = false,
+    this.namesFrom,
   });
 
+  /// This folder's own Song names setting: 'tags', 'files', or null to
+  /// follow the folder above it (and in the end the library's setting).
+  final String? namesFrom;
+
   factory Folder.fromRow(Map<String, Object?> r) => Folder(
+        namesFrom: r['names_from'] as String?,
         id: r['id'] as int,
         path: r['path'] as String,
         parentId: r['parent_id'] as int?,

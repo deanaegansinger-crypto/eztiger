@@ -1214,7 +1214,21 @@ class _FolderTile extends StatelessWidget {
           const PopupMenuItem(value: 'include', child: Text('➕ Add to searchable library')),
         if (f.isRoot) const PopupMenuItem(value: 'rescan', child: Text('🔄 Rescan')),
         if (f.isRoot) const PopupMenuItem(value: 'forget', child: Text('🗑 Forget this folder')),
+        const PopupMenuDivider(),
+        const PopupMenuItem(enabled: false, height: 28, child: Text('SONG NAMES IN THIS FOLDER', style: TextStyle(fontSize: 11))),
+        for (final (v, label) in [(null, 'Same as the folder above'), ('tags', 'Tags'), ('files', 'File names')])
+          CheckedPopupMenuItem(
+            key: Key('folder-names-${v ?? 'inherit'}'),
+            value: 'names:${v ?? ''}',
+            checked: f.namesFrom == v,
+            child: Text(label),
+          ),
       ]);
+      if (choice != null && choice.startsWith('names:')) {
+        final v = choice.substring(6);
+        await s.setFolderNamesFrom(f, v.isEmpty ? null : v);
+        return;
+      }
       switch (choice) {
         case 'include':
           await s.setFolderIncluded(f, true);

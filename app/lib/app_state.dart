@@ -357,6 +357,23 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// One folder's own Song names setting ('tags', 'files', or null to follow
+  /// the folder above it), from its right-click (press-and-hold) menu.
+  Future<void> setFolderNamesFrom(Folder f, String? from) async {
+    if (renaming) return;
+    renaming = true;
+    notifyListeners();
+    try {
+      await db.setFolderNamesFrom(f.id, from);
+      await _reloadFolders();
+      await refreshResults();
+      await _reloadQueue();
+    } finally {
+      renaming = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> init({bool rescanLibrary = true}) async {
     namesFromTags = await db.namesFrom() == 'tags';
     await _loadSettings();

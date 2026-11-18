@@ -5,6 +5,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
@@ -48,7 +49,7 @@ SongTags _readId3(String path) {
     if (head.length == 10 && head[0] == 0x49 && head[1] == 0x44 && head[2] == 0x33) {
       final major = head[3], flags = head[5];
       final size = _synchsafe(head, 6);
-      final body = f.readSync(size.clamp(0, 4 * 1024 * 1024));
+      final body = f.readSync(min(size, 4 * 1024 * 1024));
       final v2 = _id3v2Frames(body, major, flags);
       title = _clean(v2.title);
       artist = _clean(v2.artist);
@@ -158,7 +159,7 @@ SongTags _readMp4(String path) {
       }
       if (size < hdr) break;
       if (type == 'moov') {
-        final n = (size - hdr).clamp(0, 48 * 1024 * 1024);
+        final n = min(max(size - hdr, 0), 48 * 1024 * 1024);
         f.setPositionSync(pos + hdr);
         return _moov(f.readSync(n));
       }

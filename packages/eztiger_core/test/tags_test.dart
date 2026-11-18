@@ -85,4 +85,29 @@ void main() {
     expect(t.title, 'Sweet Caroline');
     expect(await lib.titles('sweet caroline'), ['Sweet Caroline']);
   });
+
+  test('a folder can have its own Song names setting, which the folders inside it follow', () async {
+    final lib = await TestLibrary.create();
+    addTearDown(lib.dispose);
+    for (final dir in ['Pop', 'Pop/80s', 'Rock']) {
+      Directory(lib.path(dir)).createSync(recursive: true);
+    }
+    File(lib.path('Pop/80s/Wrong - Name.mp3')).writeAsBytesSync(id3v2({'TIT2': 'Africa', 'TPE1': 'Toto'}));
+    File(lib.path('Rock/Wrong - Other.mp3')).writeAsBytesSync(id3v2({'TIT2': 'Livin On A Prayer', 'TPE1': 'Bon Jovi'}));
+    await lib.scan();
+    final pop = (await lib.db.folders.byPath(lib.path('Pop')))!;
+
+    await lib.db.setFolderNamesFrom(pop.id, 'files');
+    expect((await lib.track('Pop/80s/Wrong - Name.mp3')).artist, 'Wrong', reason: 'Pop and below: file names');
+    expect((await lib.track('Rock/Wrong - Other.mp3')).artist, 'Bon Jovi', reason: 'the rest: the library (tags)');
+    expect((await lib.db.folders.byPath(lib.path('Pop')))!.namesFrom, 'files');
+
+    // A new song in the folder follows it after a rescan too.
+    File(lib.path('Pop/80s/Also - Wrong.mp3')).writeAsBytesSync(id3v2({'TIT2': 'Take On Me', 'TPE1': 'A-ha'}));
+    await lib.scan();
+    expect((await lib.track('Pop/80s/Also - Wrong.mp3')).title, isNot('Take On Me'));
+
+    await lib.db.setFolderNamesFrom(pop.id, null);
+    expect((await lib.track('Pop/80s/Wrong - Name.mp3')).artist, 'Toto', reason: 'back to following the library');
+  });
 }

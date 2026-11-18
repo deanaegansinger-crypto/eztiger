@@ -291,6 +291,12 @@ WHERE folder_id IN (${folderIds.isEmpty ? 'NULL' : folderIds.values.join(',')})'
       }
     });
 
+    // Folders with their own Song names setting: names from what was just read.
+    if (report.changed &&
+        (await db.db.rawQuery('SELECT 1 FROM folders WHERE names_from IS NOT NULL LIMIT 1')).isNotEmpty) {
+      await db.applyNames(index: rebuildIndex);
+    }
+
     report.elapsed = sw.elapsed;
     return report;
   }

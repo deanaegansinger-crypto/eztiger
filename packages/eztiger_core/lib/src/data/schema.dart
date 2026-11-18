@@ -29,6 +29,7 @@ const List<String> namesColumnsStatements = [
   'ALTER TABLE tracks ADD COLUMN file_artist TEXT',
   'ALTER TABLE tracks ADD COLUMN tag_title TEXT',
   'ALTER TABLE tracks ADD COLUMN tag_artist TEXT',
+  'ALTER TABLE folders ADD COLUMN names_from TEXT',
   'UPDATE tracks SET file_title = title, file_artist = artist',
 ];
 
@@ -49,6 +50,9 @@ CREATE TABLE folders (
   -- 0 when Dean has removed this folder from the searchable library.
   -- The scanner skips it and everything below it.
   included    INTEGER NOT NULL DEFAULT 1,
+  -- Song names for this folder and below: 'tags', 'files', or NULL to
+  -- follow the folder above it (and the library's setting at the top).
+  names_from  TEXT,
   -- Tracks directly in this folder, and in it plus all its subfolders.
   track_count INTEGER NOT NULL DEFAULT 0,
   total_count INTEGER NOT NULL DEFAULT 0

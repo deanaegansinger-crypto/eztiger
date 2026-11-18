@@ -48,8 +48,12 @@ class EztigerDatabase {
           if (from < 3) await db.execute(trackAnalysisStatement);
           if (from < 4) await regroupTracks(db);
           if (from < 5) {
+            Future<Set<String>> cols(String table) async =>
+                {for (final r in await db.rawQuery('PRAGMA table_info($table)')) r['name'] as String};
+            final have = {'tracks': await cols('tracks'), 'folders': await cols('folders')};
             for (final sql in namesColumnsStatements) {
-              await db.execute(sql);
+              final m = RegExp(r'ALTER TABLE (\w+) ADD COLUMN (\w+)').firstMatch(sql);
+              if (m == null || !have[m.group(1)]!.contains(m.group(2))) await db.execute(sql);
             }
           }
         },
@@ -99,16 +103,56 @@ class EztigerDatabase {
   /// title and artist, its grouping and the search index are rewritten from
   /// what the last scan read, with no rescan.
   Future<void> setNamesFrom(String from) async {
-    final tags = from != 'files';
+    await setMeta('names_from', from == 'files' ? 'files' : 'tags');
+    await applyNames();
+  }
+
+  /// One folder's own Song names setting ('tags', 'files', or null to follow
+  /// the folder above it); it covers the folders inside it too.
+  Future<void> setFolderNamesFrom(int folderId, String? from) async {
+    await db.update('folders', {'names_from': from == null ? null : (from == 'files' ? 'files' : 'tags')},
+        where: 'id = ?', whereArgs: [folderId]);
+    await applyNames();
+  }
+
+  /// Whether each folder uses tag names: its own setting, or the nearest
+  /// folder above it with one, or the library's.
+  Future<Map<int, bool>> folderUsesTags() async {
+    final libTags = await namesFrom() == 'tags';
+    final rows = await db.rawQuery('SELECT id, parent_id, names_from FROM folders');
+    final parent = {for (final r in rows) r['id'] as int: r['parent_id'] as int?};
+    final own = {for (final r in rows) r['id'] as int: r['names_from'] as String?};
+    final out = <int, bool>{};
+    bool resolve(int id) {
+      final known = out[id];
+      if (known != null) return known;
+      final o = own[id];
+      final up = parent[id];
+      return out[id] = o != null ? o == 'tags' : (up == null ? libTags : resolve(up));
+    }
+
+    for (final id in own.keys) {
+      resolve(id);
+    }
+    return out;
+  }
+
+  /// Rewrites every song's title and artist from its tag and file names,
+  /// following the library's and each folder's Song names setting, then its
+  /// grouping and (when [index]) the search index. No rescan needed.
+  Future<void> applyNames({bool index = true}) async {
+    final uses = await folderUsesTags();
+    final files = [for (final e in uses.entries) if (!e.value) e.key];
     await db.transaction((txn) async {
-      await txn.execute(tags
-          ? 'UPDATE tracks SET title = COALESCE(tag_title, file_title, title), artist = COALESCE(tag_artist, file_artist)'
-          : 'UPDATE tracks SET title = COALESCE(file_title, title), artist = file_artist');
+      await txn.execute('UPDATE tracks SET title = COALESCE(tag_title, file_title, title), artist = COALESCE(tag_artist, file_artist)');
+      for (var i = 0; i < files.length; i += 500) {
+        final part = files.sublist(i, i + 500 > files.length ? files.length : i + 500);
+        await txn.rawUpdate(
+            'UPDATE tracks SET title = COALESCE(file_title, title), artist = file_artist WHERE folder_id IN (${List.filled(part.length, '?').join(',')})',
+            part);
+      }
       await regroupTracks(txn);
-      if (hasFts) await rebuildIndex(txn);
-      await txn.rawInsert(
-          "INSERT INTO meta(key, value) VALUES('names_from', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-          [tags ? 'tags' : 'files']);
+      if (index && hasFts) await rebuildIndex(txn);
     });
   }
 }
