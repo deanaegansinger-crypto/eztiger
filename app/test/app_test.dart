@@ -603,7 +603,10 @@ void main() {
     expect(backend.calls, contains('play'), reason: 'a media play/pause key, locked');
     await key(LogicalKeyboardKey.mediaPause);
     expect(backend.calls, contains('pause'));
+    // The song in the player wasn't started from the playlist, so the first
+    // "next" starts the playlist (the same song); the second moves on.
     final before = state.engine.current?.id;
+    await key(LogicalKeyboardKey.pageDown);
     await key(LogicalKeyboardKey.pageDown);
     expect(state.engine.current?.id, isNot(before), reason: 'Page Down: the next song');
     state.setLocked(false);
