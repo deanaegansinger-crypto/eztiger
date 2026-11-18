@@ -1,4 +1,5 @@
 import 'package:eztiger_core/eztiger_core.dart';
+import 'package:eztiger_core/src/text.dart' show groupKey;
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:test/test.dart';
