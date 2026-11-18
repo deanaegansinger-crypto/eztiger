@@ -241,16 +241,17 @@ void main() {
     // Look it up.
     await tester.enterText(find.byKey(const Key('songbook-find')), 'queen');
     await settle(tester);
-    expect(find.text('Bohemian Rhapsody'), findsOneWidget);
-    expect(find.text('Waterloo'), findsNothing);
+    Finder inBook(String text) => find.descendant(of: find.byKey(const Key('singer-songbook')), matching: find.text(text));
+    expect(inBook('Bohemian Rhapsody'), findsOneWidget);
+    expect(inBook('Waterloo'), findsNothing);
     // Tap to add to the bottom of Tonight's playlist; it gets a ✓.
     final before = state.queue.length;
-    await tester.tap(find.text('Bohemian Rhapsody'));
+    await tester.tap(inBook('Bohemian Rhapsody'));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
     await settle(tester);
     expect(state.queue.length, before + 1);
     expect(state.queue.last.track.title, 'Bohemian Rhapsody');
-    expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('singer-songbook')), matching: find.byIcon(Icons.check_circle)), findsOneWidget);
     expect(tester.takeException(), isNull);
     // A song starting: the songbook steps aside for the lyrics.
     await tester.runAsync(() async {
