@@ -376,6 +376,8 @@ void main() {
     }
     // The classic skin has a light screen too; the others don't.
     expect(find.text('Light'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('menu-skin')));
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.byKey(const Key('menu-skin')));
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 100));
@@ -1283,6 +1285,9 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.byKey(const Key('menu-lock-enabled')), findsOneWidget);
+      // The menu is taller than the tablet's screen: it scrolls.
+      await tester.ensureVisible(find.byKey(const Key('menu-two-decks')));
+      await tester.pump(const Duration(milliseconds: 100));
       await tester.tap(find.byKey(const Key('menu-two-decks')));
       for (var i = 0; i < 5; i++) {
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
