@@ -207,6 +207,17 @@ class AppState extends ChangeNotifier {
   /// Pro: the 🔒 screen lock is offered (☰ Menu → Screen lock button).
   bool lockEnabled = true;
 
+  /// The singer app: the songbook (every song on the tablet, by artist,
+  /// folder or title) is open in the lyrics' place. It closes when a song
+  /// starts. Not saved.
+  bool singerSongbook = false;
+
+  void setSingerSongbook(bool v) {
+    if (singerSongbook == v) return;
+    singerSongbook = v;
+    notifyListeners();
+  }
+
   /// Pro: the screen is locked, so a bump on the mic stand can't stop or
   /// skip a song. Press and hold the lock to unlock. Not saved: EZTiger
   /// always starts unlocked.

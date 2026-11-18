@@ -214,6 +214,7 @@ const _singer = <(String, List<String>)>[
     '4. Tonight\'s playlist',
     [
       'Tonight\'s playlist is the list of songs for the gig. 📂 Load playlist puts a saved playlist (such as one from the PC) into it.',
+      '📖 Songbook (top of the lyrics box) opens every song on the tablet in the lyrics\' place: by Artist, by Folder (your genres or sets) or A–Z by title, with a look-up box and an A–Z strip down the side to jump. Tap a song to add it to the bottom of Tonight\'s playlist (✓ shows it\'s in); press and hold to make it the next song. ✕ closes it, and it steps aside by itself when a song starts playing.',
       'Add songs by dragging them in, or ☰ Menu → Double-click → Tonight, so a double-tap adds a song to the end instead of loading it.',
       'Drag songs up and down to change the order. Sung songs stay in the list with a ✓; Clear played takes them off.',
       'Changed the order during the night? 💾 Save to <playlist> keeps it. ★ Save as playlist makes a new one.',

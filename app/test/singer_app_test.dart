@@ -218,6 +218,53 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('the songbook: in the lyrics\' place, by artist, folder or A–Z, look-up, tap to add, closes on play', (tester) async {
+    await pumpApp(tester, const Size(1280, 800));
+    await tester.runAsync(() async {
+      await state.db.queue.clear();
+      await state.playNow(state.results.first.primary, autostart: false);
+    });
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('open-songbook')));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    await settle(tester);
+    expect(find.byKey(const Key('singer-songbook')), findsOneWidget);
+    expect(find.byKey(const Key('output-screen')), findsNothing, reason: 'in the lyrics\' place');
+    // By artist (the usual): a heading for each artist.
+    expect(find.text('Queen  ·  1'), findsOneWidget);
+    expect(find.text('Abba  ·  1'), findsOneWidget);
+    // By folder: Pop and Rock.
+    await tester.tap(find.text('Folder'));
+    await settle(tester);
+    expect(find.text('Pop  ·  2'), findsOneWidget);
+    expect(find.text('Rock  ·  1'), findsOneWidget);
+    // Look it up.
+    await tester.enterText(find.byKey(const Key('songbook-find')), 'queen');
+    await settle(tester);
+    expect(find.text('Bohemian Rhapsody'), findsOneWidget);
+    expect(find.text('Waterloo'), findsNothing);
+    // Tap to add to the bottom of Tonight's playlist; it gets a ✓.
+    final before = state.queue.length;
+    await tester.tap(find.text('Bohemian Rhapsody'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    await settle(tester);
+    expect(state.queue.length, before + 1);
+    expect(state.queue.last.track.title, 'Bohemian Rhapsody');
+    expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    // A song starting: the songbook steps aside for the lyrics.
+    await tester.runAsync(() async {
+      await state.engine.play();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await settle(tester);
+    expect(state.singerSongbook, isFalse);
+    expect(find.byKey(const Key('singer-songbook')), findsNothing);
+    expect(find.byKey(const Key('output-screen')), findsOneWidget);
+    await tester.runAsync(() => state.engine.playPause());
+    await settle(tester);
+  });
+
   test('the singer app is one app: the Pro singing features, however it was built', () {
     expect(builtAsPro, isTrue);
   });

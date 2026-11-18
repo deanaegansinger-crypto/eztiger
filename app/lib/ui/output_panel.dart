@@ -2,6 +2,7 @@ import '../edition.dart';
 
 import 'package:flutter/material.dart';
 
+import '../platform.dart';
 import '../player.dart';
 import '../theme.dart';
 import 'common.dart';
@@ -116,6 +117,22 @@ class _OutputPanelState extends State<OutputPanel> {
                     children: [
                       HeadText(isPro ? 'Lyrics output' : 'Karaoke output', color: EzColors.brass),
                       const Spacer(),
+                      // The singer app: open the songbook in the lyrics' place.
+                      if (singerApp)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: InkWell(
+                            key: const Key('open-songbook'),
+                            onTap: () => AppScope.of(context).setSingerSongbook(true),
+                            child: Row(
+                              children: [
+                                Icon(Icons.menu_book, size: 16, color: EzColors.cyan),
+                                const SizedBox(width: 4),
+                                Text('Songbook', style: TextStyle(fontSize: 12, color: EzColors.cyan, fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ),
+                        ),
                       if (AppScope.secondScreenOf(context) case final second?)
                         Padding(
                           padding: const EdgeInsets.only(right: 10),

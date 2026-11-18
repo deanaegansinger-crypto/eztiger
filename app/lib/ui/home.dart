@@ -9,6 +9,7 @@ import 'lock.dart';
 import 'output_panel.dart';
 import 'queue_panel.dart';
 import 'rack.dart';
+import 'singer_songbook.dart';
 import 'songbook_dialog.dart';
 import 'stage_view.dart';
 
@@ -135,7 +136,11 @@ class _Stage extends StatelessWidget {
                   ),
                 ),
               ),
-              OutputPanel(bounds: Size(c.maxWidth, c.maxHeight), onFullScreen: onFullScreen),
+              // The singer app's songbook takes the lyrics' place, under the playlist.
+              if (singerApp && AppScope.of(context).singerSongbook)
+                Positioned(left: 12, right: 12, top: 22 + qh, bottom: 12, child: const SingerSongbook())
+              else
+                OutputPanel(bounds: Size(c.maxWidth, c.maxHeight), onFullScreen: onFullScreen),
             ],
           );
         },
