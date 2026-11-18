@@ -13,7 +13,8 @@ library;
 
 /// 2: queue.played_at (played songs stay in the queue).
 /// 3: track_analysis (each song's key and tempo).
-const int schemaVersion = 3;
+/// 4: group_key ignores a leading "The" on the artist (rewritten for every track).
+const int schemaVersion = 4;
 
 /// Bump when the filename parser or classification rules change. A scan that
 /// sees a different value re-parses every track (as UPDATEs, ids unchanged).
