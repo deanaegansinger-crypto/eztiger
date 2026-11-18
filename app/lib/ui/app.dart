@@ -35,6 +35,10 @@ class EztigerApp extends StatelessWidget {
             ...WidgetsApp.defaultShortcuts,
             const SingleActivator(LogicalKeyboardKey.space): const PlayPauseIntent(),
             const SingleActivator(LogicalKeyboardKey.space, control: true): const PlayPauseIntent(),
+            // Page Up / Down are a footswitch's keys (next song, back to the
+            // start; see keys.dart), not "scroll a list".
+            const SingleActivator(LogicalKeyboardKey.pageUp): const DoNothingAndStopPropagationIntent(),
+            const SingleActivator(LogicalKeyboardKey.pageDown): const DoNothingAndStopPropagationIntent(),
           },
           actions: {
             ...WidgetsApp.defaultActions,
