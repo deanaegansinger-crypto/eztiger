@@ -188,6 +188,7 @@ const _singer = <(String, List<String>)>[
       'Library tab → Add folder. The first time, Android asks to let EZTiger "manage all files": switch it on and come back. It needs this to read the CDG lyric files, which Android doesn\'t count as music.',
       'Pick where your karaoke folder is (SD card, internal storage or a USB stick), then the folder itself. EZTiger reads every song in it.',
       'Added, removed or renamed songs later? ☰ Menu → Rescan library. Or tick Rescan at start-up to have it done each time EZTiger opens.',
+      '☰ Menu → Song names: Tags (the usual) uses each song\'s own title and artist tags, and the file name only where a tag is blank; File names reads them from the file names. Switch any time.',
     ],
   ),
   (
@@ -337,6 +338,7 @@ const _sections = <(String, List<String>)>[
       'Library tab: click Add folder and pick your karaoke folder. EZtiger scans it. When you add, remove or rename songs later, press 🔄 Rescan (next to Add folder, or in the ☰ Menu). To rescan every time EZtiger starts, tick "Rescan at start-up" in the Menu.',
       'The arrow at the right of the Library / Playlists tabs folds that box away, for more room for the song list. Tap a tab to bring it back.',
       'Type in the search box to find songs by title or artist. Above the list: Type (CDG, MP4…), Sort (best match or A–Z) and View.',
+      'Song names (☰ Menu): Tags (the usual) takes each song\'s title and artist from its own tags (ID3 in MP3s, the title and artist in MP4s), and the file name only where a tag is blank. File names reads them from the file names. Switching is instant; after updating new builds, Rescan once so every song\'s tags are read.',
       'View: Songbook (the usual) shows each song once on a bigger row, the title over the artist, with a tile for each collection that has it, such as Sunfly ×2 · Zoom · +1. List shows one line a song, so more fit on the screen. EZTiger remembers which you chose.',
     ],
   ),

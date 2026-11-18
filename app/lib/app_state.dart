@@ -336,7 +336,29 @@ class AppState extends ChangeNotifier {
 
   /// Loads everything saved. [rescanLibrary] is false on Android until the
   /// app is allowed to read the SD card (it rescans once it is).
+  /// Song names from the files' title and artist tags (true, the usual; a
+  /// blank tag falls back to the file name), or from the file names only.
+  /// ☰ Menu → Song names. Kept in the library database.
+  bool namesFromTags = true;
+  bool renaming = false;
+
+  Future<void> setNamesFromTags(bool v) async {
+    if (v == namesFromTags || renaming) return;
+    namesFromTags = v;
+    renaming = true;
+    notifyListeners();
+    try {
+      await db.setNamesFrom(v ? 'tags' : 'files');
+      await refreshResults();
+      await _reloadQueue();
+    } finally {
+      renaming = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> init({bool rescanLibrary = true}) async {
+    namesFromTags = await db.namesFrom() == 'tags';
     await _loadSettings();
     await _loadKeys();
     await _loadVocalRemoved();

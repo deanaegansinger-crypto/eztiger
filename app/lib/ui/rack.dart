@@ -269,6 +269,17 @@ class _MainMenu extends StatelessWidget {
               onChanged: s.setStagePortrait,
             ),
           ),
+        // Where the titles and artists in the search and songbook come from.
+        _menuRow(
+          menu,
+          'Song names',
+          Segmented<bool>(
+            key: const Key('menu-names-from'),
+            options: const {true: 'Tags', false: 'File names'},
+            value: s.namesFromTags,
+            onChanged: s.setNamesFromTags,
+          ),
+        ),
         if (isPro)
           _menuRow(
             menu,

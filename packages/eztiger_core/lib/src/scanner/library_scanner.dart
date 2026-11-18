@@ -11,6 +11,7 @@ import '../data/search.dart';
 import '../text.dart';
 import 'filename_parser.dart';
 import 'folder_walker.dart';
+import 'tag_reader.dart';
 
 const Set<String> audioExtensions = {'.mp3', '.wav', '.wma', '.m4a', '.flac', '.ogg', '.aac'};
 const Set<String> videoExtensions = {'.mp4', '.avi', '.mpg', '.mpeg', '.mkv', '.mov', '.wmv', '.m4v', '.webm'};
@@ -192,6 +193,7 @@ WHERE folder_id IN (${folderIds.isEmpty ? 'NULL' : folderIds.values.join(',')})'
 
     // 5. Write everything in one transaction.
     bool under(String path, String dir) => path == dir || path.startsWith('$dir${p.separator}');
+    final useTags = await db.namesFrom() == 'tags';
     await db.db.transaction((txn) async {
       final perFolder = <int, int>{};
       for (final l in listings) {
@@ -222,6 +224,11 @@ WHERE folder_id IN (${folderIds.isEmpty ? 'NULL' : folderIds.values.join(',')})'
           report.unchanged++;
           continue;
         }
+        // The song's own title and artist tags (only read for new or changed
+        // files, so a rescan stays quick). A blank tag falls back to the file name.
+        final tags = c.kind == 'cdg_zip' ? (title: null, artist: null) : readTags(path);
+        final title = useTags ? (tags.title ?? c.parsed.title) : c.parsed.title;
+        final artist = useTags ? (tags.artist ?? c.parsed.artist) : c.parsed.artist;
         final values = <String, Object?>{
           'folder_id': folderId,
           'file_name': c.file.name,
@@ -234,12 +241,15 @@ WHERE folder_id IN (${folderIds.isEmpty ? 'NULL' : folderIds.values.join(',')})'
           'size': c.file.size,
           'mtime': c.file.mtime,
           'pair_sig': sig,
-          'title': c.parsed.title,
-          'artist': c.parsed.artist,
+          'title': title,
+          'artist': artist,
+          'file_title': c.parsed.title,
+          'file_artist': c.parsed.artist,
+          'tag_title': tags.title,
+          'tag_artist': tags.artist,
           'version': c.parsed.version,
           'catalogue_code': c.parsed.catalogueCode,
-          'group_key': groupKey(
-              (old?['user_title'] as String?) ?? c.parsed.title, (old?['user_artist'] as String?) ?? c.parsed.artist),
+          'group_key': groupKey((old?['user_title'] as String?) ?? title, (old?['user_artist'] as String?) ?? artist),
         };
         if (old == null) {
           values['path'] = path;

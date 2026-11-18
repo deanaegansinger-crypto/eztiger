@@ -221,7 +221,7 @@ void main() {
   testWidgets('the songbook: in the lyrics\' place, by artist, folder or A–Z, look-up, tap to add, closes on play', (tester) async {
     await pumpApp(tester, const Size(1280, 800));
     await tester.runAsync(() async {
-      await state.db.queue.clear();
+      await state.clearQueue();
       await state.playNow(state.results.first.primary, autostart: false);
     });
     await settle(tester);

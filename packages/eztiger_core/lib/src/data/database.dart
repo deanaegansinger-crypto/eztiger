@@ -47,6 +47,11 @@ class EztigerDatabase {
           if (from < 2) await db.execute('ALTER TABLE queue ADD COLUMN played_at INTEGER');
           if (from < 3) await db.execute(trackAnalysisStatement);
           if (from < 4) await regroupTracks(db);
+          if (from < 5) {
+            for (final sql in namesColumnsStatements) {
+              await db.execute(sql);
+            }
+          }
         },
         onCreate: (db, version) async {
           final batch = db.batch();
@@ -84,6 +89,28 @@ class EztigerDatabase {
       [key, value]);
 
   Future<void> close() => db.close();
+
+  /// Where the library's titles and artists come from: 'tags' (the ID3 or
+  /// MP4 tags, falling back to the file name for a blank tag) or 'files'
+  /// (the file names only).
+  Future<String> namesFrom() async => (await getMeta('names_from')) == 'files' ? 'files' : 'tags';
+
+  /// Switches the library between tag names and file names: every song's
+  /// title and artist, its grouping and the search index are rewritten from
+  /// what the last scan read, with no rescan.
+  Future<void> setNamesFrom(String from) async {
+    final tags = from != 'files';
+    await db.transaction((txn) async {
+      await txn.execute(tags
+          ? 'UPDATE tracks SET title = COALESCE(tag_title, file_title, title), artist = COALESCE(tag_artist, file_artist)'
+          : 'UPDATE tracks SET title = COALESCE(file_title, title), artist = file_artist');
+      await regroupTracks(txn);
+      if (hasFts) await rebuildIndex(txn);
+      await txn.rawInsert(
+          "INSERT INTO meta(key, value) VALUES('names_from', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+          [tags ? 'tags' : 'files']);
+    });
+  }
 }
 
 /// Works out every track's group_key again with today's [groupKey] (for an

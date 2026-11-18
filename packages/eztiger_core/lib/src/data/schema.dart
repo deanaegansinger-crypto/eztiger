@@ -14,11 +14,23 @@ library;
 /// 2: queue.played_at (played songs stay in the queue).
 /// 3: track_analysis (each song's key and tempo).
 /// 4: group_key ignores a leading "The" on the artist (rewritten for every track).
-const int schemaVersion = 4;
+/// 5: file_title / file_artist (from the file name) and tag_title / tag_artist
+///    (from the ID3 or MP4 tags); title / artist hold whichever the library
+///    uses (meta 'names_from': 'tags', the usual, or 'files').
+const int schemaVersion = 5;
 
 /// Bump when the filename parser or classification rules change. A scan that
 /// sees a different value re-parses every track (as UPDATEs, ids unchanged).
-const int parserVersion = 1;
+/// 2: reads each song's title and artist tags too.
+const int parserVersion = 2;
+
+const List<String> namesColumnsStatements = [
+  'ALTER TABLE tracks ADD COLUMN file_title TEXT',
+  'ALTER TABLE tracks ADD COLUMN file_artist TEXT',
+  'ALTER TABLE tracks ADD COLUMN tag_title TEXT',
+  'ALTER TABLE tracks ADD COLUMN tag_artist TEXT',
+  'UPDATE tracks SET file_title = title, file_artist = artist',
+];
 
 const List<String> schemaStatements = [
   '''
@@ -65,6 +77,11 @@ CREATE TABLE tracks (
   pair_sig       TEXT NOT NULL,
   title          TEXT NOT NULL,
   artist         TEXT,
+  -- The names from the file name, and from the file's tags (null if blank).
+  file_title     TEXT,
+  file_artist    TEXT,
+  tag_title      TEXT,
+  tag_artist     TEXT,
   version        TEXT,
   catalogue_code TEXT,
   -- Normalised artist|title, used to group copies of the same song.
