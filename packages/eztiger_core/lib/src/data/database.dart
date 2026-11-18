@@ -1,5 +1,6 @@
 import 'package:sqflite_common/sqlite_api.dart';
 
+import '../text.dart';
 import 'daos.dart';
 import 'schema.dart';
 import 'search.dart';
@@ -45,6 +46,7 @@ class EztigerDatabase {
         onUpgrade: (db, from, to) async {
           if (from < 2) await db.execute('ALTER TABLE queue ADD COLUMN played_at INTEGER');
           if (from < 3) await db.execute(trackAnalysisStatement);
+          if (from < 4) await regroupTracks(db);
         },
         onCreate: (db, version) async {
           final batch = db.batch();
@@ -82,4 +84,20 @@ class EztigerDatabase {
       [key, value]);
 
   Future<void> close() => db.close();
+}
+
+/// Works out every track's group_key again with today's [groupKey] (for an
+/// upgrade that changes how copies of a song are grouped). Only rows whose
+/// key changes are written.
+Future<void> regroupTracks(DatabaseExecutor db) async {
+  final rows = await db.query('tracks', columns: ['id', 'title', 'artist', 'user_title', 'user_artist', 'group_key']);
+  final batch = db.batch();
+  for (final r in rows) {
+    final key = groupKey(
+      (r['user_title'] as String?) ?? r['title'] as String,
+      (r['user_artist'] as String?) ?? r['artist'] as String?,
+    );
+    if (key != r['group_key']) batch.update('tracks', {'group_key': key}, where: 'id = ?', whereArgs: [r['id']]);
+  }
+  await batch.commit(noResult: true);
 }

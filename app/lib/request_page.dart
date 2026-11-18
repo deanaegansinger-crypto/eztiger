@@ -36,8 +36,21 @@ final _brands = <RegExp, String>{
   RegExp('MagicTracks', caseSensitive: false): 'Magic Tracks',
 };
 
+String? _knownBrand(String folder) {
+  for (final e in _brands.entries) {
+    if (e.key.hasMatch(folder)) return e.value;
+  }
+  return null;
+}
+
+/// What a song in a working folder whose name starts with "_" (such as
+/// _incoming) shows as, when no known brand's folder sits inside it.
+const otherBrand = 'Other';
+
 /// The version name for a song in [folder]: its collection, the top folder
-/// under the library folder that holds it.
+/// under the library folder that holds it. A top folder starting with "_"
+/// (_incoming, _new…) is a working folder, not a make of disc: a known
+/// brand's folder inside it names the version, or else it shows as Other.
 String brandOf(String folder, List<String> roots) {
   final root = roots.where((r) => p.equals(r, folder) || p.isWithin(r, folder)).fold<String?>(
         null,
@@ -45,9 +58,15 @@ String brandOf(String folder, List<String> roots) {
       );
   final rel = root == null ? '' : p.relative(folder, from: root);
   final top = rel.isEmpty || rel == '.' ? p.basename(root ?? folder) : p.split(rel).first;
-  for (final e in _brands.entries) {
-    if (e.key.hasMatch(top)) return e.value;
+  if (top.startsWith('_')) {
+    for (final part in p.split(rel).skip(1)) {
+      final b = _knownBrand(part);
+      if (b != null) return b;
+    }
+    return otherBrand;
   }
+  final known = _knownBrand(top);
+  if (known != null) return known;
   final name = top.replaceAll(RegExp(r'\s*\([^)]*\)\s*'), ' ').trim();
   return name.isEmpty ? 'Karaoke' : name;
 }
@@ -89,7 +108,8 @@ String _hex(List<num> c) => '#${c.map((v) => v.round().clamp(0, 255).toRadixStri
     });
   final unique = <String, ({String title, String artist, List<String> discs})>{};
   for (final s in sorted) {
-    final key = '${_norm(s.title)}|${_norm(s.artist)}';
+    // "The Beatles" and "Beatles" are one artist (as in the library's search).
+    final key = '${_norm(s.title)}|${_norm(s.artist).replaceFirst(RegExp(r'^the (?=.)'), '')}';
     final disc = '${brandNo[s.brand]}~${s.code}';
     final u = unique[key];
     if (u == null) {

@@ -31,10 +31,14 @@ List<String> tokens(String input) {
   return n.isEmpty ? const [] : n.split(' ');
 }
 
-/// Key that groups copies of the same song across folders.
+final RegExp _leadingThe = RegExp(r'^the (?=.)');
+
+/// Key that groups copies of the same song across folders. A leading "The"
+/// on the artist doesn't count, so The Beatles and Beatles are one artist.
+/// (Changing this needs a database upgrade that rewrites every group_key.)
 String groupKey(String title, String? artist) {
   final t = normalize(title);
-  final a = artist == null ? '' : normalize(artist);
+  final a = artist == null ? '' : normalize(artist).replaceFirst(_leadingThe, '');
   return '$a|$t';
 }
 

@@ -21,6 +21,26 @@ void main() {
     expect(brandOf(p.join(root, 'Zoom (ZM)', 'Elvis'), [root]), 'Zoom');
     expect(brandOf(p.join(root, 'Party Pack (PP)', 'Disc 1'), [root]), 'Party Pack');
     expect(brandOf(root, [root]), 'Karaoke', reason: 'songs right in the library folder');
+    // Working folders (a name starting with "_") are not a make of disc.
+    expect(brandOf(p.join(root, '_incoming', 'Zoom Karaoke', 'ZM5'), [root]), 'Zoom');
+    expect(brandOf(p.join(root, '_incoming', 'misc'), [root]), 'Other');
+    expect(brandOf(p.join(root, '_incoming'), [root]), 'Other');
+  });
+
+  test('the page: "The Beatles" and "Beatles" are one song', () {
+    final template = File(p.join('requests', 'request-template.html')).readAsStringSync();
+    final page = requestPageHtml(
+      template: template,
+      name: 'X',
+      logoBase64: '',
+      skin: 'classic',
+      songs: [
+        (title: 'Yesterday', artist: 'Beatles', brand: 'Zoom', code: 'ZM1'),
+        (title: 'Yesterday', artist: 'The Beatles', brand: 'Sunfly', code: 'SF1'),
+        (title: 'This Is The Day', artist: 'The The', brand: 'Zoom', code: 'ZM2'),
+      ],
+    );
+    expect(page.count, 2);
   });
 
   test('the page: each song once, with its versions, the colours and the name', () {
