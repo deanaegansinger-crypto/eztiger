@@ -101,4 +101,26 @@ void main() {
     expect(state.requestsState, RequestsState.needsCode);
     expect(state.queue, isEmpty);
   });
+
+  test("EZTiger tells the request list on this PC which address its QR code uses", () async {
+    final ips = <String?>[];
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((req) async {
+      ips.add(req.uri.queryParameters['ip']);
+      req.response.headers.contentType = ContentType.json;
+      req.response.write('[]');
+      await req.response.close();
+    });
+    state.requestsLink = 'localhost:${server.port}';
+    state.setSongbook(url: 'http://192.168.0.57:8080/');
+    await state.checkSongRequests();
+    expect(ips.last, '192.168.0.57', reason: "the QR code's address");
+
+    state.setSongbook(url: 'https://example.github.io/songbook/');
+    state.pcAddress = '10.0.0.9';
+    await state.checkSongRequests();
+    expect(ips.last, '10.0.0.9', reason: 'the QR code is a web site: this PC\'s address');
+    expect(RequestServer.parse('http://192.168.0.57:8080/dj?key=x')!.onThisDevice, isFalse, reason: 'a tablet sends none');
+  });
 }

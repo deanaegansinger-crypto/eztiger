@@ -76,9 +76,16 @@ class RequestServer {
     return base.replace(path: path, queryParameters: q.isEmpty ? null : q);
   }
 
+  /// True when the request list runs on this device (localhost).
+  bool get onThisDevice => const ['localhost', '127.0.0.1', '::1'].contains(base.host);
+
   /// The songs in the singing queue that haven't gone into EZTiger yet, top first.
-  Future<List<SongRequest>> waiting(HttpClient http) async {
-    final req = await http.getUrl(_at('/app/next')).timeout(_timeout);
+  /// [ip] is the address EZTiger's QR code uses, so the request list's QR
+  /// code (on the DJ list and poster) shows the same one; sent only when the
+  /// request list runs on this PC.
+  Future<List<SongRequest>> waiting(HttpClient http, {String? ip}) async {
+    final send = ip != null && ip.isNotEmpty && onThisDevice;
+    final req = await http.getUrl(_at('/app/next', send ? {'ip': ip} : const {})).timeout(_timeout);
     final res = await req.close().timeout(_timeout);
     final body = await res.transform(utf8.decoder).join().timeout(_timeout);
     if (res.statusCode == 403) throw const RequestServerRefused();

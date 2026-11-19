@@ -161,7 +161,8 @@ function RowsJson($rows, $names) {
 }
 function ListJson {
   $ago = if ($script:lastApp -eq [DateTime]::MinValue) { -1 } else { [int]((Get-Date) - $script:lastApp).TotalSeconds }
-  '{"app":' + $ago + ',"open":' + $(if ($script:closed) { 'false' } else { 'true' }) + ',"rows":' + (RowsJson $list $fields) + '}'
+  Update-Link
+  '{"app":' + $ago + ',"link":' + (JStr $script:singerLink) + ',"open":' + $(if ($script:closed) { 'false' } else { 'true' }) + ',"rows":' + (RowsJson $list $fields) + '}'
 }
 
 function Send($stream, [int]$code, [string]$type, [byte[]]$bytes, [string]$extra = '') {
@@ -246,13 +247,14 @@ $djHtml = @'
   <section id="closedBox"><h2>Sung &amp; rejected <span class="c" id="cClosed">0</span><span class="hint">Kept until you clear the list. ↩ sends one back to New requests.</span></h2>
     <div id="closed"></div></section>
   <div class="bar"><span>The list is saved on this PC and kept until you clear it.</span><button class="clear" id="clear">Clear whole list…</button></div>
-  <div class="bar"><span>On a tablet (EZTiger ☰ Menu → Song requests, or this list): <b style="color:var(--cyan);user-select:all">__LINK__/dj?key=__KEY__</b></span></div>
+  <div class="bar"><span>On a tablet (EZTiger ☰ Menu → Song requests, or this list): <b id="djLink" style="color:var(--cyan);user-select:all">__LINK__/dj?key=__KEY__</b></span></div>
   <div class="bar" id="stopBar"><span>The request list runs in the background on this PC. Start it again from the taskbar.</span><button id="stop">⏻ Stop the request list</button></div>
   <div class="closed" id="stopped" hidden>The request list is <b>stopped</b>: phones can't open the page or send requests. Your list is saved. Start it again from the taskbar (Start song requests).</div>
 </main>
 <script>
 __QRJS__
-document.getElementById('qr').innerHTML = QR.svg('__LINK__');
+let link = '__LINK__';
+document.getElementById('qr').innerHTML = QR.svg(link);
 const KEY = '__KEY__';
 const $ = id => document.getElementById(id);
 const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
@@ -288,6 +290,11 @@ async function load(force) {
   try { text = await (await fetch('/dj/list?key=' + KEY, { cache:'no-store' })).text(); }
   catch { $('nNew').innerHTML = '<span class="off">?</span>'; return; }
   const data = JSON.parse(text), list = data.rows;
+  if (data.link && data.link !== link) {   // this PC's address changed (new router or venue): the QR code follows
+    link = data.link;
+    $('qr').innerHTML = QR.svg(link);
+    $('djLink').textContent = link + '/dj?key=' + KEY;
+  }
   const on = data.app >= 0 && data.app < 15;   // EZTiger asks every few seconds while open
   const appEl = $('app');
   appEl.className = 'app' + (on ? ' on' : '');
@@ -576,14 +583,16 @@ function Handle($client) {
     }
     '^GET /dj/?$' {
       if (-not $djOk) { SendText $stream 403 'text/plain' 'The DJ list needs the DJ link.'; return }
-      $html = $djHtml.Replace('__QRJS__', $qrJs).Replace('__NAME__', [Net.WebUtility]::HtmlEncode($showName)).Replace('__LINK__', $singerLink).Replace('__KEY__', $key)
+      Update-Link
+      $html = $djHtml.Replace('__QRJS__', $qrJs).Replace('__NAME__', [Net.WebUtility]::HtmlEncode($showName)).Replace('__LINK__', $script:singerLink).Replace('__KEY__', $key)
       SendText $stream 200 'text/html' $html
       return
     }
     '^GET /poster$' {
       if (-not $djOk) { SendText $stream 403 'text/plain' 'The poster needs the DJ link.'; return }
       $v = Get-Venue
-      $html = $posterHtml.Replace('__QRJS__', $qrJs).Replace('__LINK__', $singerLink)
+      Update-Link
+      $html = $posterHtml.Replace('__QRJS__', $qrJs).Replace('__LINK__', $script:singerLink)
       if ($v) {                                   # venue branding: the venue's name and logo, EZTiger as a small line
         $html = $html.Replace('__NAME__', [Net.WebUtility]::HtmlEncode($v.name)).Replace('__POWERED__', [Net.WebUtility]::HtmlEncode($v.poweredBy))
         if ($v.logoUrl) { $html = $html.Replace('data:image/png;base64,__LOGO__', $v.logoUrl) }
@@ -622,6 +631,12 @@ function Handle($client) {
     '^GET /app/next$' {
       if (-not $djOk) { SendText $stream 403 'application/json' '[]'; return }
       $script:lastApp = Get-Date
+      # EZTiger on this PC says which address its QR code uses: the DJ list's QR code uses it too, if it is this PC's.
+      $appIp = [string]$query['ip']
+      if ([Net.IPAddress]::IsLoopback($remote) -and $appIp -match '^\d{1,3}(\.\d{1,3}){3}$' -and $appIp -ne $script:appIp -and ((PcAddresses) -contains $appIp)) {
+        $script:appIp = $appIp; $script:ipCheckedAt = Get-Date
+      }
+      Update-Link
       SendText $stream 200 'application/json' (RowsJson @(Queue | Where-Object { -not $_.Sent }) @('Id','Singer','Title','Artist','Version','Disc','File','Path'))
       return
     }
@@ -662,19 +677,52 @@ function Handle($client) {
 }
 
 # ---------- Start ----------
-$ip = $null
-try {
-  # The address on the network the router gives out (the one with the default route).
-  $route = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction Stop | Sort-Object { $_.RouteMetric + $_.InterfaceMetric } | Select-Object -First 1
-  $ip = Get-NetIPAddress -InterfaceIndex $route.InterfaceIndex -AddressFamily IPv4 -ErrorAction Stop | Select-Object -First 1 -ExpandProperty IPAddress
-} catch {}
-if (-not $ip) {
-  $ip = [Net.Dns]::GetHostAddresses([Net.Dns]::GetHostName()) | Where-Object { $_.AddressFamily -eq 'InterNetwork' -and -not $_.ToString().StartsWith('169.254') } |
-        Select-Object -First 1 | ForEach-Object { $_.ToString() }
+# This PC's address changes with the network (a new router, another venue), so
+# it is worked out again every 20 seconds while the list runs, and the QR code
+# on the DJ list follows it. EZTiger on this PC also says which address its own
+# QR code uses (with /app/next); that one wins while it is still this PC's.
+$virtualNics = 'vEthernet|VirtualBox|VMware|Hyper-V|WSL|Docker|Bluetooth|Tailscale|ZeroTier|VPN|TAP-|Loopback|Npcap'
+function PcAddresses {
+  try {
+    @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop | Where-Object { $_.IPAddress -notmatch '^(127\.|169\.254\.)' } | ForEach-Object { $_.IPAddress })
+  } catch {
+    @([Net.Dns]::GetHostAddresses([Net.Dns]::GetHostName()) | Where-Object { $_.AddressFamily -eq 'InterNetwork' } | ForEach-Object { $_.ToString() } |
+      Where-Object { $_ -notmatch '^(127\.|169\.254\.)' })
+  }
 }
-if (-not $ip) { $ip = 'this-pc' }
+function Find-Ip {
+  try {
+    # The address on the network the router gives out (the one with the default route), skipping VPNs and virtual adapters.
+    $routes = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction Stop | Sort-Object { $_.RouteMetric + $_.InterfaceMetric }
+    foreach ($route in $routes) {
+      if ($route.InterfaceAlias -match $virtualNics) { continue }
+      $a = Get-NetIPAddress -InterfaceIndex $route.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+           Where-Object { $_.IPAddress -notmatch '^169\.254\.' } | Select-Object -First 1 -ExpandProperty IPAddress
+      if ($a) { return $a }
+    }
+  } catch {}
+  $a = PcAddresses | Select-Object -First 1
+  if ($a) { return $a }
+  'this-pc'
+}
 $portPart = if ($Port -eq 80) { '' } else { ":$Port" }
-$singerLink = "http://$ip$portPart"
+$script:appIp = ''
+$script:foundIp = Find-Ip
+$script:ipCheckedAt = Get-Date
+function Update-Link {
+  if (((Get-Date) - $script:ipCheckedAt).TotalSeconds -ge 20) {
+    $script:ipCheckedAt = Get-Date
+    $script:foundIp = Find-Ip
+    if ($script:appIp -and -not ((PcAddresses) -contains $script:appIp)) { $script:appIp = '' }   # EZTiger's address isn't this PC's any more
+  }
+  $ip = if ($script:appIp) { $script:appIp } else { $script:foundIp }
+  $new = "http://$ip$portPart"
+  if ($script:singerLink -and $new -ne $script:singerLink) { Write-Host ("  {0:HH:mm}  This PC's address is now {1}: the QR code follows it" -f (Get-Date), $new) -ForegroundColor Cyan }
+  $script:singerLink = $new
+}
+$script:singerLink = ''
+Update-Link
+$singerLink = $script:singerLink
 
 $listener = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Any, $Port)
 try { $listener.Start() } catch {

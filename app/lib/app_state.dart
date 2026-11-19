@@ -1471,7 +1471,8 @@ class AppState extends ChangeNotifier {
     _requestsBusy = true;
     try {
       final http = _requestsHttp ??= HttpClient()..connectionTimeout = const Duration(seconds: 3);
-      final waiting = await server.waiting(http);
+      final qrHost = isLocalNetworkUrl(songbookUrl) ? Uri.tryParse(songbookUrl.trim())?.host : null;
+      final waiting = await server.waiting(http, ip: qrHost ?? pcAddress);
       _setRequestsState(RequestsState.connected);
       for (final r in waiting) {
         if (!_requestsTaken.containsKey(r.id)) {
