@@ -55,7 +55,22 @@ bool isLocalNetworkUrl(String url) {
 }
 
 /// [url] with its address changed to [ip], keeping the rest (port, page).
-String withAddress(String url, String ip) => Uri.parse(url.trim()).replace(host: ip).toString();
+String withAddress(String url, String ip) => fixLocalUrl(Uri.parse(url.trim()).replace(host: ip).toString());
+
+/// A link to a PC on the local network made to work with the song-request
+/// list, which answers at http (never https) on port 8080: "https://192.168.3.5"
+/// or "192.168.3.5" becomes "http://192.168.3.5:8080/". A web site's link
+/// (and a local link that already names its port) is left alone apart from
+/// the http.
+String fixLocalUrl(String url) {
+  var s = url.trim();
+  if (s.isEmpty) return s;
+  if (!s.contains('://')) s = 'http://$s';
+  final u = Uri.tryParse(s);
+  if (u == null || !isPrivateIp(u.host)) return url.trim();
+  final explicitPort = RegExp(r'^[a-zA-Z]+://[^/]+:\d+').hasMatch(s);
+  return u.replace(scheme: 'http', port: explicitPort ? u.port : 8080, path: u.path.isEmpty ? '/' : u.path).toString();
+}
 
 /// The song-request page on this PC ("Start song requests", port 8080).
 String requestPageUrl(String ip) => 'http://$ip:8080/';

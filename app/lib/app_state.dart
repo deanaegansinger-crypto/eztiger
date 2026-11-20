@@ -435,7 +435,7 @@ class AppState extends ChangeNotifier {
       };
       hiddenColumns = {...((m['hiddenColumns'] as List?) ?? const []).whereType<String>()};
       songbookTitle = m['songbookTitle'] as String? ?? songbookTitle;
-      songbookUrl = m['songbookUrl'] as String? ?? songbookUrl;
+      songbookUrl = fixLocalUrl(m['songbookUrl'] as String? ?? songbookUrl);
       songbookSaved = m['songbookSaved'] as String? ?? songbookSaved;
       requestsLink = m['requestsLink'] as String? ?? requestsLink;
       transferHost = m['transferHost'] as String? ?? transferHost;
@@ -856,7 +856,7 @@ class AppState extends ChangeNotifier {
 
   void setSongbook({String? title, String? url}) {
     songbookTitle = title ?? songbookTitle;
-    songbookUrl = url ?? songbookUrl;
+    songbookUrl = url == null ? songbookUrl : fixLocalUrl(url);
     notifyListeners();
   }
 

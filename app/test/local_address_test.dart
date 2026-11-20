@@ -28,4 +28,13 @@ void main() {
     expect(withAddress('http://192.168.88.2:8080/', '192.168.88.12'), 'http://192.168.88.12:8080/');
     expect(requestPageUrl('10.0.0.7'), 'http://10.0.0.7:8080/');
   });
+
+  test('a local address typed by hand is made into the request page link (http, port 8080)', () {
+    expect(fixLocalUrl('https://192.168.3.5'), 'http://192.168.3.5:8080/');
+    expect(fixLocalUrl('192.168.3.5'), 'http://192.168.3.5:8080/');
+    expect(fixLocalUrl('https://192.168.3.5:8080/'), 'http://192.168.3.5:8080/');
+    expect(fixLocalUrl('http://192.168.3.5:8081/'), 'http://192.168.3.5:8081/', reason: 'its own port kept');
+    expect(fixLocalUrl('https://deano.github.io/songbook/'), 'https://deano.github.io/songbook/', reason: 'web sites untouched');
+    expect(fixLocalUrl(''), '');
+  });
 }
