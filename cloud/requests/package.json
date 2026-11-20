@@ -1,1 +1,26 @@
-{"name":"eztiger-requests","private":true,"devDependencies":{"wrangler":"^4.165.0"}}
+{
+  "name": "eztiger-requests",
+  "description": "EZTiger online song requests: singers request from their own phones, the DJ's EZTiger collects them.",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.165.0"
+  },
+  "cloudflare": {
+    "label": "EZTiger song requests",
+    "products": ["Workers", "D1", "KV"],
+    "bindings": {
+      "DJ_KEY": {
+        "description": "Your DJ code: make up 20 or more letters and numbers (no spaces) and keep it private. Your DJ link is your web address + `/dj?key=` + this code."
+      },
+      "PAGES": {
+        "description": "Keeps your singers' song page."
+      },
+      "DB": {
+        "description": "Keeps the request list."
+      }
+    }
+  }
+}

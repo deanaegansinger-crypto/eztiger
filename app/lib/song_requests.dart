@@ -53,7 +53,7 @@ class SongRequest {
 /// `localhost:8080` on the PC that runs it, or the "DJ link" it shows, such
 /// as `http://192.168.1.20:8080/dj?key=abc123`, on a tablet.
 class RequestServer {
-  RequestServer._(this.base, this.key);
+  RequestServer._(this.base, this.key, [this.prefix = '']);
 
   /// Null when [link] is empty or not a web address.
   static RequestServer? parse(String link) {
@@ -62,8 +62,14 @@ class RequestServer {
     if (!s.contains('://')) s = 'http://$s';
     final u = Uri.tryParse(s);
     if (u == null || u.host.isEmpty || !(u.scheme == 'http' || u.scheme == 'https')) return null;
+    // A DJ's own list on the shared online service sits under /v/<id>/
+    // (https://…/v/ab12cd34/dj?key=…): everything is asked for under it.
+    var path = u.path;
+    final dj = path.indexOf('/dj');
+    if (dj >= 0) path = path.substring(0, dj);
+    path = path.replaceAll(RegExp(r'/+$'), '');
     return RequestServer._(Uri(scheme: u.scheme, host: u.host, port: u.hasPort ? u.port : null),
-        u.queryParameters['key'] ?? '');
+        u.queryParameters['key'] ?? '', path);
   }
 
   final Uri base;
@@ -71,11 +77,34 @@ class RequestServer {
   /// The DJ code from the DJ link; not needed on the PC itself.
   final String key;
 
+  /// Where this DJ's list is on the server: '' for its own, or `/v/<id>` on
+  /// the shared online service.
+  final String prefix;
+
   static const _timeout = Duration(seconds: 4);
 
   Uri _at(String path, [Map<String, String> query = const {}]) {
     final q = {if (key.isNotEmpty) 'key': key, ...query};
-    return base.replace(path: path, queryParameters: q.isEmpty ? null : q);
+    return base.replace(path: '$prefix$path', queryParameters: q.isEmpty ? null : q);
+  }
+
+  /// Gets a new DJ their own list on the shared online request service
+  /// ([service], such as EZTiger's), named [name]. Returns its DJ link.
+  static Future<String> register(HttpClient http, String service, String name) async {
+    final req = await http.postUrl(Uri.parse('$service/register')).timeout(const Duration(seconds: 15));
+    req.headers.contentType = ContentType('application', 'x-www-form-urlencoded', charset: 'utf-8');
+    req.write(Uri(queryParameters: {'name': name}).query);
+    final res = await req.close().timeout(const Duration(seconds: 30));
+    final body = await res.transform(utf8.decoder).join();
+    Map<String, dynamic>? j;
+    try {
+      j = jsonDecode(body) as Map<String, dynamic>;
+    } catch (_) {}
+    final dj = j?['dj'];
+    if (res.statusCode != 200 || dj is! String || parse(dj) == null) {
+      throw HttpException(j?['error'] as String? ?? 'The online request service answered ${res.statusCode}');
+    }
+    return dj;
   }
 
   /// True when the request list runs on this device (localhost).
@@ -86,7 +115,7 @@ class RequestServer {
   bool get online => !onThisDevice && !isPrivateIp(base.host) && !base.host.endsWith('.local');
 
   /// The singers' page: what the songbook QR code opens.
-  String get singerPage => base.replace(path: '/').toString();
+  String get singerPage => base.replace(path: '$prefix/').toString();
 
   /// The DJ list in a browser.
   String get djList => _at('/dj').toString();

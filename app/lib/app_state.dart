@@ -1522,6 +1522,33 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// EZTiger's own online request service: each DJ gets their own request
+  /// page and DJ list on it (☰ Menu → Song requests → Get my online request page).
+  static const onlineRequestService = 'https://eztiger-requests.eztiger-requests.workers.dev';
+
+  /// Signs this DJ up on [onlineRequestService]; replaced in tests.
+  Future<String> Function(HttpClient http, String name) registerOnline =
+      (http, name) => RequestServer.register(http, onlineRequestService, name);
+
+  /// ☰ Menu → Song requests → Get my online request page: a request page and
+  /// DJ list of this DJ's own on EZTiger's online service, connected straight
+  /// away. Then Start song requests puts their songs on it.
+  Future<void> getOnlineRequestPage() async {
+    final http = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+    try {
+      final name = songbookTitle.trim().isEmpty ? 'Karaoke' : songbookTitle.trim();
+      setRequestsLink(await registerOnline(http, name));
+    } on SocketException {
+      throw StateError("Can't reach the online request service. Check this PC is on the internet.");
+    } on TimeoutException {
+      throw StateError("Can't reach the online request service. Check this PC is on the internet.");
+    } on HttpException catch (e) {
+      throw StateError(e.message);
+    } finally {
+      http.close(force: true);
+    }
+  }
+
   /// Sends the singers' page to the online request list; replaced in tests.
   Future<void> Function(RequestServer server, HttpClient http, String html, String name) publishRequestPage =
       (server, http, html, name) => server.publishPage(http, html, name: name);

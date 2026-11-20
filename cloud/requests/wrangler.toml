@@ -3,6 +3,8 @@ name = "eztiger-requests"
 main = "worker.js"
 compatibility_date = "2025-09-01"
 workers_dev = true
+# Keep ALLOW_SIGNUPS (set in the dashboard or with --var) when deploying again.
+keep_vars = true
 
 [[rules]]
 type = "Text"
@@ -25,4 +27,8 @@ binding = "DB"
 database_name = "eztiger-requests"
 database_id = "1926410e-4f14-4747-8221-570a3271c438"
 
-# DJ_KEY (the code in the DJ link) is a secret: wrangler secret put DJ_KEY
+# DJ_KEY (the code in the owner's DJ link) is a secret: wrangler secret put DJ_KEY
+# ALLOW_SIGNUPS = "yes" lets other DJs get their own list from EZTiger
+# (☰ Menu → Song requests → Get my online request page). Only the EZTiger
+# owner's service turns it on (in the dashboard, or with --var); a DJ hosting
+# their own copy leaves it off.

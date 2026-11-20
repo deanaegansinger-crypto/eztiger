@@ -49,6 +49,46 @@ void main() {
     expect(web.online, isTrue);
     expect(web.singerPage, 'https://eztiger-requests.deano.workers.dev/');
     expect(web.djList, 'https://eztiger-requests.deano.workers.dev/dj?key=Zx9');
+    // A DJ's own list on the shared service, under /v/<id>/.
+    final shared = RequestServer.parse('https://eztiger-requests.deano.workers.dev/v/ab12cd34/dj?key=Qq7')!;
+    expect(shared.online, isTrue);
+    expect(shared.prefix, '/v/ab12cd34');
+    expect(shared.singerPage, 'https://eztiger-requests.deano.workers.dev/v/ab12cd34/');
+    expect(shared.djList, 'https://eztiger-requests.deano.workers.dev/v/ab12cd34/dj?key=Qq7');
+    expect(pc.prefix, '');
+    expect(tablet.prefix, '');
+  });
+
+  test('a new DJ gets their own list on the shared online service', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final asked = <String>[];
+    server.listen((req) async {
+      final body = await utf8.decoder.bind(req).join();
+      asked.add('${req.method} ${req.uri.path} $body');
+      req.response.headers.contentType = ContentType.json;
+      if (body.contains('Full')) {
+        req.response.statusCode = 429;
+        req.response.write('{"ok":false,"error":"Too many new request pages today"}');
+      } else {
+        req.response.write('{"ok":true,"link":"http://x/v/ab12cd34/","dj":"http://127.0.0.1:${server.port}/v/ab12cd34/dj?key=K9"}');
+      }
+      await req.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+    final http = HttpClient();
+    addTearDown(() => http.close(force: true));
+    final dj = await RequestServer.register(http, 'http://127.0.0.1:${server.port}', "Deano's Karaoke");
+    expect(asked.single, startsWith('POST /register name=Deano'));
+    expect(RequestServer.parse(dj)!.prefix, '/v/ab12cd34');
+    await expectLater(RequestServer.register(http, 'http://127.0.0.1:${server.port}', 'Full'),
+        throwsA(isA<HttpException>().having((e) => e.message, 'message', contains('Too many'))));
+
+    // The app connects to it straight away.
+    state.registerOnline = (http, name) async => dj;
+    await state.getOnlineRequestPage();
+    expect(state.requestsLink, dj);
+    expect(state.requestsOnline, isFalse, reason: '127.0.0.1 is this PC, not online');
+    state.setRequestsLink('');
   });
 
   test('the singers\' page goes to the online request list gzipped, with the DJ code, name and time zone', () async {

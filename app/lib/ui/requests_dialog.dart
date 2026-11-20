@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../song_requests.dart';
 import '../theme.dart';
@@ -56,6 +57,7 @@ class _RequestsDialog extends StatefulWidget {
 
 class _RequestsDialogState extends State<_RequestsDialog> {
   late final link = TextEditingController(text: AppScope.of(context).requestsLink);
+  bool _busy = false;
 
   @override
   void dispose() {
@@ -137,6 +139,16 @@ class _RequestsDialogState extends State<_RequestsDialog> {
                           },
                           child: const Text('Use this PC instead (no internet)'),
                         ),
+                      if (s.requestsOnline)
+                        TextButton(
+                          key: const Key('requests-copy-dj'),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: RequestServer.parse(s.requestsLink)!.djList));
+                            ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
+                                content: Text('DJ link copied. Keep it somewhere safe: it opens your DJ list on any device.')));
+                          },
+                          child: const Text('Copy the DJ link'),
+                        ),
                       if (!s.requestsOnline && s.onlineRequestsLink.isNotEmpty)
                         TextButton(
                           key: const Key('requests-use-online'),
@@ -148,6 +160,36 @@ class _RequestsDialogState extends State<_RequestsDialog> {
                         ),
                     ],
                   ),
+                  if (Platform.isWindows && !s.requestsOnline && s.onlineRequestsLink.isEmpty) ...[
+                    const SizedBox(height: 8),
+                    FilledButton.tonal(
+                      key: const Key('requests-get-online'),
+                      onPressed: _busy
+                          ? null
+                          : () async {
+                              setState(() => _busy = true);
+                              final messenger = ScaffoldMessenger.maybeOf(context);
+                              try {
+                                await s.getOnlineRequestPage();
+                                link.text = s.requestsLink;
+                                messenger?.showSnackBar(const SnackBar(
+                                  duration: Duration(seconds: 10),
+                                  content: Text('Your online request page is ready. Now ☰ Menu → Start song requests puts your songs on it.'),
+                                ));
+                              } on StateError catch (e) {
+                                messenger?.showSnackBar(SnackBar(content: Text(e.message)));
+                              } finally {
+                                if (mounted) setState(() => _busy = false);
+                              }
+                            },
+                      child: Text(_busy ? 'Getting your page…' : '🌐 Get my online request page'),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Your own request page on EZTiger\'s online service: singers request on their own phone data, with no Wi-Fi to join.',
+                      style: TextStyle(color: context.ez.textDim, fontSize: 12),
+                    ),
+                  ],
                 ],
               ),
             ),
