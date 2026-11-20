@@ -88,7 +88,9 @@ void main() {
     await state.getOnlineRequestPage();
     expect(state.requestsLink, dj);
     expect(state.requestsOnline, isFalse, reason: '127.0.0.1 is this PC, not online');
+    // Stop checking the list, and let a check already under way finish before tearDown.
     state.setRequestsLink('');
+    await Future<void>.delayed(const Duration(milliseconds: 500));
   });
 
   test('the singers\' page goes to the online request list gzipped, with the DJ code, name and time zone', () async {

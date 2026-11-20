@@ -1562,8 +1562,11 @@ class AppState extends ChangeNotifier {
     startSongRequests();
   }
 
+  /// Set once EZTiger closes: a request-list check still under way then changes nothing.
+  bool _disposed = false;
+
   void _setRequestsState(RequestsState v) {
-    if (requestsState == v) return;
+    if (_disposed || requestsState == v) return;
     requestsState = v;
     notifyListeners();
   }
@@ -1580,6 +1583,7 @@ class AppState extends ChangeNotifier {
       final waiting = await server.waiting(http, ip: qrHost ?? pcAddress);
       _setRequestsState(RequestsState.connected);
       for (final r in waiting) {
+        if (_disposed) return;
         if (!_requestsTaken.containsKey(r.id)) {
           final t = await findRequestedSong(r);
           if (t != null) await enqueue(t, singer: r.singer.isEmpty ? null : r.singer);
@@ -2050,6 +2054,7 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _debounce?.cancel();
     _requestsTimer?.cancel();
     _requestsHttp?.close(force: true);
