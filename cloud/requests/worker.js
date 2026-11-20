@@ -115,7 +115,8 @@ async function handle(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, '') || '/';
   const method = request.method;
-  const djOk = sameKey(url.searchParams.get('key') || '', env.DJ_KEY || '');
+  const djKey = String(env.DJ_KEY || '').trim();   // a secret typed or piped in can end with a line break
+  const djOk = sameKey((url.searchParams.get('key') || '').trim(), djKey);
   const link = url.origin;
 
   if (method === 'GET' && (path === '/' || path === '/index.html')) {
@@ -156,7 +157,7 @@ async function handle(request, env, ctx) {
     if (path.startsWith('/app')) return json([], 403);
     return text('Not found', 404);
   }
-  const key = env.DJ_KEY;
+  const key = djKey;
 
   if (method === 'GET' && path === '/dj') {
     const m = await meta(env);
