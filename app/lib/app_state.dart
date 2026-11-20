@@ -438,6 +438,7 @@ class AppState extends ChangeNotifier {
       songbookUrl = fixLocalUrl(m['songbookUrl'] as String? ?? songbookUrl);
       songbookSaved = m['songbookSaved'] as String? ?? songbookSaved;
       requestsLink = m['requestsLink'] as String? ?? requestsLink;
+      onlineRequestsLink = m['onlineRequestsLink'] as String? ?? onlineRequestsLink;
       transferHost = m['transferHost'] as String? ?? transferHost;
       libraryCollapsed = m['libraryCollapsed'] as bool? ?? libraryCollapsed;
       lockEnabled = m['lockEnabled'] as bool? ?? lockEnabled;
@@ -500,6 +501,7 @@ class AppState extends ChangeNotifier {
       'songbookUrl': songbookUrl,
       'songbookSaved': songbookSaved,
       'requestsLink': requestsLink,
+      'onlineRequestsLink': onlineRequestsLink,
       'transferHost': transferHost,
       'libraryCollapsed': libraryCollapsed,
       'lockEnabled': lockEnabled,
@@ -1341,6 +1343,14 @@ class AppState extends ChangeNotifier {
   /// a tablet uses the DJ link that the request list's window shows.
   String requestsLink = Platform.isWindows ? 'localhost:8080' : '';
 
+  /// The online request list's DJ link, kept while [requestsLink] is switched
+  /// to this PC (a venue with no signal), so it is one tap to go back.
+  String onlineRequestsLink = '';
+
+  /// True when [requestsLink] is the online request list (singers use their
+  /// own mobile data), not this PC or another device on the Wi-Fi.
+  bool get requestsOnline => RequestServer.parse(requestsLink)?.online ?? false;
+
   /// How the link to the request list is doing, for the menu.
   RequestsState requestsState = RequestsState.off;
 
@@ -1412,7 +1422,8 @@ class AppState extends ChangeNotifier {
     final tools = requestTools();
     final template = File(p.join(tools, 'request-template.html'));
     final server = File(p.join(tools, 'request-server.ps1'));
-    if (!template.existsSync() || !server.existsSync()) {
+    final online = RequestServer.parse(requestsLink);
+    if (!template.existsSync() || (!server.existsSync() && !(online?.online ?? false))) {
       throw StateError("The song-request list isn't installed with this copy of EZTiger. Reinstall EZTiger Pro.");
     }
     final logo = File(p.join(tools, 'eztiger-logo.png'));
@@ -1422,14 +1433,35 @@ class AppState extends ChangeNotifier {
         (title: r.title, artist: r.artist, brand: brandOf(r.folder, rootPaths), code: p.basename(r.folder)),
     ];
     if (songs.isEmpty) throw StateError('Add your karaoke folder first: the request page lists its songs.');
+    final name = songbookTitle.trim().isEmpty ? 'EZTiger Karaoke' : songbookTitle.trim();
     final page = requestPageHtml(
       template: template.readAsStringSync(),
-      name: songbookTitle.trim().isEmpty ? 'EZTiger Karaoke' : songbookTitle.trim(),
+      name: name,
       logoBase64: logo.existsSync() ? base64Encode(logo.readAsBytesSync()) : '',
       skin: skin,
       lightScreen: !dark,
       songs: songs,
     );
+    if (online != null && online.online) {
+      // The online request list: put the page with this library's songs on it,
+      // open its DJ list, and point the songbook QR code at it.
+      final http = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+      try {
+        await publishRequestPage(online, http, page.html, name);
+      } on RequestServerRefused {
+        throw StateError("The online request list didn't accept the DJ link. Copy the DJ link again (☰ Menu → Song requests).");
+      } on SocketException {
+        throw StateError("Can't reach the online request list. Check this PC is on the internet (the venue Wi-Fi or your phone's hotspot).");
+      } on TimeoutException {
+        throw StateError("Can't reach the online request list. Check this PC is on the internet (the venue Wi-Fi or your phone's hotspot).");
+      } finally {
+        http.close(force: true);
+      }
+      await launch('explorer', [online.djList]);
+      setSongbook(url: online.singerPage);
+      setRequestsLink(requestsLink);
+      return page.count;
+    }
     final data = Directory(requestDataDir())..createSync(recursive: true);
     final pagePath = p.join(data.path, 'request-songs.html');
     File(pagePath).writeAsStringSync(page.html);
@@ -1463,8 +1495,13 @@ class AppState extends ChangeNotifier {
     return page.count;
   }
 
+  /// Sends the singers' page to the online request list; replaced in tests.
+  Future<void> Function(RequestServer server, HttpClient http, String html, String name) publishRequestPage =
+      (server, http, html, name) => server.publishPage(http, html, name: name);
+
   void setRequestsLink(String link) {
     requestsLink = link.trim();
+    if (RequestServer.parse(requestsLink)?.online ?? false) onlineRequestsLink = requestsLink;
     _requestsTaken.clear();
     notifyListeners();
     startSongRequests();

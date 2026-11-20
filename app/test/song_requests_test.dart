@@ -43,6 +43,38 @@ void main() {
     expect(tablet.key, 'ab12cd');
     expect(RequestServer.parse(''), isNull);
     expect(RequestServer.parse('ftp://somewhere'), isNull);
+    expect(pc.online, isFalse);
+    expect(tablet.online, isFalse, reason: 'another device on the Wi-Fi');
+    final web = RequestServer.parse('https://eztiger-requests.deano.workers.dev/dj?key=Zx9')!;
+    expect(web.online, isTrue);
+    expect(web.singerPage, 'https://eztiger-requests.deano.workers.dev/');
+    expect(web.djList, 'https://eztiger-requests.deano.workers.dev/dj?key=Zx9');
+  });
+
+  test('the singers\' page goes to the online request list gzipped, with the DJ code, name and time zone', () async {
+    final got = <String, Object>{};
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((req) async {
+      final bytes = await req.fold<List<int>>([], (a, b) => a..addAll(b));
+      got['method'] = req.method;
+      got['query'] = req.uri.queryParameters;
+      got['page'] = utf8.decode(gzip.decode(bytes));
+      req.response.statusCode = req.uri.queryParameters['key'] == 'Zx9' ? 200 : 403;
+      req.response.write('{"ok":true}');
+      await req.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+    final http = HttpClient();
+    addTearDown(() => http.close(force: true));
+    final ok = RequestServer.parse('http://127.0.0.1:${server.port}/dj?key=Zx9')!;
+    await ok.publishPage(http, '<html>Waterloo</html>', name: 'Deano\'s Karaoke');
+    expect(got['method'], 'PUT');
+    expect(got['page'], '<html>Waterloo</html>');
+    final q = got['query']! as Map<String, String>;
+    expect(q['name'], 'Deano\'s Karaoke');
+    expect(int.parse(q['tz']!), DateTime.now().timeZoneOffset.inMinutes);
+    final wrong = RequestServer.parse('http://127.0.0.1:${server.port}/dj?key=nope')!;
+    await expectLater(wrong.publishPage(http, '<html></html>', name: 'x'), throwsA(isA<RequestServerRefused>()));
   });
 
   test('songs in the request list\'s singing queue come into Tonight\'s playlist with the singer', () async {

@@ -134,4 +134,47 @@ void main() {
     await expectLater(s.startRequestList(), throwsA(isA<StateError>()));
     expect(launched.map((l) => l.first), ['powershell']);
   });
+
+  test('Start song requests online: the page goes to the online list, the QR code opens it, no PowerShell', () async {
+    isPro = true;
+    final lib = makeLibrary();
+    final db = await EztigerDatabase.open(databaseFactoryFfiNoIsolate, inMemoryDatabasePath);
+    final s = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: (_) async => null));
+    addTearDown(() async {
+      s.setRequestsLink('');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await db.close();
+      lib.deleteSync(recursive: true);
+    });
+    await s.init(rescanLibrary: false);
+    await s.addRootFolder(lib.path);
+    s.findPcAddress = () async => '192.168.1.20';
+    final launched = <List<String>>[];
+    s.launch = (exe, args) async => launched.add([exe, ...args]);
+    s.requestTools = () => p.absolute('requests');
+    final sent = <(String, String, String)>[];
+    s.publishRequestPage = (server, http, html, name) async => sent.add((server.base.toString(), name, html));
+
+    const dj = 'https://eztiger-requests.example.test/dj?key=abc123';
+    s.setRequestsLink(dj);
+    expect(s.requestsOnline, isTrue);
+    expect(s.onlineRequestsLink, dj, reason: 'kept for "Use the online request list"');
+    expect(await s.startRequestList(), 3);
+    expect(sent.single.$1, 'https://eztiger-requests.example.test');
+    expect(sent.single.$3, contains('Bohemian Rhapsody'));
+    expect(launched, [
+      ['explorer', 'https://eztiger-requests.example.test/dj?key=abc123'],
+    ], reason: 'opens the online DJ list; no PowerShell request list');
+    expect(s.songbookUrl, 'https://eztiger-requests.example.test/', reason: 'the QR code opens the online page');
+
+    // Back to this PC (a venue with no signal), and online again.
+    s.setRequestsLink('localhost:8080');
+    expect(s.requestsOnline, isFalse);
+    expect(s.onlineRequestsLink, dj);
+
+    // The online list can't be reached: it says so.
+    s.setRequestsLink(dj);
+    s.publishRequestPage = (server, http, html, name) async => throw const SocketException('no internet');
+    await expectLater(s.startRequestList(), throwsA(isA<StateError>()));
+  });
 }

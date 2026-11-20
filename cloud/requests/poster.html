@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Request a song · __NAME__</title>
+<style>
+  @page { size:A4; margin:12mm }
+  body { margin:0; font-family:"Segoe UI", system-ui, sans-serif; color:#111; background:#fff; text-align:center }
+  .sheet { max-width:180mm; margin:0 auto; padding:8mm 16px }
+  img.logo { width:42mm; max-width:40vw; height:auto }
+  h1 { font-size:34pt; margin:3mm 0 0; line-height:1.1 }
+  h2 { font-size:21pt; font-weight:600; margin:2mm 0 6mm; color:#444 }
+  #qr svg { width:118mm; max-width:86vw; height:auto; display:block; margin:0 auto }
+  ol { text-align:left; display:inline-block; font-size:16pt; line-height:1.6; margin:6mm 0 0; padding-left:1.4em }
+  .link { font-weight:700; white-space:nowrap }
+  img.logo { object-fit:contain }
+  .pow { margin:8mm 0 0; font-size:10pt; color:#777 }
+  .pow:empty { display:none }
+  .print { position:fixed; top:12px; right:12px; font:inherit; font-size:15px; font-weight:600; padding:10px 18px; border-radius:8px; border:0; background:#E8B34A; color:#1A1508; cursor:pointer }
+  @media print { .print { display:none } }
+</style></head><body>
+<button class="print" onclick="print()">Print</button>
+<div class="sheet">
+  <img class="logo" src="data:image/png;base64,__LOGO__" alt="">
+  <h1>__NAME__</h1>
+  <h2>Request a song from your phone</h2>
+  <div id="qr"></div>
+  <ol><li>Join the Wi-Fi here</li><li>Point your camera at the code</li><li>Or open <span class="link">__LINK__</span></li></ol>
+  <p class="pow">__POWERED__</p>
+</div>
+<script>
+__QRJS__
+document.getElementById('qr').innerHTML = QR.svg('__LINK__');
+</script>
+</body></html>

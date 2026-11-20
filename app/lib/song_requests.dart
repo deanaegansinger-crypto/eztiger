@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'local_address.dart';
+
 /// How the link to the song-request list is doing.
 enum RequestsState {
   /// No link set.
@@ -78,6 +80,37 @@ class RequestServer {
 
   /// True when the request list runs on this device (localhost).
   bool get onThisDevice => const ['localhost', '127.0.0.1', '::1'].contains(base.host);
+
+  /// True for the online request list (cloud/requests on Cloudflare): not this
+  /// PC and not another device on the venue Wi-Fi. Singers use their own data.
+  bool get online => !onThisDevice && !isPrivateIp(base.host) && !base.host.endsWith('.local');
+
+  /// The singers' page: what the songbook QR code opens.
+  String get singerPage => base.replace(path: '/').toString();
+
+  /// The DJ list in a browser.
+  String get djList => _at('/dj').toString();
+
+  /// Puts the singers' page ([html], with the songs) on the online request
+  /// list, with the show's [name] and this PC's time zone for the request times.
+  Future<void> publishPage(HttpClient http, String html, {required String name}) async {
+    final offset = DateTime.now().timeZoneOffset.inMinutes;
+    final req = await http
+        .openUrl('PUT', _at('/dj/page', {'name': name, 'tz': '$offset'}))
+        .timeout(const Duration(seconds: 15));
+    req.headers.contentType = ContentType('application', 'gzip');
+    req.add(gzip.encode(utf8.encode(html)));
+    final res = await req.close().timeout(const Duration(seconds: 60));
+    final body = await res.transform(utf8.decoder).join();
+    if (res.statusCode == 403) throw const RequestServerRefused();
+    if (res.statusCode != 200) {
+      String? why;
+      try {
+        why = (jsonDecode(body) as Map)['error'] as String?;
+      } catch (_) {}
+      throw HttpException(why ?? 'The online request list answered ${res.statusCode}');
+    }
+  }
 
   /// The songs in the singing queue that haven't gone into EZTiger yet, top first.
   /// [ip] is the address EZTiger's QR code uses, so the request list's QR

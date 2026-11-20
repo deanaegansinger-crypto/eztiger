@@ -1,0 +1,23 @@
+# The online request list on Cloudflare (free plan). Deploy: see README.md.
+name = "eztiger-requests"
+main = "worker.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html", "**/*.txt"]
+fallthrough = true
+
+# The singers' page (with the song list), as EZTiger last sent it.
+[[kv_namespaces]]
+binding = "PAGES"
+id = "KV_ID"
+
+# The request list.
+[[d1_databases]]
+binding = "DB"
+database_name = "eztiger-requests"
+database_id = "D1_ID"
+
+# DJ_KEY (the code in the DJ link) is a secret: wrangler secret put DJ_KEY
