@@ -162,7 +162,7 @@ function RowsJson($rows, $names) {
 function ListJson {
   $ago = if ($script:lastApp -eq [DateTime]::MinValue) { -1 } else { [int]((Get-Date) - $script:lastApp).TotalSeconds }
   Update-Link
-  '{"app":' + $ago + ',"link":' + (JStr $script:singerLink) + ',"open":' + $(if ($script:closed) { 'false' } else { 'true' }) + ',"rows":' + (RowsJson $list $fields) + '}'
+  '{"app":' + $ago + ',"link":' + (JStr $script:singerLink) + ',"phone":' + (JStr $script:lastPhone) + ',"blocked":' + (JStr $script:fwWarning) + ',"open":' + $(if ($script:closed) { 'false' } else { 'true' }) + ',"rows":' + (RowsJson $list $fields) + '}'
 }
 
 function Send($stream, [int]$code, [string]$type, [byte[]]$bytes, [string]$extra = '') {
@@ -239,6 +239,7 @@ $djHtml = @'
   <a class="qr" href="/poster?key=__KEY__" target="_blank" title="Open the poster to print"><span id="qr"></span><span>Scan to request<br><u>Print poster</u></span></a>
 </header>
 <main>
+  <div class="closed" id="fwBanner" hidden></div>
   <div class="closed" id="closedBanner" hidden>🔒 Requests are <b>closed</b>. Phones show "Sorry, no more requests tonight" and can't send. Press <b>Open requests</b> to take them again.</div>
   <section id="newBox"><h2>New requests <span class="c" id="cNew">0</span><span class="hint">Oldest first. Add each one to the queue when you're ready, or reject it.</span></h2>
     <div id="new"></div></section>
@@ -248,6 +249,7 @@ $djHtml = @'
     <div id="closed"></div></section>
   <div class="bar"><span>The list is saved on this PC and kept until you clear it.</span><button class="clear" id="clear">Clear whole list…</button></div>
   <div class="bar"><span>On a tablet (EZTiger ☰ Menu → Song requests, or this list): <b id="djLink" style="color:var(--cyan);user-select:all">__LINK__/dj?key=__KEY__</b></span></div>
+  <div class="bar"><span id="phoneSeen">📱 No phone has opened the request page yet. Join the phone to this Wi-Fi (turn off mobile data) and scan the QR code.</span></div>
   <div class="bar" id="stopBar"><span>The request list runs in the background on this PC. Start it again from the taskbar.</span><button id="stop">⏻ Stop the request list</button></div>
   <div class="closed" id="stopped" hidden>The request list is <b>stopped</b>: phones can't open the page or send requests. Your list is saved. Start it again from the taskbar (Start song requests).</div>
 </main>
@@ -295,6 +297,9 @@ async function load(force) {
     $('qr').innerHTML = QR.svg(link);
     $('djLink').textContent = link + '/dj?key=' + KEY;
   }
+  $('fwBanner').hidden = !data.blocked;
+  $('fwBanner').textContent = data.blocked ? '⚠ ' + data.blocked : '';
+  if (data.phone) $('phoneSeen').textContent = '📱 ✓ A phone opened the request page: ' + data.phone;
   const on = data.app >= 0 && data.app < 15;   // EZTiger asks every few seconds while open
   const appEl = $('app');
   appEl.className = 'app' + (on ? ' on' : '');
@@ -533,6 +538,7 @@ function Handle($client) {
       if ($hdr['accept-encoding'] -match 'gzip') { Send $stream 200 'text/html; charset=utf-8' $pageGz "Content-Encoding: gzip`r`n" }
       else { Send $stream 200 'text/html; charset=utf-8' $pageBytes }
       Write-Host ("  {0:HH:mm}  page opened by {1}" -f (Get-Date), $remote)
+      if (-not [Net.IPAddress]::IsLoopback($remote)) { $script:lastPhone = ('{0} at {1:HH:mm}' -f $remote, (Get-Date)) }
       return
     }
     '^GET /venue/active\.json$' {
@@ -705,6 +711,33 @@ function Find-Ip {
   if ($a) { return $a }
   'this-pc'
 }
+# Windows only lets phones in if PowerShell (which runs the list) is allowed
+# through the firewall for the kind of network this is: Public or Private.
+# Allowing it once only covers the kind of network it was on then, so a new
+# router set to Private (or Public) can block every phone with no message.
+$script:lastPhone = ''
+$script:fwWarning = ''
+function Check-Firewall([string]$ip) {
+  try {
+    $nic = Get-NetIPAddress -IPAddress $ip -ErrorAction Stop | Select-Object -First 1
+    $kind = (Get-NetConnectionProfile -InterfaceIndex $nic.InterfaceIndex -ErrorAction Stop | Select-Object -First 1).NetworkCategory
+    $kindName = switch ([string]$kind) { 'Private' { 'Private' } 'DomainAuthenticated' { 'Domain' } default { 'Public' } }
+    $ps = (Get-Process -Id $PID).Path
+    $allow = $false; $block = $false
+    foreach ($r in @(Get-NetFirewallRule -Direction Inbound -Enabled True -ErrorAction Stop | Where-Object { $_.DisplayName -match 'PowerShell' })) {
+      $prof = [string]$r.Profile
+      if (-not ($prof -eq 'Any' -or $prof -match $kindName)) { continue }
+      $prog = ($r | Get-NetFirewallApplicationFilter).Program
+      if ($prog -ne 'Any' -and [Environment]::ExpandEnvironmentVariables($prog) -ne $ps) { continue }
+      if ([string]$r.Action -eq 'Block') { $block = $true } else { $allow = $true }
+    }
+    if ($block -or -not $allow) {
+      return "Windows is blocking phones on this Wi-Fi: it is a $kindName network and PowerShell isn't allowed through the firewall on $kindName networks. " +
+        "Fix: Start > Windows Security > Firewall & network protection > Allow an app through firewall > Change settings > tick both Private and Public for Windows PowerShell > OK."
+    }
+  } catch {}
+  ''
+}
 $portPart = if ($Port -eq 80) { '' } else { ":$Port" }
 $script:appIp = ''
 $script:foundIp = Find-Ip
@@ -716,11 +749,18 @@ function Update-Link {
     if ($script:appIp -and -not ((PcAddresses) -contains $script:appIp)) { $script:appIp = '' }   # EZTiger's address isn't this PC's any more
   }
   $ip = if ($script:appIp) { $script:appIp } else { $script:foundIp }
+  if ($ip -ne $script:fwIp -or ((Get-Date) - $script:fwCheckedAt).TotalSeconds -ge 30) {
+    $script:fwIp = $ip; $script:fwCheckedAt = Get-Date
+    $w = Check-Firewall $ip
+    if ($w -and $w -ne $script:fwWarning) { Write-Host "  $w" -ForegroundColor Red }
+    $script:fwWarning = $w
+  }
   $new = "http://$ip$portPart"
   if ($script:singerLink -and $new -ne $script:singerLink) { Write-Host ("  {0:HH:mm}  This PC's address is now {1}: the QR code follows it" -f (Get-Date), $new) -ForegroundColor Cyan }
   $script:singerLink = $new
 }
 $script:singerLink = ''
+$script:fwIp = ''; $script:fwCheckedAt = [DateTime]::MinValue
 Update-Link
 $singerLink = $script:singerLink
 

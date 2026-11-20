@@ -25,7 +25,7 @@ Future<void> startSongRequestList(BuildContext context) async {
         duration: const Duration(seconds: 10),
         content: Text(
           'Song requests are on: $n songs on the singers\' page. The DJ list opens in your browser. '
-          'If Windows asks, allow PowerShell on Private networks. The songbook QR code now opens the request page.',
+          'If Windows asks, tick both Private and Public networks for PowerShell and Allow. The songbook QR code now opens the request page.',
         ),
       ),
     );
