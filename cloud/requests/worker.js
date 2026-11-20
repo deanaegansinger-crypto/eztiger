@@ -20,7 +20,16 @@
 import DJ_HTML from './dj.html';
 import QR_JS from './qr.txt';
 import POSTER_HTML from './poster.html';
+import ICON_48 from './icon-48.png';
+import ICON_192 from './icon-192.png';
+import ICON_512 from './icon-512.png';
 
+// The tiger icon, so the DJ list has its own icon in the browser tab and,
+// installed as an app (Chrome ⋮ → Cast, save and share → Install page as app),
+// its own window and taskbar button.
+const ICONS = { '/icon-48.png': ICON_48, '/icon-192.png': ICON_192, '/icon-512.png': ICON_512, '/favicon.ico': ICON_48 };
+const ICON_HEAD = '<link rel="icon" type="image/png" sizes="48x48" href="/icon-48.png">' +
+  '<link rel="apple-touch-icon" href="/icon-192.png"><meta name="theme-color" content="#14151C">';
 const FIELDS = ['Id', 'At', 'Time', 'Singer', 'Title', 'Artist', 'Version', 'Disc', 'Others', 'Note', 'Status', 'Pos', 'Closed', 'Brand', 'Code', 'File', 'Path', 'Sent'];
 const CLOSED_MSG = 'Sorry, no more requests tonight. The DJ has closed the list.';
 
@@ -123,6 +132,9 @@ async function handle(request, env, ctx) {
     ctx.waitUntil(setMeta(env, 'phone', (request.headers.get('CF-IPCountry') || 'a phone') + '|' + Date.now()).catch(() => {}));
     return singersPage(request, env);
   }
+  if (method === 'GET' && ICONS[path]) {
+    return new Response(ICONS[path], { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' } });
+  }
   if (method === 'GET' && path === '/status') {
     const m = await meta(env);
     return json({ open: m.closed !== '1', message: CLOSED_MSG });
@@ -167,8 +179,21 @@ async function handle(request, env, ctx) {
       .replace('The list is saved on this PC and kept until you clear it.', 'The list is kept online until you clear it.')
       .replace('A copy is saved in the requests folder first.', 'A copy is kept online first.')
       .replaceAll('__QRJS__', QR_JS).replaceAll('__NAME__', escHtml(m.name || 'Karaoke'))
-      .replaceAll('__LINK__', link).replaceAll('__KEY__', key);
+      .replaceAll('__LINK__', link).replaceAll('__KEY__', key)
+      .replace('</title>', `</title>${ICON_HEAD}<link rel="manifest" href="/dj/app.webmanifest?key=${encodeURIComponent(key)}">`);
     return html(page);
+  }
+  if (method === 'GET' && path === '/dj/app.webmanifest') {
+    const m = await meta(env);
+    const name = (m.name || 'Karaoke') + ' · Requests';
+    return new Response(JSON.stringify({
+      name, short_name: 'Requests', id: '/dj', start_url: '/dj?key=' + encodeURIComponent(key), scope: '/dj',
+      display: 'standalone', background_color: '#14151C', theme_color: '#14151C',
+      icons: [
+        { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+      ],
+    }), { headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'no-store' } });
   }
   if (method === 'GET' && path === '/poster') {
     const m = await meta(env);
@@ -176,7 +201,8 @@ async function handle(request, env, ctx) {
     const page = POSTER_HTML
       .replace('<li>Join the Wi-Fi here</li>', '')
       .replaceAll('__QRJS__', QR_JS).replaceAll('__LINK__', link).replaceAll('__NAME__', escHtml(m.name || 'Karaoke'))
-      .replaceAll('__LOGO__', logo).replaceAll('__POWERED__', '');
+      .replaceAll('__LOGO__', logo).replaceAll('__POWERED__', '')
+      .replace('</title>', '</title>' + ICON_HEAD);
     return html(page);
   }
   if (method === 'GET' && path === '/dj/list') {

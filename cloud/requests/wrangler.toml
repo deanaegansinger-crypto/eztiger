@@ -9,6 +9,11 @@ type = "Text"
 globs = ["**/*.html", "**/*.txt"]
 fallthrough = true
 
+[[rules]]
+type = "Data"
+globs = ["**/*.png"]
+fallthrough = true
+
 # The singers' page (with the song list), as EZTiger last sent it.
 [[kv_namespaces]]
 binding = "PAGES"
