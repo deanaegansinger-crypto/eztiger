@@ -17,7 +17,17 @@ library;
 /// 5: file_title / file_artist (from the file name) and tag_title / tag_artist
 ///    (from the ID3 or MP4 tags); title / artist hold whichever the library
 ///    uses (meta 'names_from': 'tags', the usual, or 'files').
-const int schemaVersion = 5;
+/// 6: folders.songbook_private (kept out of the audience songbook and the
+///    song-request page, and so is everything below it).
+const int schemaVersion = 6;
+
+const String songbookPrivateStatement = 'ALTER TABLE folders ADD COLUMN songbook_private INTEGER NOT NULL DEFAULT 0';
+
+/// SQL true when the folder `f` is, or is inside, a folder kept out of the
+/// songbook. Works with \ and / paths; new subfolders follow by themselves.
+const String folderPrivateSql = '''
+EXISTS(SELECT 1 FROM folders pv WHERE pv.songbook_private = 1 AND (pv.id = f.id OR (
+  substr(f.path, 1, length(pv.path)) = pv.path AND substr(f.path, length(pv.path) + 1, 1) IN ('/', '\\'))))''';
 
 /// Bump when the filename parser or classification rules change. A scan that
 /// sees a different value re-parses every track (as UPDATEs, ids unchanged).
@@ -53,6 +63,9 @@ CREATE TABLE folders (
   -- Song names for this folder and below: 'tags', 'files', or NULL to
   -- follow the folder above it (and the library's setting at the top).
   names_from  TEXT,
+  -- 1 to keep this folder and everything below it out of the audience
+  -- songbook and the song-request page (still searchable by the DJ).
+  songbook_private INTEGER NOT NULL DEFAULT 0,
   -- Tracks directly in this folder, and in it plus all its subfolders.
   track_count INTEGER NOT NULL DEFAULT 0,
   total_count INTEGER NOT NULL DEFAULT 0

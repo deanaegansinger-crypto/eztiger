@@ -37,7 +37,15 @@ class Folder {
     required this.totalCount,
     this.hasChildren = false,
     this.namesFrom,
+    this.songbookPrivate = false,
+    this.inPrivate = false,
   });
+
+  /// True when this folder is marked "Keep out of the songbook".
+  final bool songbookPrivate;
+
+  /// True when this folder, or a folder above it, is kept out of the songbook.
+  final bool inPrivate;
 
   /// This folder's own Song names setting: 'tags', 'files', or null to
   /// follow the folder above it (and in the end the library's setting).
@@ -45,6 +53,8 @@ class Folder {
 
   factory Folder.fromRow(Map<String, Object?> r) => Folder(
         namesFrom: r['names_from'] as String?,
+        songbookPrivate: ((r['songbook_private'] as int?) ?? 0) == 1,
+        inPrivate: ((r['in_private'] as int?) ?? 0) == 1,
         id: r['id'] as int,
         path: r['path'] as String,
         parentId: r['parent_id'] as int?,

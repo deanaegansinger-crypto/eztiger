@@ -3,7 +3,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 import '../text.dart';
 import '../audio/track_analysis.dart';
 import 'models.dart';
-import 'schema.dart' show trackAnalysisStatement;
+import 'schema.dart' show trackAnalysisStatement, folderPrivateSql;
 import 'search.dart';
 
 const String trackSelect = 'SELECT t.*, f.path AS folder_path FROM tracks t JOIN folders f ON f.id = t.folder_id';
@@ -17,8 +17,15 @@ class FolderDao {
   final Database db;
 
   static const _select = '''
-SELECT f.*, EXISTS(SELECT 1 FROM folders c WHERE c.parent_id = f.id) AS has_children
+SELECT f.*, EXISTS(SELECT 1 FROM folders c WHERE c.parent_id = f.id) AS has_children,
+  $folderPrivateSql AS in_private
 FROM folders f''';
+
+  /// "Keep out of the songbook" on a folder: it and everything below it stay
+  /// searchable for the DJ but aren't on the audience songbook or the
+  /// song-request page.
+  Future<void> setSongbookPrivate(int id, bool private) =>
+      db.update('folders', {'songbook_private': private ? 1 : 0}, where: 'id = ?', whereArgs: [id]);
 
   /// Adds a folder to the library as a root and returns its id. Run the
   /// scanner afterwards to index it. If the folder is already known as a
@@ -88,7 +95,7 @@ class TrackDao {
     final rows = await db.rawQuery('''
 SELECT COALESCE(t.user_title, t.title) AS title, COALESCE(t.user_artist, t.artist) AS artist, f.path AS folder
 FROM tracks t JOIN folders f ON f.id = t.folder_id
-WHERE f.included = 1''');
+WHERE f.included = 1 AND NOT $folderPrivateSql''');
     return [
       for (final r in rows)
         if ((r['title'] as String).trim().isNotEmpty)
@@ -106,7 +113,7 @@ WHERE f.included = 1''');
     final rows = await db.rawQuery('''
 SELECT COALESCE(t.user_title, t.title) AS title, COALESCE(t.user_artist, t.artist) AS artist
 FROM tracks t JOIN folders f ON f.id = t.folder_id
-WHERE f.included = 1''');
+WHERE f.included = 1 AND NOT $folderPrivateSql''');
     final seen = <String>{};
     final songs = <SongbookEntry>[];
     for (final r in rows) {

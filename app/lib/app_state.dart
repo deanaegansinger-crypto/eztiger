@@ -374,6 +374,19 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// "Keep out of the songbook" on a folder: still searchable here, but not
+  /// on the audience songbook or the song-request page (the folders inside
+  /// it follow). The songbook shows as out of date until it is saved again.
+  Future<void> setFolderSongbookPrivate(Folder f, bool private) async {
+    await db.folders.setSongbookPrivate(f.id, private);
+    await _reloadFolders();
+    await checkSongbook();
+    status = private
+        ? '🔒 ${f.name} is kept out of the songbook and song requests (you can still search it). Save the songbook page again.'
+        : '${f.name} is back in the songbook and song requests. Save the songbook page again.';
+    notifyListeners();
+  }
+
   Future<void> init({bool rescanLibrary = true}) async {
     namesFromTags = await db.namesFrom() == 'tags';
     await _loadSettings();

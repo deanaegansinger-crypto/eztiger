@@ -56,6 +56,10 @@ class EztigerDatabase {
               if (m == null || !have[m.group(1)]!.contains(m.group(2))) await db.execute(sql);
             }
           }
+          if (from < 6) {
+            final cols = {for (final r in await db.rawQuery('PRAGMA table_info(folders)')) r['name'] as String};
+            if (!cols.contains('songbook_private')) await db.execute(songbookPrivateStatement);
+          }
         },
         onCreate: (db, version) async {
           final batch = db.batch();

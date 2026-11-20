@@ -318,6 +318,7 @@ const _songbook = (
     '☰ Menu → Songbook: a web page of your songs (titles and artists only) that people search on their phones by scanning a QR code.',
     'Give it a heading, press Save songbook page and upload the file (index.html) to a free web page such as GitHub Pages. Put that web address in the box, then Show QR code puts the code on screen; it\'s also a button in the stage view.',
     'After adding songs or correcting titles, the Menu says the songbook "needs updating": save it again and upload the new file over the old one.',
+    'It lists every song in your searchable library. To keep a folder to yourself (backing tracks, working folders), right-click it and tick Keep out of the songbook: you can still search and play it, but it isn\'t on the songbook or the song-request page, and nor are the folders inside it (🔒 beside them).',
   ],
 );
 

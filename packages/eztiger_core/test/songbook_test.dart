@@ -24,6 +24,35 @@ void main() {
         ['ABBA - Waterloo', 'Toto - Africa']);
   });
 
+  test('a folder kept out of the songbook (and the folders inside it) stays searchable but off the songbook and request page',
+      () async {
+    final lib = await TestLibrary.create();
+    addTearDown(lib.dispose);
+    lib.touch('Karaoke/ABBA - Waterloo.mp3');
+    lib.touch('_Backing/Toto - Africa.mp3');
+    lib.touch('_Backing/Rock/Queen - Bohemian Rhapsody.mp3');
+    lib.touch('_Backing2/Bon Jovi - Always.mp3'); // a name that starts the same is not inside it
+    await lib.scan();
+    final root = (await lib.db.folders.roots()).first;
+    final backing = (await lib.db.folders.children(root.id)).firstWhere((f) => f.name == '_Backing');
+    await lib.db.folders.setSongbookPrivate(backing.id, true);
+
+    expect((await lib.db.tracks.songbook()).map((s) => s.title), ['Waterloo', 'Always']);
+    expect((await lib.db.tracks.requestSongs()).map((s) => s.title).toSet(), {'Always', 'Waterloo'});
+    expect(await lib.titles('africa'), ['Africa'], reason: 'still searchable');
+    final rock = (await lib.db.folders.children(backing.id)).single;
+    expect((rock.songbookPrivate, rock.inPrivate), (false, true), reason: 'follows the folder above');
+    expect((await lib.db.folders.byId(backing.id))!.songbookPrivate, isTrue);
+
+    // A new subfolder found by a rescan follows too.
+    lib.touch('_Backing/Pop/Adele - Hello.mp3');
+    await lib.scan();
+    expect((await lib.db.tracks.songbook()).map((s) => s.title), isNot(contains('Hello')));
+
+    await lib.db.folders.setSongbookPrivate(backing.id, false);
+    expect((await lib.db.tracks.songbook()), hasLength(5));
+  });
+
   test('the songbook page holds the songs safely and needs no other files', () {
     final html = songbookHtml(
       title: "Deano's <Songs>",

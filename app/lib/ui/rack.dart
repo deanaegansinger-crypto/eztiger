@@ -1214,6 +1214,22 @@ class _FolderTile extends StatelessWidget {
           const PopupMenuItem(value: 'include', child: Text('➕ Add to searchable library')),
         if (f.isRoot) const PopupMenuItem(value: 'rescan', child: Text('🔄 Rescan')),
         if (f.isRoot) const PopupMenuItem(value: 'forget', child: Text('🗑 Forget this folder')),
+        if (!singerApp) ...[
+          const PopupMenuDivider(),
+          if (f.inPrivate && !f.songbookPrivate)
+            const PopupMenuItem(
+              key: Key('folder-private-above'),
+              enabled: false,
+              child: Text('🔒 Kept out of the songbook (by the folder above)'),
+            )
+          else
+            CheckedPopupMenuItem(
+              key: const Key('folder-private'),
+              value: f.songbookPrivate ? 'public' : 'private',
+              checked: f.songbookPrivate,
+              child: const Text('Keep out of the songbook'),
+            ),
+        ],
         const PopupMenuDivider(),
         const PopupMenuItem(enabled: false, height: 28, child: Text('SONG NAMES IN THIS FOLDER', style: TextStyle(fontSize: 11))),
         for (final (v, label) in [(null, 'Same as the folder above'), ('tags', 'Tags'), ('files', 'File names')])
@@ -1238,6 +1254,10 @@ class _FolderTile extends StatelessWidget {
           await s.rescan();
         case 'forget':
           await s.removeRootFolder(f);
+        case 'private':
+          await s.setFolderSongbookPrivate(f, true);
+        case 'public':
+          await s.setFolderSongbookPrivate(f, false);
       }
     }
 
@@ -1247,6 +1267,7 @@ class _FolderTile extends StatelessWidget {
       depth: depth,
       count: f.totalCount,
       included: f.included,
+      private: f.inPrivate && !singerApp,
       expandable: f.hasChildren,
       expanded: s.expanded.contains(f.id),
       selected: selected,
@@ -1271,13 +1292,14 @@ class _FolderRow extends StatelessWidget {
     required this.onTap,
     this.count,
     this.included = true,
+    this.private = false,
     this.expandable = false,
     this.expanded = false,
     this.onToggle,
   });
   final String label;
   final int depth;
-  final bool selected, included, expandable, expanded;
+  final bool selected, included, private, expandable, expanded;
   final int? count;
   final VoidCallback onTap;
   final VoidCallback? onToggle;
@@ -1310,6 +1332,14 @@ class _FolderRow extends StatelessWidget {
               style: TextStyle(fontSize: 12, color: included ? context.ez.text : context.ez.textDim),
             ),
           ),
+          if (private)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Tooltip(
+                message: 'Kept out of the songbook and song requests',
+                child: Icon(Icons.lock_outline, size: 11, color: context.ez.textDim),
+              ),
+            ),
           if (count != null) Text('$count', style: TextStyle(fontSize: 10, color: context.ez.textDim)),
           if (count != null && included)
             Padding(
