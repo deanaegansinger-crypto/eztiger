@@ -108,7 +108,7 @@ void main() {
     await s.addRootFolder(lib.path);
     final n = await s.startRequestList();
     expect(n, 3);
-    expect(launched.map((l) => l.first), ['powershell', 'explorer'], reason: 'starts the list, then opens the DJ list');
+    expect(launched.map((l) => l.first), ['powershell', 'rundll32'], reason: 'starts the list, then opens the DJ list');
     final args = launched.first;
     expect(args[args.indexOf('-File') + 1], endsWith('request-server.ps1'));
     expect(args, contains('-NoBrowser'), reason: 'EZTiger opens the DJ list itself');
@@ -125,7 +125,7 @@ void main() {
     asked.clear();
     expect(await s.startRequestList(), 3);
     expect(asked, contains('POST /dj/quit'));
-    expect(launched.map((l) => l.first), ['powershell', 'explorer']);
+    expect(launched.map((l) => l.first), ['powershell', 'rundll32']);
 
     // The list never comes up: it says so, and opens nothing.
     launched.clear();
@@ -154,6 +154,12 @@ void main() {
     s.requestTools = () => p.absolute('requests');
     final sent = <(String, String, String)>[];
     s.publishRequestPage = (server, http, html, name) async => sent.add((server.base.toString(), name, html));
+    // The Wi-Fi request list is still running on this PC.
+    final asked = <String>[];
+    s.askRequestList = (method, path) async {
+      asked.add('$method $path');
+      return true;
+    };
 
     const dj = 'https://eztiger-requests.example.test/dj?key=abc123';
     s.setRequestsLink(dj);
@@ -163,8 +169,9 @@ void main() {
     expect(sent.single.$1, 'https://eztiger-requests.example.test');
     expect(sent.single.$3, contains('Bohemian Rhapsody'));
     expect(launched, [
-      ['explorer', 'https://eztiger-requests.example.test/dj?key=abc123'],
-    ], reason: 'opens the online DJ list; no PowerShell request list');
+      ['rundll32', 'url.dll,FileProtocolHandler', 'https://eztiger-requests.example.test/dj?key=abc123'],
+    ], reason: 'opens the online DJ list (explorer.exe drops links with ?key=); no PowerShell request list');
+    expect(asked, ['GET /status', 'POST /dj/quit'], reason: 'the Wi-Fi list on this PC is stopped');
     expect(s.songbookUrl, 'https://eztiger-requests.example.test/', reason: 'the QR code opens the online page');
 
     // Back to this PC (a venue with no signal), and online again.

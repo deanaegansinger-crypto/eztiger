@@ -125,7 +125,7 @@ class _RequestsDialogState extends State<_RequestsDialog> {
                       if (Platform.isWindows && s.requestsOnline)
                         TextButton(
                           key: const Key('requests-open-dj'),
-                          onPressed: () => s.launch('explorer', [RequestServer.parse(s.requestsLink)!.djList]),
+                          onPressed: () => s.openInBrowser(RequestServer.parse(s.requestsLink)!.djList),
                           child: const Text('Open the DJ list'),
                         ),
                       if (Platform.isWindows && s.requestsOnline)

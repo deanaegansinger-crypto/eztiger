@@ -478,6 +478,7 @@ class AppState extends ChangeNotifier {
       // Unreadable settings: keep the defaults.
     }
     _settingsLoaded = true;
+    _tellDesktopIcon();
   }
 
   String _savedSettings = '';
@@ -1459,7 +1460,9 @@ class AppState extends ChangeNotifier {
       } finally {
         http.close(force: true);
       }
-      await launch('explorer', [online.djList]);
+      // The Wi-Fi request list on this PC isn't needed now: stop it, so only one list takes requests.
+      if (await askRequestList('GET', '/status')) await askRequestList('POST', '/dj/quit');
+      await openInBrowser(online.djList);
       setSongbook(url: online.singerPage);
       setRequestsLink(requestsLink);
       return page.count;
@@ -1491,10 +1494,32 @@ class AppState extends ChangeNotifier {
     if (!await _waitForRequestList(up: true, tries: 120)) {
       throw StateError("The request list didn't start. If Windows asked about PowerShell and the network, choose Allow, then try again.");
     }
-    await launch('explorer', ['http://localhost:8080/dj']);
+    await openInBrowser('http://localhost:8080/dj');
     setRequestsLink('localhost:8080');
     if (await detectPcAddress() != null) useThisPcForQr();
     return page.count;
+  }
+
+  /// Opens a web page in the default browser. (explorer.exe won't open a
+  /// link with ?key=… in it, so Windows' own link opener is used.)
+  Future<void> openInBrowser(String url) => launch('rundll32', ['url.dll,FileProtocolHandler', url]);
+
+  /// Tells the desktop "Start song requests" icon which list to open: the
+  /// online DJ list while requests are online, else the Wi-Fi list on this PC.
+  void _tellDesktopIcon() {
+    if (!Platform.isWindows || !_settingsLoaded) return;
+    try {
+      final f = File(p.join(requestDataDir(), 'online-dj-link.txt'));
+      final server = RequestServer.parse(requestsLink);
+      if (server != null && server.online) {
+        f.parent.createSync(recursive: true);
+        f.writeAsStringSync(server.djList);
+      } else if (f.existsSync()) {
+        f.deleteSync();
+      }
+    } catch (_) {
+      // The icon then starts the Wi-Fi list, as before.
+    }
   }
 
   /// Sends the singers' page to the online request list; replaced in tests.
@@ -1504,6 +1529,7 @@ class AppState extends ChangeNotifier {
   void setRequestsLink(String link) {
     requestsLink = link.trim();
     if (RequestServer.parse(requestsLink)?.online ?? false) onlineRequestsLink = requestsLink;
+    _tellDesktopIcon();
     _requestsTaken.clear();
     notifyListeners();
     startSongRequests();
