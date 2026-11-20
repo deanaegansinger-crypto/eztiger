@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Directory, File, HttpClient, Platform, Process, ProcessStartMode;
+import 'dart:io' show Directory, File, HttpClient, HttpException, Platform, Process, ProcessStartMode, SocketException;
 import 'dart:isolate';
 
 import 'package:eztiger_core/eztiger_core.dart';
@@ -1454,6 +1454,8 @@ class AppState extends ChangeNotifier {
         throw StateError("Can't reach the online request list. Check this PC is on the internet (the venue Wi-Fi or your phone's hotspot).");
       } on TimeoutException {
         throw StateError("Can't reach the online request list. Check this PC is on the internet (the venue Wi-Fi or your phone's hotspot).");
+      } on HttpException catch (e) {
+        throw StateError('The online request list said: ${e.message}');
       } finally {
         http.close(force: true);
       }
