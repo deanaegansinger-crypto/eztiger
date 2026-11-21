@@ -852,13 +852,16 @@ void main() {
   });
 
   testWidgets('Pro 2 decks: "Play this first" on the waiting deck swaps the decks, and the other song waits', (tester) async {
-    state = AppState(db, KaraokeEngine(backend, scanEdges: scan), deckB: KaraokeEngine(FakeBackend(), scanEdges: scan));
+    // Made in real time: its deck jobs then run without the test's clock.
+    await tester.runAsync(() async {
+      state = AppState(db, KaraokeEngine(backend, scanEdges: scan), deckB: KaraokeEngine(FakeBackend(), scanEdges: scan));
+    });
     await pumpApp(tester);
     await tester.runAsync(() async {
       for (final g in state.results) {
-        await state.enqueue(g.primary);
+        await state.enqueue(g.primary).timeout(const Duration(seconds: 20));
       }
-      await state.setTwoDecks(true);
+      await state.setTwoDecks(true).timeout(const Duration(seconds: 20));
       await Future<void>.delayed(const Duration(milliseconds: 100));
     });
     await tester.pump();
