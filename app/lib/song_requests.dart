@@ -155,6 +155,22 @@ class RequestServer {
     return [for (final j in jsonDecode(body) as List) SongRequest.fromJson(j as Map<String, dynamic>)];
   }
 
+  /// Sends the songs in Tonight's playlist that the DJ gave a singer's name to
+  /// (paper slips, songs added by hand), so the request list's singing queue
+  /// shows them too, marked as the DJ's. [items] is the whole set each time:
+  /// {id, singer, title, artist, played}. A list too old to know about this
+  /// (it answers 404) is left alone.
+  Future<void> syncDjEntries(HttpClient http, List<Map<String, Object?>> items) async {
+    final req = await http.postUrl(_at('/app/sync')).timeout(_timeout);
+    req.headers.contentType = ContentType.json;
+    req.write(jsonEncode(items));
+    final res = await req.close().timeout(_timeout);
+    await res.drain<void>().timeout(_timeout);
+    if (res.statusCode == 404) return;
+    if (res.statusCode == 403) throw const RequestServerRefused();
+    if (res.statusCode != 200) throw HttpException('The request list answered ${res.statusCode}');
+  }
+
   /// Tells the request list that [id] is in Tonight's playlist, or that the
   /// song couldn't be found in the library ([found] false), so the DJ sees it.
   Future<void> collected(HttpClient http, String id, {required bool found}) async {

@@ -83,7 +83,9 @@ if ($utf8.GetString($pageBytes, 0, [Math]::Min(4000, $pageBytes.Length)) -match 
 # Brand / Code: the version asked for; File / Path: that song's file inside the
 # library and its full path; Sent: yes once EZTiger has put it in Tonight's
 # playlist (missing if EZTiger couldn't find the song).
-$fields = 'Id','At','Time','Singer','Title','Artist','Version','Disc','Others','Note','Status','Pos','Closed','Brand','Code','File','Path','Sent'
+# Src: 'dj' for a song the DJ put in Tonight's playlist in EZTiger with a
+# singer's name (a paper slip, say), shown shaded in the singing queue.
+$fields = 'Id','At','Time','Singer','Title','Artist','Version','Disc','Others','Note','Status','Pos','Closed','Brand','Code','File','Path','Sent','Src'
 $listFile = Join-Path $Folder 'request-list.csv'
 $list = New-Object System.Collections.Generic.List[object]
 if (Test-Path $listFile) {
@@ -211,6 +213,8 @@ $djHtml = @'
   .fresh { animation:fresh 3s ease-out }
   @keyframes fresh { from { background:color-mix(in srgb, var(--cyan) 22%, transparent) } to { background:transparent } }
   #closedBox .row { opacity:.6 } #closedBox .singer, #closedBox .song { text-decoration:line-through }
+  .row.dj { background:color-mix(in srgb, var(--brass) 11%, transparent); box-shadow:inset 4px 0 0 var(--brass) }
+  .from { display:inline-block; margin-top:3px; font-size:11px; font-weight:700; color:var(--brass); background:color-mix(in srgb, var(--brass) 16%, transparent); border-radius:5px; padding:1px 6px }
   .tag { font-size:12px; font-weight:700; padding:2px 8px; border-radius:6px; background:var(--raised) }
   .tag.done { color:var(--green) } .tag.rejected { color:var(--red) }
   .empty { color:var(--dim); padding:18px 16px }
@@ -243,7 +247,7 @@ $djHtml = @'
   <div class="closed" id="closedBanner" hidden>🔒 Requests are <b>closed</b>. Phones show "Sorry, no more requests tonight" and can't send. Press <b>Open requests</b> to take them again.</div>
   <section id="newBox"><h2>New requests <span class="c" id="cNew">0</span><span class="hint">Oldest first. Add each one to the queue when you're ready, or reject it.</span></h2>
     <div id="new"></div></section>
-  <section id="queueBox"><h2>Singing queue <span class="c" id="cQueue">0</span><span class="hint">Top sings next. ▲ ▼ to change the order.</span></h2>
+  <section id="queueBox"><h2>Singing queue <span class="c" id="cQueue">0</span><span class="hint">Top sings next. ▲ ▼ to change the order. <span class="from">📝 Shaded</span> = added in EZTiger (paper slips).</span></h2>
     <div id="queue"></div></section>
   <section id="closedBox"><h2>Sung &amp; rejected <span class="c" id="cClosed">0</span><span class="hint">Kept until you clear the list. ↩ sends one back to New requests.</span></h2>
     <div id="closed"></div></section>
@@ -276,9 +280,11 @@ function row(r, kind, i, count) {
   else if (kind === 'queue') acts = b('up', '▲', 'mv', i === 0, 'Move up') + b('down', '▼', 'mv', i === count - 1, 'Move down') +
     b('done', '✓ Sung', 'ok') + b('reject', '✕ Remove', 'no');
   else acts = `<span class="tag ${r.Status}">${r.Status === 'done' ? 'Sung' : 'Rejected'} ${hhmm(r.Closed)}</span>` + b('back', '↩ Back', '', false, 'Back to New requests');
-  return `<div class="row${fresh}">
+  const dj = r.Src === 'dj';   // put in Tonight's playlist in EZTiger by the DJ (a paper slip, say)
+  return `<div class="row${fresh}${dj ? ' dj' : ''}">
     <div class="n">${kind === 'queue' ? i + 1 : ''}</div>
-    <div><div class="singer">${esc(r.Singer)}</div><div class="time">asked ${esc(r.Time)}</div>${kind === 'queue' ? sentTag(r) : ''}</div>
+    <div><div class="singer">${esc(r.Singer)}</div>${dj ? `<div class="from" title="Added in EZTiger by the DJ, not sent from a phone">📝 Added in EZTiger ${esc(r.Time)}</div>`
+      : `<div class="time">asked ${esc(r.Time)}</div>${kind === 'queue' ? sentTag(r) : ''}`}</div>
     <div class="song">${esc(r.Title)}<small>${esc(r.Artist)}</small></div>
     <div class="ver">${esc(r.Version)}<small>${esc(r.Disc)}</small>${r.Others ? `<div class="others">also: ${esc(r.Others)}</div>` : ''}</div>
     <div class="note">${esc(r.Note)}</div>
@@ -577,7 +583,7 @@ function Handle($client) {
           Singer = $singer; Title = $title; Artist = Clean $f['artist'] 120
           Version = Clean $f['version'] 40; Disc = Clean $f['disc'] 60; Others = Clean $f['others'] 300
           Note = Clean $f['note'] 200; Status = 'new'; Pos = ''; Closed = ''
-          Brand = Clean $f['brand'] 40; Code = Clean $f['code'] 60; File = ''; Path = ''; Sent = ''
+          Brand = Clean $f['brand'] 40; Code = Clean $f['code'] 60; File = ''; Path = ''; Sent = ''; Src = ''
         }
         $rel = $fileOf["$($r.Brand)|$($r.Code)"]
         if ($rel) { $r.File = $rel; if ($libRoot) { $r.Path = Join-Path $libRoot $rel } }
@@ -655,6 +661,43 @@ function Handle($client) {
         $what = if ($r.Sent -eq 'yes') { 'into EZTiger' } else { 'NOT FOUND in EZTiger - add it by hand' }
         Write-Host ("  {0:HH:mm}  {1}: {2} - {3}  {4}" -f (Get-Date), $r.Singer, $r.Title, $r.Artist, $what) -ForegroundColor Green
       }
+      SendText $stream 200 'application/json' '{"ok":true}'
+      return
+    }
+    # EZTiger sends the songs in Tonight's playlist that have a singer's name
+    # but didn't come from this list (paper slips, songs added by hand): they
+    # join the singing queue marked as the DJ's, are ticked off when played,
+    # and go when taken out of the playlist. [{id, singer, title, artist, played}]
+    '^POST /app/sync$' {
+      if (-not $djOk) { SendText $stream 403 'application/json' '{"ok":false}'; return }
+      $script:lastApp = Get-Date
+      # Piped, so Windows PowerShell 5.1 gives the items one by one (not the whole array as one).
+      try { $items = @((ConvertFrom-Json $body) | ForEach-Object { $_ }) } catch { SendText $stream 400 'application/json' '{"ok":false}'; return }
+      $now = (Get-Date).ToString('s'); $keep = @{}; $changed = $false
+      $pos = 0; foreach ($x in $list) { if ($x.Status -eq 'queue' -and $x.Pos -and [int]$x.Pos -gt $pos) { $pos = [int]$x.Pos } }
+      foreach ($it in $items) {
+        if ($null -eq $it -or $null -eq $it.id) { continue }
+        $id = 'dj-' + [string]$it.id; $keep[$id] = $true
+        $singer = Clean $it.singer 40; $title = Clean $it.title 120; $artist = Clean $it.artist 120
+        $r = $list | Where-Object { $_.Id -eq $id } | Select-Object -First 1
+        if ($r) {
+          if ($r.Singer -ne $singer -or $r.Title -ne $title -or $r.Artist -ne $artist) { $r.Singer = $singer; $r.Title = $title; $r.Artist = $artist; $changed = $true }
+          if ($it.played -and ($r.Status -eq 'queue' -or $r.Status -eq 'new')) { $r.Status = 'done'; $r.Pos = ''; $r.Closed = $now; $changed = $true }
+          continue
+        }
+        # Already on the list as a singer's own request: not twice.
+        if ($list | Where-Object { $_.Src -ne 'dj' -and $_.Status -ne 'rejected' -and $_.Singer -eq $singer -and $_.Title -eq $title }) { continue }
+        $newPos = ''; if (-not $it.played) { $pos++; $newPos = [string]$pos }
+        $list.Add([pscustomobject]@{
+          Id = $id; At = $now; Time = (Get-Date).ToString('HH:mm'); Singer = $singer; Title = $title; Artist = $artist
+          Version = ''; Disc = ''; Others = ''; Note = ''; Status = $(if ($it.played) { 'done' } else { 'queue' })
+          Pos = $newPos; Closed = $(if ($it.played) { $now } else { '' })
+          Brand = ''; Code = ''; File = ''; Path = ''; Sent = 'yes'; Src = 'dj'
+        })
+        $changed = $true
+      }
+      foreach ($r in @($list | Where-Object { $_.Src -eq 'dj' -and -not $keep[$_.Id] })) { [void]$list.Remove($r); $changed = $true }
+      if ($changed) { Save-List }
       SendText $stream 200 'application/json' '{"ok":true}'
       return
     }

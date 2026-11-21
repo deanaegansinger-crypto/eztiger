@@ -37,7 +37,9 @@ import ICON_512 from './icon-512.png';
 const ICONS = { '/icon-48.png': ICON_48, '/icon-192.png': ICON_192, '/icon-512.png': ICON_512, '/favicon.ico': ICON_48 };
 const ICON_HEAD = '<link rel="icon" type="image/png" sizes="48x48" href="/icon-48.png">' +
   '<link rel="apple-touch-icon" href="/icon-192.png"><meta name="theme-color" content="#14151C">';
-const FIELDS = ['Id', 'At', 'Time', 'Singer', 'Title', 'Artist', 'Version', 'Disc', 'Others', 'Note', 'Status', 'Pos', 'Closed', 'Brand', 'Code', 'File', 'Path', 'Sent'];
+// Src: 'dj' for a song the DJ put in Tonight's playlist in EZTiger with a
+// singer's name (a paper slip, say): POST /app/sync. Shown shaded.
+const FIELDS = ['Id', 'At', 'Time', 'Singer', 'Title', 'Artist', 'Version', 'Disc', 'Others', 'Note', 'Status', 'Pos', 'Closed', 'Brand', 'Code', 'File', 'Path', 'Sent', 'Src'];
 const CLOSED_MSG = 'Sorry, no more requests tonight. The DJ has closed the list.';
 const SIGNUPS_PER_IP_PER_DAY = 3, SIGNUPS_PER_DAY = 100;
 
@@ -78,11 +80,11 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS requests (
     Id TEXT PRIMARY KEY, At TEXT, Time TEXT, Singer TEXT, Title TEXT, Artist TEXT, Version TEXT, Disc TEXT,
     Others TEXT, Note TEXT, Status TEXT, Pos INTEGER, Closed TEXT, Brand TEXT, Code TEXT, File TEXT, Path TEXT, Sent TEXT,
-    T TEXT NOT NULL DEFAULT '')`,
+    T TEXT NOT NULL DEFAULT '', Src TEXT NOT NULL DEFAULT '')`,
   `CREATE TABLE IF NOT EXISTS cleared (
     ClearedAt TEXT, Id TEXT, At TEXT, Time TEXT, Singer TEXT, Title TEXT, Artist TEXT, Version TEXT, Disc TEXT,
     Others TEXT, Note TEXT, Status TEXT, Pos INTEGER, Closed TEXT, Brand TEXT, Code TEXT, File TEXT, Path TEXT, Sent TEXT,
-    T TEXT NOT NULL DEFAULT '')`,
+    T TEXT NOT NULL DEFAULT '', Src TEXT NOT NULL DEFAULT '')`,
   `CREATE TABLE IF NOT EXISTS meta2 (T TEXT NOT NULL, k TEXT NOT NULL, v TEXT, PRIMARY KEY (T, k))`,
   `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, key TEXT NOT NULL, name TEXT, created INTEGER, ip TEXT)`,
   `CREATE INDEX IF NOT EXISTS requests_t ON requests (T, Status)`,
@@ -91,6 +93,12 @@ let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   await env.DB.batch(SCHEMA.map(s => env.DB.prepare(s)));
+  // Lists made before Src was added get the column (an error just means it's there).
+  for (const t of ['requests', 'cleared']) {
+    try {
+      await env.DB.prepare(`ALTER TABLE ${t} ADD COLUMN Src TEXT NOT NULL DEFAULT ''`).run();
+    } catch (_) {}
+  }
   schemaReady = true;
 }
 
@@ -333,6 +341,55 @@ async function handle(request, env, ctx) {
     if (!m.app || Date.now() - Number(m.app) > 60000) await setMeta(env, T, 'app', Date.now());
     const list = await rows(env, T, "AND Status = 'queue' AND (Sent IS NULL OR Sent = '') ORDER BY Pos");
     return json(list.map(r => ({ Id: r.Id, Singer: r.Singer, Title: r.Title, Artist: r.Artist, Version: r.Version, Disc: r.Disc, File: r.File, Path: r.Path })));
+  }
+  // EZTiger sends the songs in Tonight's playlist that have a singer's name
+  // but didn't come from this list (paper slips, songs added by hand): they
+  // join the singing queue marked as the DJ's, are ticked off when played,
+  // and go when taken out of the playlist. [{id, singer, title, artist, played}]
+  if (method === 'POST' && path === '/app/sync') {
+    let items;
+    try {
+      items = JSON.parse((await request.text()) || '[]');
+    } catch (_) {
+      items = null;
+    }
+    if (!Array.isArray(items) || items.length > 500) return json({ ok: false }, 400);
+    const m = await meta(env, T);
+    if (!m.app || Date.now() - Number(m.app) > 60000) await setMeta(env, T, 'app', Date.now());
+    const now = local(m);
+    const all = await rows(env, T);
+    const byId = new Map(all.map(r => [r.Id, r]));
+    let pos = all.filter(r => r.Status === 'queue').reduce((p, r) => Math.max(p, Number(r.Pos) || 0), 0);
+    const keep = new Set(), writes = [];
+    for (const it of items) {
+      if (!it || it.id == null) continue;
+      const id = 'dj-' + String(it.id).slice(0, 20);
+      keep.add(id);
+      const singer = clean(it.singer, 40), title = clean(it.title, 120), artist = clean(it.artist, 120);
+      const r = byId.get(id);
+      if (r) {
+        if (r.Singer !== singer || r.Title !== title || r.Artist !== artist) {
+          writes.push(env.DB.prepare('UPDATE requests SET Singer = ?, Title = ?, Artist = ? WHERE T = ? AND Id = ?').bind(singer, title, artist, T, id));
+        }
+        if (it.played && (r.Status === 'queue' || r.Status === 'new')) {
+          writes.push(env.DB.prepare("UPDATE requests SET Status = 'done', Pos = NULL, Closed = ? WHERE T = ? AND Id = ?").bind(now, T, id));
+        }
+        continue;
+      }
+      // Already on the list as a singer's own request: not twice.
+      const same = s => s.toLowerCase();
+      if (all.some(o => o.Src !== 'dj' && o.Status !== 'rejected' && same(o.Singer) === same(singer) && same(o.Title) === same(title))) continue;
+      const played = !!it.played;
+      writes.push(env.DB.prepare(
+        `INSERT INTO requests (Id, At, Time, Singer, Title, Artist, Version, Disc, Others, Note, Status, Pos, Closed, Brand, Code, File, Path, Sent, T, Src)
+         VALUES (?, ?, ?, ?, ?, ?, '', '', '', '', ?, ?, ?, '', '', '', '', 'yes', ?, 'dj')`,
+      ).bind(id, now, now.slice(11, 16), singer, title, artist, played ? 'done' : 'queue', played ? null : ++pos, played ? now : '', T));
+    }
+    for (const r of all) {
+      if (r.Src === 'dj' && !keep.has(r.Id)) writes.push(env.DB.prepare('DELETE FROM requests WHERE T = ? AND Id = ?').bind(T, r.Id));
+    }
+    if (writes.length) await env.DB.batch(writes);
+    return json({ ok: true });
   }
   if (method === 'POST' && path === '/app/sent') {
     await setMeta(env, T, 'app', Date.now());

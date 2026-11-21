@@ -1005,10 +1005,12 @@ class AppState extends ChangeNotifier {
 
   // --------------------------------------------------------------- queue
 
-  Future<void> enqueue(Track t, {String? singer}) async {
-    await db.queue.add(t.id, singer: singer);
+  /// Adds [t] to the bottom of Tonight's playlist; returns its queue id.
+  Future<int> enqueue(Track t, {String? singer}) async {
+    final id = await db.queue.add(t.id, singer: singer);
     await _reloadQueue();
     await _autocue();
+    return id;
   }
 
   /// Called once the window is on screen: cues the queue left from last
@@ -1558,6 +1560,7 @@ class AppState extends ChangeNotifier {
     if (RequestServer.parse(requestsLink)?.online ?? false) onlineRequestsLink = requestsLink;
     _tellDesktopIcon();
     _requestsTaken.clear();
+    _sentDjEntries = '';
     notifyListeners();
     startSongRequests();
   }
@@ -1586,7 +1589,7 @@ class AppState extends ChangeNotifier {
         if (_disposed) return;
         if (!_requestsTaken.containsKey(r.id)) {
           final t = await findRequestedSong(r);
-          if (t != null) await enqueue(t, singer: r.singer.isEmpty ? null : r.singer);
+          if (t != null) _fromRequests.add(await enqueue(t, singer: r.singer.isEmpty ? null : r.singer));
           _requestsTaken[r.id] = t != null;
           status = t != null
               ? '🎤 From the request list: ${r.singer.isEmpty ? '' : '${r.singer} – '}${t.title}'
@@ -1595,12 +1598,50 @@ class AppState extends ChangeNotifier {
         }
         await server.collected(http, r.id, found: _requestsTaken[r.id]!);
       }
+      await _syncDjEntries(server, http);
     } on RequestServerRefused {
       _setRequestsState(RequestsState.needsCode);
     } catch (_) {
       _setRequestsState(RequestsState.unreachable);
     } finally {
       _requestsBusy = false;
+    }
+  }
+
+  /// Tonight's playlist entries that came from the request list (already on it).
+  final Set<int> _fromRequests = {};
+
+  /// What was last sent with [_syncDjEntries], so it is only sent on a change.
+  String _sentDjEntries = '';
+
+  /// The songs in Tonight's playlist with a singer's name that the DJ added
+  /// here (a paper slip, say), for the request list's singing queue, where
+  /// they show shaded as the DJ's. Songs without a singer (background music)
+  /// stay off it. The request list also skips any that match a singer's own
+  /// request, so a request isn't shown twice after EZTiger restarts.
+  List<Map<String, Object?>> get djEntries => [
+    for (final e in queue)
+      if ((e.singer ?? '').trim().isNotEmpty && !_fromRequests.contains(e.id))
+        {
+          'id': e.id,
+          'singer': e.singer!.trim(),
+          'title': e.track.title,
+          'artist': e.track.artist ?? '',
+          'played': e.played,
+        },
+  ];
+
+  Future<void> _syncDjEntries(RequestServer server, HttpClient http) async {
+    final items = djEntries;
+    final sent = jsonEncode(items);
+    if (sent == _sentDjEntries) return;
+    try {
+      await server.syncDjEntries(http, items);
+      _sentDjEntries = sent;
+    } on RequestServerRefused {
+      rethrow;
+    } catch (_) {
+      // Try again on the next check; requests still come in meanwhile.
     }
   }
 

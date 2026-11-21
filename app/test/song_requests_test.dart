@@ -163,6 +163,54 @@ void main() {
     expect(state.requestsState, RequestsState.unreachable);
   });
 
+  test("songs the DJ adds with a singer's name (paper slips) show on the request list too, marked as the DJ's", () async {
+    final waiting = [
+      {'Id': '7', 'Singer': 'Kim', 'Title': 'Waterloo', 'Artist': 'ABBA', 'Path': '', 'File': ''},
+    ];
+    final taken = <String>{};
+    final syncs = <List<dynamic>>[];
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((req) async {
+      final body = await utf8.decoder.bind(req).join();
+      req.response.headers.contentType = ContentType.json;
+      if (req.uri.path == '/app/next') {
+        req.response.write(jsonEncode([for (final w in waiting) if (!taken.contains(w['Id'])) w]));
+      } else if (req.uri.path == '/app/sent') {
+        taken.add(req.uri.queryParameters['id']!);
+      } else if (req.uri.path == '/app/sync') {
+        syncs.add(jsonDecode(body) as List<dynamic>);
+      }
+      await req.response.close();
+    });
+    Track song(String name) => state.results.map((g) => g.primary).firstWhere((t) => t.fileName.contains(name));
+
+    // A request (Kim), a paper slip (Pat), and background music (no singer).
+    state.requestsLink = 'http://127.0.0.1:${server.port}/dj?key=k';
+    await state.checkSongRequests();
+    await state.enqueue(song('Bon Jovi'), singer: 'Pat');
+    await state.enqueue(song('Bohemian'));
+    await state.checkSongRequests();
+    expect(state.queue, hasLength(3));
+    final slip = state.queue[1];
+    expect(slip.singer, 'Pat');
+    expect(syncs.last, [
+      {'id': slip.id, 'singer': 'Pat', 'title': slip.track.title, 'artist': slip.track.artist ?? '', 'played': false},
+    ], reason: "only the paper slip: the request is on the list already, and background music has no singer");
+
+    // Nothing changed: nothing sent again.
+    final sent = syncs.length;
+    await state.checkSongRequests();
+    expect(syncs.length, sent);
+
+    // Taken out of Tonight's playlist: the list is told (it drops it).
+    await state.removeFromQueue(state.queue[1]);
+    await state.checkSongRequests();
+    expect(syncs.last, isEmpty);
+    state.setRequestsLink('');
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+  });
+
   test('the request list asks for the DJ code when the link has none', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
