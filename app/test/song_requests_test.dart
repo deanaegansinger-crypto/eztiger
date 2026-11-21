@@ -229,7 +229,7 @@ void main() {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     server.listen((req) async {
-      ips.add(req.uri.queryParameters['ip']);
+      if (req.uri.path == '/app/next') ips.add(req.uri.queryParameters['ip']);
       req.response.headers.contentType = ContentType.json;
       req.response.write('[]');
       await req.response.close();

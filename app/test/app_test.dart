@@ -836,12 +836,14 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     });
     final songs = [for (final e in state.queue) e.track.id];
-    final fresh = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan), deckB: KaraokeEngine(FakeBackend(), scanEdges: scan));
+    late AppState fresh;
     await tester.runAsync(() async {
+      // Made in real time: its deck jobs then run without the test's clock.
+      fresh = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan), deckB: KaraokeEngine(FakeBackend(), scanEdges: scan));
       await fresh.init(rescanLibrary: false);
       fresh.autocue = true;
-      await fresh.setTwoDecks(true);
-      await fresh.startUp();
+      await fresh.setTwoDecks(true).timeout(const Duration(seconds: 20));
+      await fresh.startUp().timeout(const Duration(seconds: 20));
       await Future<void>.delayed(const Duration(milliseconds: 100));
     });
     expect(fresh.engine.current?.id, songs[0], reason: 'the first in Tonight\'s playlist is live');
@@ -859,15 +861,19 @@ void main() {
       await state.setTwoDecks(true);
       await Future<void>.delayed(const Duration(milliseconds: 100));
     });
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump();
     final first = state.queue[0], second = state.queue[1];
     expect(state.engine.current?.id, first.track.id);
     expect(state.standby?.current?.id, second.track.id);
     final liveBefore = state.liveDeck;
 
     await tester.runAsync(() async {
-      await state.playWaitingFirst();
+      await state.playWaitingFirst().timeout(const Duration(seconds: 20));
       await Future<void>.delayed(const Duration(milliseconds: 100));
     });
+    await tester.pump();
     expect(state.liveDeck, 1 - liveBefore, reason: 'the decks swapped');
     expect(state.engine.current?.id, second.track.id);
     expect(state.engine.playing, isTrue);
