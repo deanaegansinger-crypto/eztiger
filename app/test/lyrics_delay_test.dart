@@ -73,6 +73,21 @@ void main() {
     expect(state.lyricsDelayMs, 250);
   }));
 
+  testWidgets("the player says which CDG file is playing, for the second screen to draw from", (tester) => tester.runAsync(() async {
+    await state.init();
+    await state.addRootFolder(lib.path);
+    await state.playNow(song('Waterloo'), autostart: false);
+    expect(state.engine.cdgPath, isNotNull);
+    expect(state.engine.cdgPath!.toLowerCase(), endsWith('.cdg'));
+    expect(File(state.engine.cdgPath!).existsSync(), isTrue);
+    // A video has no CDG file; stopping clears it.
+    await state.playNow(song('Bohemian'), autostart: false);
+    expect(state.engine.cdgPath, isNull);
+    await state.playNow(song('Waterloo'), autostart: false);
+    await state.engine.stop();
+    expect(state.engine.cdgPath, isNull);
+  }));
+
   testWidgets('a video is held back by the player, and only while the delay is on', (tester) => tester.runAsync(() async {
     await state.init();
     await state.addRootFolder(lib.path);

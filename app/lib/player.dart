@@ -155,6 +155,10 @@ class KaraokeEngine extends ChangeNotifier {
   CdgDecoder? _cdg;
   bool _rendering = false;
 
+  /// The CDG lyrics file of the song loaded now (unzipped, for an MP3+G
+  /// zip), or null. The second screen draws the lyrics itself from it.
+  String? cdgPath;
+
   /// How far the lyrics (CDG) and the video run behind the sound, to match
   /// sound that is heard late (Bluetooth to a mixer, say). Zero: in step.
   Duration lyricsDelay = Duration.zero;
@@ -235,6 +239,7 @@ class KaraokeEngine extends ChangeNotifier {
     position = Duration.zero;
     duration = Duration.zero;
     _cdg = null;
+    cdgPath = null;
     cdgFrame.value = null;
     cdgPixels = null;
     notifyListeners();
@@ -248,6 +253,7 @@ class KaraokeEngine extends ChangeNotifier {
       }
       if (cdgPath != null && File(cdgPath).existsSync()) {
         _cdg = CdgDecoder(await File(cdgPath).readAsBytes());
+        this.cdgPath = cdgPath;
         await _render();
       }
       _startAnalysis(track, media, loadId);
@@ -317,6 +323,7 @@ class KaraokeEngine extends ChangeNotifier {
     analysis = null;
     analysing = false;
     _cdg = null;
+    cdgPath = null;
     cdgFrame.value = null;
     cdgPixels = null;
     position = Duration.zero;

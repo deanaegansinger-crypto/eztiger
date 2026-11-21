@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -43,10 +44,17 @@ class SecondScreen extends ChangeNotifier {
   WindowController? _window;
   StreamSubscription<void>? _windows;
   Timer? _tick;
-  int? _sentTrack;
-  Uint8List? _sentPixels;
+  String? _sentTrack;
   bool? _sentPlaying;
+  int? _sentDelay;
+  final Stopwatch _sinceClock = Stopwatch();
   bool _busy = false;
+
+  /// How often the output window is told where the song is. It runs its own
+  /// clock in between, so this stays small: the messages pass through the
+  /// same Windows thread as the mouse, and a steady stream of big ones (each
+  /// CDG picture, as it was) froze clicks, menus and resizing.
+  static const clockEvery = Duration(milliseconds: 300);
 
   Future<void> toggle() => isOpen ? close() : open();
 
@@ -58,10 +66,10 @@ class SecondScreen extends ChangeNotifier {
     await _window!.show();
     _windows ??= onWindowsChanged.listen((_) => _checkStillOpen());
     _sentTrack = null;
-    _sentPixels = null;
     _sentPlaying = null;
+    _sentDelay = null;
     // The output window needs a moment to start its engine.
-    _tick = Timer.periodic(const Duration(milliseconds: 60), (_) => _push());
+    _tick = Timer.periodic(const Duration(milliseconds: 100), (_) => _push());
     notifyListeners();
   }
 
@@ -91,36 +99,39 @@ class SecondScreen extends ChangeNotifier {
     if (_busy) return;
     _busy = true;
     try {
-      final t = engine.current;
-      if (t?.id != _sentTrack) {
+      final e = engine, t = e.current;
+      final cdg = e.isVideo ? null : e.cdgPath;
+      final track = '${t?.id}|$cdg|${e.singer}';
+      if (track != _sentTrack) {
         await _channel.invokeMethod('track', {
           'title': t?.title,
           'artist': t?.artist,
-          'singer': engine.singer,
-          'video': engine.isVideo ? t!.path : null,
+          'singer': e.singer,
+          'video': e.isVideo ? t!.path : null,
+          'cdg': cdg,
         });
-        _sentTrack = t?.id;
-        _sentPixels = null;
+        _sentTrack = track;
         _sentPlaying = null;
       }
-      final px = engine.cdgPixels;
-      if (!identical(px, _sentPixels)) {
-        await _channel.invokeMethod('cdg', px);
-        _sentPixels = px;
-      }
-      if (engine.isVideo || _sentPlaying != engine.playing) {
+      final delay = e.lyricsDelay.inMilliseconds;
+      if (_sentPlaying != e.playing || _sentDelay != delay || !_sinceClock.isRunning || _sinceClock.elapsed >= clockEvery) {
         await _channel.invokeMethod('clock', {
-          'playing': engine.playing,
-          'ms': engine.position.inMilliseconds,
-          'delayMs': engine.lyricsDelay.inMilliseconds,
+          'playing': e.playing,
+          'ms': e.position.inMilliseconds,
+          'lyricsMs': e.lyricsPosition.inMilliseconds,
+          'delayMs': delay,
         });
-        _sentPlaying = engine.playing;
+        _sentPlaying = e.playing;
+        _sentDelay = delay;
+        _sinceClock
+          ..reset()
+          ..start();
       }
     } on WindowChannelException {
       // Not ready yet, or closed: try again on the next tick.
-      _sentTrack = -1;
+      _sentTrack = null;
     } catch (_) {
-      _sentTrack = -1;
+      _sentTrack = null;
     } finally {
       _busy = false;
     }
@@ -182,6 +193,48 @@ class _OutputModel extends ChangeNotifier {
   VideoController? video;
   int _delayMs = 0;
 
+  // The CDG lyrics, drawn here from the song's .cdg file: the main window
+  // only says where the song is (every 300 ms), and this window keeps time
+  // in between.
+  CdgDecoder? _lyrics;
+  Timer? _lyricsTick;
+  int _lyricsMs = 0;
+  final Stopwatch _sinceClock = Stopwatch();
+  bool _drawing = false;
+
+  void _setLyrics(CdgDecoder? d) {
+    _lyrics = d;
+    _lyricsMs = 0;
+    _sinceClock.reset();
+    _lyricsTick?.cancel();
+    _lyricsTick = d == null ? null : Timer.periodic(const Duration(milliseconds: 40), (_) => _drawLyrics());
+    cdg?.dispose();
+    cdg = null;
+  }
+
+  Future<void> _drawLyrics() async {
+    final d = _lyrics;
+    if (d == null || _drawing) return;
+    final ms = _lyricsMs + (playing ? _sinceClock.elapsedMilliseconds : 0);
+    d.seek(Duration(milliseconds: ms));
+    if (!d.changed && cdg != null) return;
+    _drawing = true;
+    try {
+      final c = Completer<ui.Image>();
+      ui.decodeImageFromPixels(Uint8List.fromList(d.rgba()), CdgDecoder.width, CdgDecoder.height, ui.PixelFormat.rgba8888, c.complete);
+      final img = await c.future;
+      if (!identical(d, _lyrics)) {
+        img.dispose();
+        return;
+      }
+      cdg?.dispose();
+      cdg = img;
+      notifyListeners();
+    } finally {
+      _drawing = false;
+    }
+  }
+
   Future<dynamic> handle(MethodCall call) async {
     switch (call.method) {
       case 'track':
@@ -189,8 +242,16 @@ class _OutputModel extends ChangeNotifier {
         title = a['title'] as String?;
         artist = a['artist'] as String?;
         singer = a['singer'] as String?;
-        cdg?.dispose();
-        cdg = null;
+        final cdgFile = a['cdg'] as String?;
+        CdgDecoder? lyrics;
+        if (cdgFile != null) {
+          try {
+            lyrics = CdgDecoder(await File(cdgFile).readAsBytes());
+          } catch (_) {
+            // Unreadable: the window shows the title instead.
+          }
+        }
+        _setLyrics(lyrics);
         final path = a['video'] as String?;
         if (path == null) {
           await _player?.stop();
@@ -202,27 +263,18 @@ class _OutputModel extends ChangeNotifier {
           await p.open(Media(path), play: false);
         }
         notifyListeners();
-      case 'cdg':
-        final px = call.arguments as Uint8List?;
-        if (px == null) {
-          cdg?.dispose();
-          cdg = null;
-          notifyListeners();
-        } else {
-          final c = Completer<ui.Image>();
-          ui.decodeImageFromPixels(px, CdgDecoder.width, CdgDecoder.height, ui.PixelFormat.rgba8888, c.complete);
-          final img = await c.future;
-          cdg?.dispose();
-          cdg = img;
-          notifyListeners();
-        }
       case 'clock':
         final a = Map<String, dynamic>.from(call.arguments as Map);
         final playing = a['playing'] as bool;
+        _lyricsMs = a['lyricsMs'] as int? ?? a['ms'] as int;
+        _sinceClock
+          ..reset()
+          ..start();
         if (playing != this.playing) {
           this.playing = playing;
           notifyListeners();
         }
+        if (_lyrics != null) unawaited(_drawLyrics());
         final p = _player;
         if (p == null || video == null) return null;
         // The lyrics delay: hold this window's video back too.
@@ -235,6 +287,7 @@ class _OutputModel extends ChangeNotifier {
         if (playing != p.state.playing) playing ? await p.play() : await p.pause();
         if ((p.state.position - at).abs() > const Duration(milliseconds: 400)) await p.seek(at);
       case 'close':
+        _setLyrics(null);
         await _player?.dispose();
         await windowManager.close();
     }
