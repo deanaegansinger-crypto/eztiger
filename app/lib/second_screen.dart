@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -18,104 +17,143 @@ import 'theme.dart';
 import 'edition.dart';
 import 'ui/logo.dart';
 
-/// The arguments the output window is opened with.
-const outputWindowArgs = '{"window":"output"}';
+/// The command-line switch that starts EZTiger as the second-screen output:
+/// `eztiger.exe --output-window=<port>`.
+const outputWindowSwitch = '--output-window=';
 
-bool isOutputWindow(String args) {
-  try {
-    return (jsonDecode(args) as Map)['window'] == 'output';
-  } catch (_) {
-    return false;
+/// The port to talk to the main window on, when this copy of EZTiger was
+/// started as the second-screen output; else null.
+int? outputWindowPort(List<String> args) {
+  for (final a in args) {
+    if (a.startsWith(outputWindowSwitch)) return int.tryParse(a.substring(outputWindowSwitch.length));
   }
+  return null;
 }
 
-const _channel = WindowMethodChannel('eztiger/output', mode: ChannelMode.unidirectional);
+/// One message to the output window, as a line of JSON.
+String outputMessage(String method, Object? args) => jsonEncode({'m': method, 'a': args});
 
 /// Main-window side: opens the output window on the second screen and keeps
 /// it showing what the player is playing.
+///
+/// The output window is a second copy of EZTiger (a program of its own), told
+/// what to show over a private connection on this PC. It used to be a second
+/// window inside this program, but on Windows the two windows shared the
+/// mouse and keyboard handling, and the main window could stop taking clicks,
+/// keys and scrolling for good once the second one opened.
 class SecondScreen extends ChangeNotifier {
-  SecondScreen(this._engine);
+  SecondScreen(this._engine, {this.startOutput = _startOutput});
 
   /// The player to show: in 2-deck mode, whichever deck is live.
   final KaraokeEngine Function() _engine;
   KaraokeEngine get engine => _engine();
 
-  bool get isOpen => _window != null;
-  WindowController? _window;
-  StreamSubscription<void>? _windows;
+  /// Starts the output program, told to connect back on [port]; replaced in tests.
+  final Future<Process?> Function(int port) startOutput;
+
+  static Future<Process?> _startOutput(int port) =>
+      // Detached: its output isn't read here, so it can never fill a pipe and stall.
+      Process.start(Platform.resolvedExecutable, ['$outputWindowSwitch$port'], mode: ProcessStartMode.detached);
+
+  bool get isOpen => _socket != null || _opening;
+  bool _opening = false;
+  ServerSocket? _server;
+  Socket? _socket;
+  Process? _process;
   Timer? _tick;
   String? _sentTrack;
   bool? _sentPlaying;
   int? _sentDelay;
   final Stopwatch _sinceClock = Stopwatch();
-  bool _busy = false;
 
   /// How often the output window is told where the song is. It runs its own
-  /// clock in between, so this stays small: the messages pass through the
-  /// same Windows thread as the mouse, and a steady stream of big ones (each
-  /// CDG picture, as it was) froze clicks, menus and resizing.
+  /// clock in between, so the messages stay few and small.
   static const clockEvery = Duration(milliseconds: 300);
 
   Future<void> toggle() => isOpen ? close() : open();
 
   Future<void> open() async {
     if (isOpen) return;
-    _window = await WindowController.create(
-      const WindowConfiguration(arguments: outputWindowArgs, hiddenAtLaunch: true),
-    );
-    await _window!.show();
-    _windows ??= onWindowsChanged.listen((_) => _checkStillOpen());
-    _sentTrack = null;
-    _sentPlaying = null;
-    _sentDelay = null;
-    // The output window needs a moment to start its engine.
-    _tick = Timer.periodic(const Duration(milliseconds: 100), (_) => _push());
+    _opening = true;
     notifyListeners();
-  }
-
-  Future<void> close() async {
-    _tick?.cancel();
-    _tick = null;
     try {
-      await _channel.invokeMethod('close');
-    } catch (_) {}
-    _window = null;
-    notifyListeners();
-  }
-
-  Future<void> _checkStillOpen() async {
-    final w = _window;
-    if (w == null) return;
-    final all = await WindowController.getAll();
-    if (!all.any((c) => c.windowId == w.windowId)) {
-      _tick?.cancel();
-      _tick = null;
-      _window = null;
+      final server = _server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      _process = await startOutput(server.port);
+      final socket = await server.first.timeout(const Duration(seconds: 20));
+      await server.close();
+      _server = null;
+      _socket = socket;
+      socket.done.then((_) => _closed(), onError: (_) => _closed());
+      socket.listen((_) {}, onDone: _closed, onError: (_) => _closed(), cancelOnError: true);
+      _sentTrack = null;
+      _sentPlaying = null;
+      _sentDelay = null;
+      _sinceClock.reset();
+      _tick = Timer.periodic(const Duration(milliseconds: 100), (_) => _push());
+      _push();
+    } catch (_) {
+      // It didn't start: tidy up, and the button shows it closed.
+      await _server?.close();
+      _server = null;
+      _process?.kill();
+      _process = null;
+    } finally {
+      _opening = false;
       notifyListeners();
     }
   }
 
-  Future<void> _push() async {
-    if (_busy) return;
-    _busy = true;
+  Future<void> close() async {
+    final socket = _socket, process = _process;
+    if (socket != null) {
+      try {
+        socket.writeln(outputMessage('close', null));
+        await socket.flush();
+      } catch (_) {}
+    }
+    _closed();
+    // It closes itself on 'close'; make sure.
+    if (process != null) {
+      unawaited(Future<void>.delayed(const Duration(seconds: 3), () => process.kill()));
+    }
+  }
+
+  /// The output window has gone (closed by hand, or by [close]).
+  void _closed() {
+    if (_socket == null && _tick == null) return; // already, or EZTiger closing (dispose)
+    _tick?.cancel();
+    _tick = null;
+    try {
+      _socket?.destroy();
+    } catch (_) {}
+    _socket = null;
+    _process = null;
+    notifyListeners();
+  }
+
+  void _send(String method, Object? args) => _socket?.writeln(outputMessage(method, args));
+
+  void _push() {
+    if (_socket == null) return;
     try {
       final e = engine, t = e.current;
       final cdg = e.isVideo ? null : e.cdgPath;
-      final track = '${t?.id}|$cdg|${e.singer}';
+      final track = '${t?.id}|$cdg|${e.singer}|$isPro';
       if (track != _sentTrack) {
-        await _channel.invokeMethod('track', {
+        _send('track', {
           'title': t?.title,
           'artist': t?.artist,
           'singer': e.singer,
           'video': e.isVideo ? t!.path : null,
           'cdg': cdg,
+          'pro': isPro,
         });
         _sentTrack = track;
         _sentPlaying = null;
       }
       final delay = e.lyricsDelay.inMilliseconds;
       if (_sentPlaying != e.playing || _sentDelay != delay || !_sinceClock.isRunning || _sinceClock.elapsed >= clockEvery) {
-        await _channel.invokeMethod('clock', {
+        _send('clock', {
           'playing': e.playing,
           'ms': e.position.inMilliseconds,
           'lyricsMs': e.lyricsPosition.inMilliseconds,
@@ -127,28 +165,32 @@ class SecondScreen extends ChangeNotifier {
           ..reset()
           ..start();
       }
-    } on WindowChannelException {
-      // Not ready yet, or closed: try again on the next tick.
-      _sentTrack = null;
     } catch (_) {
       _sentTrack = null;
-    } finally {
-      _busy = false;
     }
   }
 
   @override
   void dispose() {
+    // EZTiger is closing: tell the output window to go, without waiting.
     _tick?.cancel();
-    _windows?.cancel();
+    _tick = null;
+    final process = _process;
+    try {
+      _socket?.writeln(outputMessage('close', null));
+      _socket?.close();
+    } catch (_) {}
+    _socket = null;
+    _process = null;
+    if (process != null) Timer(const Duration(seconds: 3), process.kill);
     super.dispose();
   }
 }
 
 // ----------------------------------------------------------- output window
 
-/// Runs in the second window's own engine.
-Future<void> runOutputWindow() async {
+/// Runs in the second-screen copy of EZTiger: shows what the main window says.
+Future<void> runOutputWindow(int port) async {
   MediaKit.ensureInitialized();
   await windowManager.ensureInitialized();
   await windowManager.setTitle('EZtiger output');
@@ -172,7 +214,6 @@ Future<void> runOutputWindow() async {
   } catch (_) {}
 
   final out = _OutputModel()..fullScreen = fullScreen;
-  await _channel.setMethodCallHandler(out.handle);
   runApp(
     MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -180,6 +221,22 @@ Future<void> runOutputWindow() async {
       home: _OutputView(model: out),
     ),
   );
+
+  // The main window's messages, one JSON line each. When it goes (closed, or
+  // EZTiger quit), this window goes too.
+  try {
+    final socket = await Socket.connect(InternetAddress.loopbackIPv4, port, timeout: const Duration(seconds: 10));
+    // One at a time, in order (a new song's lyrics load before its clock).
+    await for (final line in socket.cast<List<int>>().transform(utf8.decoder).transform(const LineSplitter())) {
+      try {
+        final msg = jsonDecode(line) as Map<String, dynamic>;
+        await out.handle(MethodCall(msg['m'] as String, msg['a']));
+      } catch (_) {
+        // A message it doesn't understand: skip it.
+      }
+    }
+  } catch (_) {}
+  await out.handle(const MethodCall('close'));
 }
 
 class _OutputModel extends ChangeNotifier {
@@ -189,6 +246,9 @@ class _OutputModel extends ChangeNotifier {
 
   /// The main window's player is playing (Pro shows the logo otherwise).
   bool playing = false;
+
+  /// The main window is EZTiger Pro (it says so with each song).
+  bool pro = isPro;
   Player? _player;
   VideoController? video;
   int _delayMs = 0;
@@ -242,6 +302,7 @@ class _OutputModel extends ChangeNotifier {
         title = a['title'] as String?;
         artist = a['artist'] as String?;
         singer = a['singer'] as String?;
+        pro = a['pro'] as bool? ?? pro;
         final cdgFile = a['cdg'] as String?;
         CdgDecoder? lyrics;
         if (cdgFile != null) {
@@ -288,8 +349,11 @@ class _OutputModel extends ChangeNotifier {
         if ((p.state.position - at).abs() > const Duration(milliseconds: 400)) await p.seek(at);
       case 'close':
         _setLyrics(null);
-        await _player?.dispose();
-        await windowManager.close();
+        try {
+          await _player?.dispose();
+          await windowManager.close();
+        } catch (_) {}
+        exit(0);
     }
     return null;
   }
@@ -321,7 +385,7 @@ class _OutputView extends StatelessWidget {
             listenable: model,
             builder: (context, _) {
               final v = model.video;
-              final idle = isPro && !model.playing;
+              final idle = model.pro && !model.playing;
               if (v != null && !idle) return Video(controller: v, controls: NoVideoControls, fill: Colors.black);
               final img = model.cdg;
               if (img != null && !idle) {

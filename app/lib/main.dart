@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,9 +25,10 @@ Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   if (Platform.isAndroid) return runOnTablet();
 
-  // The second-screen output is a separate window that starts here too.
-  final thisWindow = await WindowController.fromCurrentEngine();
-  if (isOutputWindow(thisWindow.arguments)) return runOutputWindow();
+  // The second-screen output is a second copy of EZTiger, started by this one
+  // with --output-window=<port> (see SecondScreen).
+  final outputPort = outputWindowPort(args);
+  if (outputPort != null) return runOutputWindow(outputPort);
 
   MediaKit.ensureInitialized();
   await windowManager.ensureInitialized();
