@@ -111,7 +111,14 @@ Future<void> runOnTablet() async {
     backends[KaraokeEngine(backend, tempDir: temp)] = backend;
   }
   final decks = backends.keys.toList();
-  final state = AppState(db, decks[0], deckB: decks.length > 1 ? decks[1] : null);
+  final state = AppState(
+    db,
+    decks[0],
+    deckB: decks.length > 1 ? decks[1] : null,
+    // The key and BPM on the players and in the library, as on Windows
+    // (decoded with the libmpv the player brings; none if it can't).
+    analyseMedia: analyseInBackground,
+  );
   // Only rescan once the app is allowed to read the SD card, or the library
   // would look empty.
   final canRead = await hasStorageAccess();
