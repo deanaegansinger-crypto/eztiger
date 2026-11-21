@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>EZTiger online song requests: host it on your own Cloudflare</title>
+<link rel="stylesheet" href="guide.css"></head><body>
+
+<section class="page cover">
+  <img src="../../app/requests/eztiger-logo.png" alt="">
+  <p class="kicker">EZTiger Pro · Optional</p>
+  <h1>Online song requests<br>on your own Cloudflare</h1>
+  <p class="lead">Most DJs simply press <b>Get my online request page</b> in EZTiger and use EZTiger's own service. This guide is for DJs who would rather run the request page on a free Cloudflare account of their own, with their own web address, under their own control.</p>
+  <div class="facts">
+    <div><b>About 15 minutes</b>once, with two free accounts</div>
+    <div><b>Free</b>Cloudflare's free plan is plenty for one DJ</div>
+    <div><b>No coding</b>one Deploy button and one code to make up</div>
+  </div>
+  <div class="foot"><span>EZTiger Entertainment · Support for Entertainment Hosts</span><span>For EZTiger Pro build BUILD or later, on Windows</span></div>
+</section>
+
+<section class="page">
+  <header class="run"><img src="../../app/requests/eztiger-logo.png" alt=""><span>Online song requests · Your own Cloudflare</span><span>1</span></header>
+  <h2>Which way is for you?</h2>
+  <p class="sub">Both work the same on the night: same DJ list, same QR code and poster, and songs go straight into EZTiger.</p>
+  <table class="three">
+    <tr><th></th><th>EZTiger's service</th><th>Your own Cloudflare</th></tr>
+    <tr><td>Setting up</td><td>One button in EZTiger</td><td>Two free accounts and a Deploy button (this guide)</td></tr>
+    <tr><td>Your web address</td><td>eztiger-requests…workers.dev/v/<i>your-code</i>/</td><td><i>a-name-you-choose</i>.<i>your-account</i>.workers.dev</td></tr>
+    <tr><td>Who looks after it</td><td>EZTiger</td><td>You (there's very little to do)</td></tr>
+    <tr><td>Your request list is kept</td><td>On EZTiger's account, private to you</td><td>On your own account</td></tr>
+  </table>
+
+  <h3>You'll need</h3>
+  <ul>
+    <li><b>A free Cloudflare account</b>: <span class="code">dash.cloudflare.com/sign-up</span>. Cloudflare runs your request page.</li>
+    <li><b>A free GitHub account</b>: <span class="code">github.com/signup</span>. Cloudflare keeps your copy of the request page's program there and uses it to build your page.</li>
+    <li><b>EZTiger Pro on Windows</b>, build BUILD or later, with your songs added.</li>
+    <li>A computer with internet. A phone works for the accounts, but the setup page is easier on a laptop.</li>
+  </ul>
+  <div class="note"><b>Make up your DJ code first.</b> It's the password for your DJ list: 20 or more letters and numbers, no spaces, for example <span class="code">Tiger7Karaoke2Night9Dave4</span> (don't use this one). Write it down; you'll type it once in step 5.</div>
+  <footer class="run"><span>EZTiger Pro · Online song requests on your own Cloudflare</span><span>Page 1 of 3</span></footer>
+</section>
+
+<section class="page">
+  <header class="run"><img src="../../app/requests/eztiger-logo.png" alt=""><span>Online song requests · Your own Cloudflare</span><span>2</span></header>
+  <h2>Set it up</h2>
+  <p class="sub">Use the same web browser for every step, so you stay signed in.</p>
+  <div class="steps">
+    <div class="step"><div><b class="t">Make your two free accounts</b><p>Sign up at <span class="code">github.com/signup</span>, then at <span class="code">dash.cloudflare.com/sign-up</span>. Confirm each one from the email it sends you.</p></div></div>
+    <div class="step"><div><b class="t">Open the Deploy link</b><p>Type this address into your browser (or click it in the PDF):<br><a class="code" href="DEPLOY_URL">DEPLOY_URL</a></p></div></div>
+    <div class="step"><div><b class="t">Connect GitHub</b><p>Cloudflare asks to connect to GitHub so it can make your copy. Choose your GitHub account and allow it.</p></div></div>
+    <div class="step"><div><b class="t">Name it</b><p>On Cloudflare's setup page, the project is called <b>eztiger-requests</b>. Change the name if you like (letters, numbers and dashes): it becomes part of your web address. Leave the storage names as they are.</p></div></div>
+    <div class="step"><div><b class="t">Add your DJ code</b><p>Where the page asks for <b>DJ_KEY</b>, type the DJ code you made up. Then press <span class="btn go">Create and deploy</span> (or <span class="btn go">Deploy</span>) and wait a minute or two until it says it's live.</p></div></div>
+    <div class="step"><div><b class="t">Note your two links</b><p>Cloudflare shows your web address, like <span class="code">https://eztiger-requests.dave.workers.dev</span>. Your <b>DJ link</b> is that address with <span class="code">/dj?key=</span> and your DJ code on the end:<br><span class="code">https://eztiger-requests.dave.workers.dev/dj?key=YourDJCode</span><br>Open it: you should see an empty DJ list. Save it somewhere safe.</p></div></div>
+    <div class="step"><div><b class="t">Connect EZTiger</b><p>In EZTiger, go to <span class="path">☰ Menu → Song requests</span>, paste your DJ link into the box and press <span class="btn go">Connect</span> (it says <b>✓ Connected</b>). Then <span class="path">☰ Menu → Start song requests</span> puts your songs on your page and opens your DJ list.</p></div></div>
+  </div>
+  <footer class="run"><span>EZTiger Pro · Online song requests on your own Cloudflare</span><span>Page 2 of 3</span></footer>
+</section>
+
+<section class="page">
+  <header class="run"><img src="../../app/requests/eztiger-logo.png" alt=""><span>Online song requests · Your own Cloudflare</span><span>3</span></header>
+  <h2>From then on</h2>
+  <p class="sub">Everything else is the same as EZTiger's service: see the <b>First-time setup</b> guide, pages 2 and 3, for the night itself, posters, your own taskbar button, and venues with no signal.</p>
+  <ul>
+    <li><b>Each night:</b> laptop on the internet, open EZTiger, <span class="path">☰ Menu → Start song requests</span>.</li>
+    <li><b>Added songs:</b> Start song requests again. Your address and QR code never change.</li>
+    <li><b>Your free plan:</b> Cloudflare's free plan allows 100,000 visits a day, far more than one venue's singers use. You won't be charged unless you choose a paid plan yourself.</li>
+  </ul>
+
+  <h2 style="margin-top:6mm">If something's not right</h2>
+  <table>
+    <tr><th>You see</th><th>Try this</th></tr>
+    <tr><td>"This request list isn't set up yet: the owner needs to add the DJ_KEY secret"</td><td>The DJ code didn't get saved. In Cloudflare: <span class="path">Workers &amp; Pages → eztiger-requests → Settings → Variables and Secrets → Add</span>, type <b>Secret</b>, name <span class="code">DJ_KEY</span>, value: your DJ code. Save (Deploy).</td></tr>
+    <tr><td>"The DJ list needs the DJ link"</td><td>The code on the end of your DJ link doesn't match DJ_KEY. Check for typos and spaces, or set DJ_KEY again as above.</td></tr>
+    <tr><td>Your web address doesn't open yet</td><td>A brand-new address can take a few minutes to start working. Try again shortly.</td></tr>
+    <tr><td>"Can't reach the online request list" in EZTiger</td><td>The laptop isn't on the internet: join the venue Wi-Fi or your phone's hotspot.</td></tr>
+    <tr><td>Phones say "The song list isn't up yet"</td><td>Press <span class="path">☰ Menu → Start song requests</span> in EZTiger.</td></tr>
+    <tr><td>Changed your mind?</td><td>Disconnect anytime: in <span class="path">☰ Menu → Song requests</span> press <span class="btn">Turn off</span>, or use <span class="btn">Get my online request page</span> for EZTiger's service. To remove your copy, delete the eztiger-requests Worker in Cloudflare.</td></tr>
+  </table>
+  <div class="note"><b>Your data.</b> Only song titles and artists, the names singers type and their notes go online, onto your own Cloudflare account. Your song files stay on your laptop.</div>
+  <footer class="run"><span>EZTiger Pro · Online song requests on your own Cloudflare</span><span>Page 3 of 3</span></footer>
+</section>
+</body></html>
