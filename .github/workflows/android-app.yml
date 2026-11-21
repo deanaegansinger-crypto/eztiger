@@ -33,6 +33,8 @@ jobs:
         run: flutter pub get
 
       - name: Test
+        # A test that hangs fails the step instead of holding the build for hours.
+        timeout-minutes: 20
         run: flutter test --file-reporter json:$RUNNER_TEMP/test-results.json
 
       - name: Name the failing tests
@@ -50,6 +52,10 @@ jobs:
               grep -v '^[══]*$' | tr '\r\n' '  ' | sed 's/  */ /g' | cut -c1-3500)
             echo "::error title=Failed: ${name//:/ -}::${text//%/%25}"
           done
+          # Tests that started and never finished (a hang stopped by the timeout).
+          jq -rs '([.[] | select(.type=="testDone") | .testID]) as $done
+            | .[] | select(.type=="testStart") | .test | select(.id as $i | $done | index($i) | not) | .name' "$f" |
+            while read -r name; do echo "::error title=Never finished::${name}"; done
 
       - name: Signing key
         # The same key every time, so a new version installs over the old one.
