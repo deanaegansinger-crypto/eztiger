@@ -744,6 +744,31 @@ class AppState extends ChangeNotifier {
   }
 
   /// Pro: mixes into the next song now, over the crossfade time.
+  /// Pro, 2 decks, before the live deck has started: plays the song waiting
+  /// on the other deck first. The decks swap, that song moves up to before
+  /// the other in Tonight's playlist, and the other waits as the next song
+  /// (it isn't marked sung).
+  Future<void> playWaitingFirst() async {
+    final sb = standby;
+    if (sb == null || engine.playing || _fading || sb.current == null) return;
+    await _standbyChain;
+    final first = queue.where((e) => e.id == standbyQueueId).firstOrNull;
+    final second = queue.where((e) => e.id == nowPlayingQueueId).firstOrNull;
+    final old = engine;
+    _live = 1 - _live;
+    nowPlayingQueueId = first?.id;
+    standbyQueueId = second?.id;
+    _endFade();
+    await engine.matchLevel(old);
+    if (first != null && second != null && queue.indexOf(first) > queue.indexOf(second)) {
+      await db.queue.move(first.id, queue.indexOf(second));
+      await _reloadQueue();
+    }
+    notifyListeners();
+    await engine.play();
+    await _cueStandby();
+  }
+
   Future<void> mixNow() async {
     if (_fading || engine.current == null || upNext == null) return;
     if (!engine.playing) return next(fadeIn: null);
@@ -1023,9 +1048,14 @@ class AppState extends ChangeNotifier {
       final last = jsonDecode(await db.getMeta('last_loaded') ?? '{}') as Map<String, dynamic>;
       final entry = queue.where((e) => e.id == last['queue']).firstOrNull;
       final track = last['track'] is int ? await db.tracks.byId(last['track'] as int) : null;
-      if (entry != null) {
+      // Tonight's playlist sets the order: the song loaded last time comes
+      // back only if it is the first still to sing. (A song cued ahead of its
+      // turn used to come back on the live deck, with the one before it
+      // waiting on the other deck: the wrong way round.)
+      final first = queue.where((e) => !e.played).firstOrNull;
+      if (entry != null && identical(entry, first)) {
         await _cue(entry, autostart: false);
-      } else if (track != null) {
+      } else if (first == null && track != null) {
         await playNow(track, autostart: false);
       }
     } catch (_) {

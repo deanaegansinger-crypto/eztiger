@@ -807,7 +807,8 @@ void main() {
     expect(find.byKey(const Key('stage-lyrics')), findsOneWidget);
     expect(tester.getRect(find.byKey(const Key('stage-lyrics'))).top, greaterThan(a.bottom));
     expect(find.byKey(const Key('deck-A-play')), findsOneWidget);
-    expect(find.byKey(const Key('deck-B-mix')), findsOneWidget);
+    expect(find.byKey(const Key('deck-B-play-first')), findsOneWidget, reason: 'nothing playing yet: deck B can go first');
+    expect(find.byKey(const Key('deck-B-mix')), findsNothing);
 
     // The key of the song waiting on deck B is set before it plays, and kept.
     final waiting = state.standby!;
@@ -821,6 +822,58 @@ void main() {
     expect(state.engine.keyShift, 0, reason: 'the song on air keeps its key');
     expect(tester.widget<Text>(find.byKey(const Key('deck-B-key'))).data, 'KEY +2');
     expect(state.keyShifts[waiting.current!.path], 2, reason: 'remembered for the song');
+  });
+
+  testWidgets("Pro 2 decks: at start-up the first song to sing is live, even if a later one was loaded last time", (tester) async {
+    await pumpApp(tester);
+    await tester.runAsync(() async {
+      state.toggleAutocue(); // off while filling the queue
+      for (final g in state.results) {
+        await state.enqueue(g.primary);
+      }
+      // Last time, the second song was cued ahead of its turn.
+      await state.playEntry(state.queue[1]);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    final songs = [for (final e in state.queue) e.track.id];
+    final fresh = AppState(db, KaraokeEngine(FakeBackend(), scanEdges: scan), deckB: KaraokeEngine(FakeBackend(), scanEdges: scan));
+    await tester.runAsync(() async {
+      await fresh.init(rescanLibrary: false);
+      fresh.autocue = true;
+      await fresh.setTwoDecks(true);
+      await fresh.startUp();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    expect(fresh.engine.current?.id, songs[0], reason: 'the first in Tonight\'s playlist is live');
+    expect(fresh.standby?.current?.id, songs[1], reason: 'the second waits on the other deck');
+    expect(fresh.engine.playing, isFalse);
+  });
+
+  testWidgets('Pro 2 decks: "Play this first" on the waiting deck swaps the decks, and the other song waits', (tester) async {
+    state = AppState(db, KaraokeEngine(backend, scanEdges: scan), deckB: KaraokeEngine(FakeBackend(), scanEdges: scan));
+    await pumpApp(tester);
+    await tester.runAsync(() async {
+      for (final g in state.results) {
+        await state.enqueue(g.primary);
+      }
+      await state.setTwoDecks(true);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    final first = state.queue[0], second = state.queue[1];
+    expect(state.engine.current?.id, first.track.id);
+    expect(state.standby?.current?.id, second.track.id);
+    final liveBefore = state.liveDeck;
+
+    await tester.runAsync(() async {
+      await state.playWaitingFirst();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    expect(state.liveDeck, 1 - liveBefore, reason: 'the decks swapped');
+    expect(state.engine.current?.id, second.track.id);
+    expect(state.engine.playing, isTrue);
+    expect(state.standby?.current?.id, first.track.id, reason: 'the other song waits as the next');
+    expect(state.queue.map((e) => e.id).take(2), [second.id, first.id], reason: 'Tonight\'s playlist follows');
+    expect(state.queue.firstWhere((e) => e.id == first.id).played, isFalse, reason: 'not marked sung');
   });
 
   testWidgets('Pro trial: days left by the PRO badge, and a licence key in the menu', (tester) async {

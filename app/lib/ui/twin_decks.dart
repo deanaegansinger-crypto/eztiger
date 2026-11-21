@@ -149,7 +149,18 @@ class _DeckCard extends StatelessWidget {
                     onTap: s.playPause,
                   ),
                   _Mini(z: z, icon: Icons.skip_next, tooltip: 'Next singer', onTap: s.next),
-                ] else if (waiting)
+                ] else if (waiting && !s.engine.playing && t != null)
+                  // Nothing playing yet (at the start, say): play this one
+                  // first, and the other deck's song waits as the next.
+                  _Mini(
+                    z: z,
+                    key: Key('deck-$name-play-first'),
+                    icon: Icons.play_arrow,
+                    tooltip: 'Play this song first (the other deck waits)',
+                    primary: true,
+                    onTap: s.playWaitingFirst,
+                  )
+                else if (waiting)
                   _Mini(
                     z: z,
                     key: Key('deck-$name-mix'),
