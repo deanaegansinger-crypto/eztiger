@@ -34,6 +34,7 @@ Future<void> showReadMe(BuildContext context) => showDialog<void>(
             children: [
               // On the tablet too: a Bluetooth keyboard, footswitch or remote.
               if (isPro) const _ShortcutsMenu(),
+              if (isPro && !singerApp) const _ConnectionsMenu(),
               for (final (head, lines)
                   in singerApp
                       ? _singer
@@ -162,6 +163,97 @@ class _ShortcutsMenu extends StatelessWidget {
                     child: Text(key, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                   ),
                   Expanded(child: Text(queueWords(what), style: const TextStyle(fontSize: 13, height: 1.3))),
+                ],
+              ),
+            ),
+        ],
+      ],
+    ),
+  );
+}
+
+/// How singers reach the request page, and what to do when the internet or
+/// the Wi-Fi goes: folded away under the shortcuts (the host's apps only).
+const _connections = <(String, List<String>)>[
+  (
+    'The online request page',
+    [
+      'The page lives on the internet, not on your laptop, so it works like any web site. Everyone can use it at the same time, whatever they are connected to: their own phone data (roaming uses very little), the venue Wi-Fi, or your phone\'s hotspot. Nobody has to join your hotspot.',
+      'Your laptop needs internet all night to pick up the requests. Your phone\'s hotspot is fine: it uses less data than one song on Spotify.',
+      'Hotel Wi-Fi that makes you sign in or tick a box on a welcome page first: guests do that before anything loads, or switch to their mobile data.',
+      'Roaming guests sometimes keep data switched off to avoid charges. They can turn it on, or use the venue Wi-Fi.',
+      'Your own web address or the Cloudflare one work the same way. Your own just looks nicer on a poster.',
+    ],
+  ),
+  (
+    'If the internet goes down',
+    [
+      'The venue Wi-Fi drops: no need for the fallback. Put the laptop on your phone\'s hotspot and the online page carries on. Guests on the venue Wi-Fi switch to their own data. The QR code stays the same.',
+      'No signal for anyone (a basement bar, the countryside, the network down): use the request list on this PC instead, below.',
+    ],
+  ),
+  (
+    'The request list on this PC (no internet)',
+    [
+      '☰ Menu → Song requests → "Use this PC instead (no internet)". EZTiger shows a new QR code with the laptop\'s address (like http://192.168.x.x:8080). Show it on the big screen, or print it there and then.',
+      'Guests join your hotspot or router Wi-Fi first, then scan that QR code. Put the Wi-Fi name and password on the screen or on a card beside the QR code.',
+      'Don\'t print the fallback QR code in advance: the laptop\'s address can change each time it joins a hotspot.',
+      'Phones may say "this Wi-Fi has no internet" and quietly go back to mobile data. Guests tap "Stay connected" (or "Use this network anyway") if asked.',
+      'A phone hotspot takes about 10 devices at once: fine for a few at a time sending a request, not for the whole room at once.',
+      'Songs already in Tonight\'s playlist stay put when you switch. A request sent in the last few seconds before the switch may be missed: ask the singer to send it again.',
+      'When the internet is back: ☰ Menu → Song requests → "Use the online request list".',
+    ],
+  ),
+  (
+    'The last resort: paper slips',
+    [
+      'If everything fails, it\'s pen and paper: singers write their name and song on a slip and hand it in. You search the song and add it with the singer\'s name, as always. (You may need to show the younger ones how a pen works.)',
+      'Slips you add with a singer\'s name still show on the request list, shaded and marked 📝 Added in EZTiger, once it\'s back.',
+    ],
+  ),
+  (
+    'Sending a playlist to the tablet',
+    [
+      '📶 Send to the tablet doesn\'t use the internet: the laptop hands the songs straight to the tablet. Both must be on the same Wi-Fi or hotspot. Customers\' requests aren\'t affected either way.',
+      'Windows Firewall must let EZTiger through (it sends on port 8085): Windows Security → Firewall & network protection → Allow an app through firewall → tick EZTiger for Private and Public.',
+      'No shared Wi-Fi? Right-click the playlist → 📤 Export to USB, SD card or Dropbox, and on the tablet ☰ Menu → Import playlist….',
+    ],
+  ),
+];
+
+class _ConnectionsMenu extends StatelessWidget {
+  const _ConnectionsMenu();
+
+  @override
+  Widget build(BuildContext context) => Theme(
+    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+    child: ExpansionTile(
+      key: const Key('read-me-connections'),
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.only(left: 4, bottom: 6),
+      expandedCrossAxisAlignment: CrossAxisAlignment.start,
+      title: Text(
+        '📶  Connections and fallbacks',
+        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: EzColors.brass),
+      ),
+      subtitle: const Text(
+        'How singers reach the request page (their own data, the venue Wi-Fi or your hotspot), what to do if the internet goes down, and the paper-slip last resort.',
+        style: TextStyle(fontSize: 12),
+      ),
+      children: [
+        for (final (group, lines) in _connections) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 2),
+            child: Text(group, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+          ),
+          for (final l in lines)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('•  ', style: TextStyle(fontSize: 13)),
+                  Expanded(child: Text(queueWords(l), style: const TextStyle(fontSize: 13, height: 1.3))),
                 ],
               ),
             ),

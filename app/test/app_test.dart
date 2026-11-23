@@ -1677,6 +1677,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Volume up'), findsOneWidget);
     expect(find.text('Key down a semitone'), findsOneWidget);
+    // Connections and fallbacks: folded too, and opens on a click.
+    expect(find.textContaining('The last resort: paper slips'), findsNothing);
+    await tester.ensureVisible(find.text('📶  Connections and fallbacks'));
+    await tester.tap(find.text('📶  Connections and fallbacks'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('The last resort: paper slips'), findsOneWidget);
     // The last line is reachable by scrolling.
     await tester.dragUntilVisible(
       find.textContaining('remembers your settings'),
