@@ -83,8 +83,8 @@ void main() {
       expect(t.clockAt(2), '9:06 pm'); // the interval
       expect(t.clockAt(3), '9:26 pm');
       expect(t.guessed, [false, false, false, true, false]);
-      expect(t.total, const Duration(minutes: 9 + 20, seconds: 30)); // c guessed at 3:30
-      expect(t.finish, '9:35 pm');
+      expect(t.total, const Duration(minutes: 3 * 3 + 20 + 3, seconds: 30)); // c guessed at 3:30
+      expect(t.finish, '9:32 pm');
       expect(x.sets, [1, 1, 2, 2, 2]);
       expect(x.setCount, 2);
       expect(x.songCount, 4);
@@ -329,6 +329,8 @@ void main() {
 
     // An interval after the first song.
     await tester.tap(find.byKey(const Key('planner-row-0')));
+    // (A song row waits to see if it's a double-click, for its note.)
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.byKey(const Key('planner-add-interval')));
     await settle();
     expect(s.showPlans[id]!.items[1].isBreak, isTrue);
