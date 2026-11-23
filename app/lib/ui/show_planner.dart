@@ -162,13 +162,12 @@ class _PlannerState extends State<_Planner> {
   }
 
   Future<void> _pickMusic(ShowItem item) async {
-    final r = await FilePicker.pickFiles(
+    final picked = await FilePicker.pickFiles(
       dialogTitle: 'Break music: MP3s or videos to play in the interval',
-      allowMultiple: true,
       type: FileType.custom,
       allowedExtensions: ['mp3', 'mp4', 'm4a', 'wav', 'wma', 'avi', 'mpg', 'mkv', 'mov'],
     );
-    final paths = [for (final f in r?.files ?? const <PlatformFile>[]) ?f.path];
+    final paths = <String>[for (final f in picked) ?f.path];
     if (paths.isEmpty) return;
     item.music.addAll(paths);
     _changed();
@@ -440,7 +439,8 @@ class _PlannerState extends State<_Planner> {
                       buildDefaultDragHandles: false,
                       padding: const EdgeInsets.only(bottom: 80),
                       itemCount: x.items.length,
-                      onReorder: (from, to) => _move(from, to > from ? to - 1 : to),
+                      // (The new place is already counted without the moved line.)
+                      onReorderItem: _move,
                       header: Padding(
                         padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
                         child: Text('Set 1', style: TextStyle(fontWeight: FontWeight.w800, color: EzColors.cyan)),
