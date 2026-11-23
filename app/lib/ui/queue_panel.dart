@@ -267,8 +267,25 @@ class _QueueRow extends StatelessWidget {
                       : played
                       ? Icon(Icons.check, size: 14, color: EzColors.green)
                       : Text('${index + 1}', style: TextStyle(fontSize: 11, color: dim)),
-                  'title': Text(
-                    t.title,
+                  // A planned show: break music says which interval it's
+                  // for, and a song shows its note.
+                  'title': Text.rich(
+                    TextSpan(
+                      children: [
+                        if (s.intervalOf(t) case final interval?)
+                          TextSpan(
+                            text: '☕ $interval: ',
+                            style: TextStyle(color: EzColors.brass, fontWeight: FontWeight.w700),
+                          ),
+                        TextSpan(text: t.title),
+                        if (s.noteFor(t) case final note?)
+                          TextSpan(
+                            text: '  📝 $note',
+                            style: TextStyle(color: EzColors.cyan, fontStyle: FontStyle.italic),
+                          ),
+                      ],
+                    ),
+                    key: Key('queue-title-${entry.id}'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 12),

@@ -63,7 +63,7 @@ class _ExportDialogState extends State<_ExportDialog> {
   void initState() {
     super.initState();
     final s = _stateOf(context);
-    PlaylistPackage.fromPlaylist(s.db, widget.pl, keyShifts: s.keyShifts).then((x) {
+    s.packageFor(widget.pl).then((x) {
       if (mounted) setState(() => pkg = x);
     });
   }
@@ -176,7 +176,7 @@ class _SendDialogState extends State<_SendDialog> {
   Future<void> _start() async {
     final s = _stateOf(context);
     try {
-      final pkg = await PlaylistPackage.fromPlaylist(s.db, widget.pl, keyShifts: s.keyShifts);
+      final pkg = await s.packageFor(widget.pl);
       final ip = await s.detectPcAddress();
       final x = PlaylistSender(pkg)
         ..onChange = () {

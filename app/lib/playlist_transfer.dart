@@ -6,6 +6,8 @@ import 'package:archive/archive_io.dart';
 import 'package:eztiger_core/eztiger_core.dart';
 import 'package:path/path.dart' as p;
 
+import 'show_plan.dart';
+
 /// Taking a playlist, and the song files themselves, from EZTiger Pro on the
 /// PC to the tablet: as a folder or one zip (for a USB stick, an SD card or
 /// Dropbox), or straight over the Wi-Fi. The tablet copies the songs into
@@ -22,7 +24,15 @@ const songsFolder = 'songs';
 
 /// One song in a package.
 class TransferSong {
-  TransferSong({required this.title, this.artist, required this.play, required this.files, this.key = 0});
+  TransferSong({
+    required this.title,
+    this.artist,
+    required this.play,
+    required this.files,
+    this.key = 0,
+    this.note = '',
+    this.length,
+  });
 
   factory TransferSong.fromJson(Map<String, dynamic> j) => TransferSong(
         title: '${j['title'] ?? ''}',
@@ -30,7 +40,15 @@ class TransferSong {
         play: '${j['play'] ?? ''}',
         files: [for (final f in (j['files'] as List? ?? const [])) '$f'],
         key: (j['key'] as num?)?.toInt() ?? 0,
+        note: '${j['note'] ?? ''}',
+        length: j['ms'] is num ? Duration(milliseconds: (j['ms'] as num).toInt()) : null,
       );
+
+  /// The show planner's note on the song, if any.
+  final String note;
+
+  /// How long the song lasts, when the PC knew.
+  final Duration? length;
 
   final String title;
   final String? artist;
@@ -50,12 +68,54 @@ class TransferSong {
         'play': play,
         'files': files,
         if (key != 0) 'key': key,
+        if (note.isNotEmpty) 'note': note,
+        if (length != null) 'ms': length!.inMilliseconds,
       };
+}
+
+/// A planned show in a package: the start time and the running order, where
+/// a song is its place in the package's songs and an interval names its
+/// music by file name in the songs folder.
+class PackageShow {
+  PackageShow({this.start, required this.items});
+
+  factory PackageShow.fromJson(Map<String, dynamic> j) => PackageShow(
+        start: j['start'] as String?,
+        items: [for (final i in (j['items'] as List? ?? const [])) Map<String, dynamic>.from(i as Map)],
+      );
+
+  final String? start;
+
+  /// {"song": 0} or {"break": true, "minutes": 20, "label": "Interval",
+  /// "music": ["Break.mp3"], "note": "…"}.
+  final List<Map<String, dynamic>> items;
+
+  /// Every interval's music, by name in the songs folder.
+  List<String> get musicFiles => [
+        for (final i in items)
+          if (i['break'] == true) ...[for (final m in (i['music'] as List? ?? const [])) '$m'],
+      ];
+
+  /// The show on this device: songs and music by their place in [songsDir].
+  ShowPlan toPlan(List<TransferSong> songs, String songsDir) => ShowPlan(start: start, items: [
+        for (final i in items)
+          if (i['break'] == true)
+            ShowItem.interval(
+              minutes: (i['minutes'] as num?)?.toInt() ?? 20,
+              label: '${i['label'] ?? 'Interval'}',
+              note: '${i['note'] ?? ''}',
+              music: [for (final m in (i['music'] as List? ?? const [])) p.join(songsDir, '$m')],
+            )
+          else if (i['song'] is int && (i['song'] as int) < songs.length)
+            ShowItem.song(p.join(songsDir, songs[i['song'] as int].play), note: songs[i['song'] as int].note),
+      ]);
+
+  Map<String, Object?> toJson() => {if (start != null) 'start': start, 'items': items};
 }
 
 /// A playlist with its songs' files.
 class PlaylistPackage {
-  PlaylistPackage({required this.name, required this.songs, this.sizes = const {}, this.sources = const {}});
+  PlaylistPackage({required this.name, required this.songs, this.sizes = const {}, this.sources = const {}, this.show});
 
   factory PlaylistPackage.fromJson(Map<String, dynamic> j) {
     if (j['eztiger_playlist'] == null) throw const FormatException('This is not an EZTiger playlist export.');
@@ -63,11 +123,16 @@ class PlaylistPackage {
       name: '${j['name'] ?? 'Playlist'}',
       songs: [for (final s in (j['songs'] as List? ?? const [])) TransferSong.fromJson(s as Map<String, dynamic>)],
       sizes: {for (final e in ((j['sizes'] as Map?) ?? const {}).entries) '${e.key}': (e.value as num).toInt()},
+      show: j['show'] is Map ? PackageShow.fromJson(Map<String, dynamic>.from(j['show'] as Map)) : null,
     );
   }
 
   final String name;
   final List<TransferSong> songs;
+
+  /// The show planned on the PC (intervals, break music, notes, start
+  /// time), or null for a plain playlist.
+  final PackageShow? show;
 
   /// Each file's size in bytes, by name.
   final Map<String, int> sizes;
@@ -78,6 +143,7 @@ class PlaylistPackage {
   /// Every file, once each, in playlist order.
   List<String> get fileNames => <String>{
         for (final s in songs) ...s.files,
+        ...?show?.musicFiles,
       }.toList();
 
   int get totalBytes => sizes.values.fold(0, (a, b) => a + b);
@@ -88,13 +154,17 @@ class PlaylistPackage {
         'exported': DateTime.now().toIso8601String(),
         'songs': [for (final s in songs) s.toJson()],
         'sizes': sizes,
+        if (show != null) 'show': show!.toJson(),
       };
 
   String toJsonText() => const JsonEncoder.withIndent(' ').convert(toJson());
 
   /// The playlist [name] and its songs from the library, ready to export.
   /// [keyShifts] are EZTiger Pro's saved keys (song path → semitones).
-  static Future<PlaylistPackage> fromPlaylist(EztigerDatabase db, Playlist pl, {Map<String, int> keyShifts = const {}}) async {
+  /// With a [plan] (the show planner), its intervals, break music and notes
+  /// go too, and each song's length ([lengthOf]) when known.
+  static Future<PlaylistPackage> fromPlaylist(EztigerDatabase db, Playlist pl,
+      {Map<String, int> keyShifts = const {}, ShowPlan? plan, Duration? Function(String path)? lengthOf}) async {
     final names = <String, String>{}; // source path → name in the package
     final taken = <String>{};
     final sizes = <String, int>{};
@@ -110,10 +180,16 @@ class PlaylistPackage {
       return s;
     }
 
+    final tracks = await db.playlists.tracks(pl.id);
+    // The plan, matched to the playlist as it is now, so its songs are the
+    // playlist's, in the playlist's order.
+    final show = plan?.matchedTo([for (final t in tracks) t.path]);
     final songs = <TransferSong>[];
-    for (final t in await db.playlists.tracks(pl.id)) {
+    final showItems = <Map<String, dynamic>>[];
+    var next = 0; // the next of [tracks]
+    TransferSong? add(Track t, String note) {
       final own = [t.path, t.cdgPath, t.lyricsPath].whereType<String>().where((f) => File(f).existsSync()).toList();
-      if (!own.contains(t.path)) continue; // the song's file is gone
+      if (!own.contains(t.path)) return null; // the song's file is gone
       final stem = names[t.path] != null
           ? p.basenameWithoutExtension(names[t.path]!)
           : nameFor(p.basenameWithoutExtension(t.path));
@@ -124,15 +200,55 @@ class PlaylistPackage {
         sources[name] = f;
         sizes[name] = File(f).lengthSync();
       }
-      songs.add(TransferSong(
+      final s = TransferSong(
         title: t.title,
         artist: t.artist,
         play: names[t.path]!,
         files: files,
         key: keyShifts[t.path] ?? 0,
-      ));
+        note: note,
+        length: lengthOf?.call(t.path),
+      );
+      songs.add(s);
+      return s;
     }
-    return PlaylistPackage(name: pl.name, songs: songs, sizes: sizes, sources: sources);
+
+    if (show == null) {
+      for (final t in tracks) {
+        add(t, '');
+      }
+      return PlaylistPackage(name: pl.name, songs: songs, sizes: sizes, sources: sources);
+    }
+    for (final i in show.items) {
+      if (!i.isBreak) {
+        final t = tracks[next++];
+        if (add(t, i.note) != null) showItems.add({'song': songs.length - 1});
+        continue;
+      }
+      // An interval: its music goes in the songs folder too.
+      final music = <String>[];
+      for (final m in i.music) {
+        if (!File(m).existsSync()) continue;
+        final name = names[m] ??= '${nameFor(p.basenameWithoutExtension(m))}${p.extension(m)}';
+        sources[name] = m;
+        sizes[name] = File(m).lengthSync();
+        music.add(name);
+      }
+      showItems.add({
+        'break': true,
+        'minutes': i.minutes,
+        'label': i.label,
+        if (music.isNotEmpty) 'music': music,
+        if (i.note.isNotEmpty) 'note': i.note,
+      });
+    }
+    return PlaylistPackage(
+      name: pl.name,
+      songs: songs,
+      sizes: sizes,
+      sources: sources,
+      show: PackageShow(start: show.start, items: showItems),
+    );
   }
 }
 

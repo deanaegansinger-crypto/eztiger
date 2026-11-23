@@ -16,6 +16,7 @@ import 'edition.dart';
 import 'licence.dart';
 import 'media_kit_backend.dart';
 import 'player.dart';
+import 'preview.dart';
 import 'second_screen.dart';
 import 'ui/android_folders.dart';
 import 'ui/app.dart';
@@ -72,6 +73,8 @@ Future<void> main(List<String> args) async {
   // Pro: "Remove vocals (AI)", when its tools came with the installer.
   if (builtAsPro) state.vocalRemover = await VocalRemover.forThisPc();
   await state.init();
+  // Pro: the show planner's preview player, through an output of its own.
+  if (builtAsPro) state.attachPreview(MediaKitPreview((await getTemporaryDirectory()).path));
   licence?.addListener(state.editionChanged);
 
   runApp(
