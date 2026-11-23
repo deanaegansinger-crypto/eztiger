@@ -13,7 +13,9 @@ import 'local_address.dart';
 import 'platform.dart';
 import 'player.dart';
 import 'playlist_transfer.dart';
+import 'preview.dart';
 import 'request_page.dart';
+import 'show_plan.dart';
 import 'song_requests.dart';
 import 'sync.dart';
 import 'vocal_remover.dart';
@@ -35,6 +37,13 @@ class AppState extends ChangeNotifier {
         if (identical(d, engine)) _onTrackFinished();
       };
       void onChange() {
+        // Each song's length, heard as it plays, for the show planner.
+        final now = d.current;
+        // (Once it has played a little, so the length is this song's.)
+        if (now != null && d.position > const Duration(seconds: 2) && d.duration > Duration.zero &&
+            songLengths[now.path] != d.duration) {
+          rememberLength(now.path, d.duration);
+        }
         if (!identical(d, engine)) return;
         _watchForCrossfade();
         _rememberLoaded();
@@ -392,6 +401,7 @@ class AppState extends ChangeNotifier {
     await _loadSettings();
     await _loadKeys();
     await _loadVocalRemoved();
+    await _loadShows();
     _applyFadeShape();
     await _reloadFolders();
     await _reloadQueue();
@@ -440,6 +450,7 @@ class AppState extends ChangeNotifier {
       requestsLink = m['requestsLink'] as String? ?? requestsLink;
       onlineRequestsLink = m['onlineRequestsLink'] as String? ?? onlineRequestsLink;
       transferHost = m['transferHost'] as String? ?? transferHost;
+      previewDevice = m['previewDevice'] as String? ?? previewDevice;
       libraryCollapsed = m['libraryCollapsed'] as bool? ?? libraryCollapsed;
       lockEnabled = m['lockEnabled'] as bool? ?? lockEnabled;
       doubleClickToQueue = m['doubleClickToQueue'] as bool? ?? doubleClickToQueue;
@@ -504,6 +515,7 @@ class AppState extends ChangeNotifier {
       'requestsLink': requestsLink,
       'onlineRequestsLink': onlineRequestsLink,
       'transferHost': transferHost,
+      'previewDevice': previewDevice,
       'libraryCollapsed': libraryCollapsed,
       'lockEnabled': lockEnabled,
       'doubleClickToQueue': doubleClickToQueue,
@@ -610,6 +622,19 @@ class AppState extends ChangeNotifier {
     } catch (_) {
       keyShifts = {};
     }
+  }
+
+  /// The show planner: sets [path]'s key (−3 to +3), as if changed on a
+  /// deck, so it plays (and previews, and goes to the tablet) in that key.
+  void setKeyForPath(String path, int semitones) {
+    final k = semitones.clamp(KaraokeEngine.minKey, KaraokeEngine.maxKey);
+    if (k == 0) {
+      keyShifts.remove(path);
+    } else {
+      keyShifts[path] = k;
+    }
+    unawaited(db.setMeta('key_shifts', jsonEncode(keyShifts)).catchError((_) {}));
+    notifyListeners();
   }
 
   void _rememberKey(Track t, int semitones) {
@@ -1208,10 +1233,26 @@ class AppState extends ChangeNotifier {
     if (keys > 0) await db.setMeta('key_shifts', jsonEncode(keyShifts));
     final name = r.plan.name;
     for (final old in await db.playlists.all()) {
-      if (old.name.toLowerCase() == name.toLowerCase()) await db.playlists.delete(old.id);
+      if (old.name.toLowerCase() == name.toLowerCase()) {
+        await db.playlists.delete(old.id);
+        showPlans.remove(old.id);
+      }
     }
     final id = await db.playlists.create(name);
     await db.playlists.addAll(id, ids);
+    // A planned show: its intervals, break music and notes come too, and
+    // the songs' lengths, for the running order's times.
+    final show = pkg.show;
+    final songsDir = p.join(folder, songsFolder);
+    for (final s in pkg.songs) {
+      if (s.length != null) songLengths[p.join(songsDir, s.play)] = s.length!;
+    }
+    if (show != null) {
+      final found = [for (final t in await db.playlists.tracks(id)) t.path];
+      showPlans[id] = show.toPlan(pkg.songs, songsDir).matchedTo(found);
+    }
+    await _saveShows();
+    _saveLengths();
     // A playlist file for other players (VLC, Poweramp…), in running order.
     // Never a reason for the transfer to fail.
     try {
@@ -1225,6 +1266,196 @@ class AppState extends ChangeNotifier {
         '${missing.isEmpty ? '' : ' (${missing.length} could not be read: ${missing.take(3).join(', ')})'}';
     notifyListeners();
     return status;
+  }
+
+  // ------------------------------------------------------- show planner
+
+  /// The show planner's plans, by playlist id (see [ShowPlan]): intervals,
+  /// break music, notes and a start time around a playlist's songs.
+  Map<int, ShowPlan> showPlans = {};
+
+  /// Songs' lengths as heard when previewed or played (path → length), so
+  /// the planner's times are right; others are worked out from the files.
+  final Map<String, Duration> songLengths = {};
+  final Map<String, Duration?> _estimated = {};
+
+  /// From the plans, for the lists: each song's note, and the interval each
+  /// piece of break music belongs to ("Interval · 20 min").
+  Map<String, String> showNotes = {}, intervalMusic = {};
+
+  static String _pathKey(String path) => path.replaceAll('\\', '/').toLowerCase();
+
+  /// The planner's note on [t], if any.
+  String? noteFor(Track t) => showNotes[_pathKey(t.path)];
+
+  /// The interval [t] is break music for, if it is.
+  String? intervalOf(Track t) => intervalMusic[_pathKey(t.path)];
+
+  Future<void> _loadShows() async {
+    try {
+      final m = jsonDecode(await db.getMeta('show_plans') ?? '{}') as Map<String, dynamic>;
+      showPlans = {
+        for (final e in m.entries)
+          if (int.tryParse(e.key) != null && e.value is Map)
+            int.parse(e.key): ShowPlan.fromJson(Map<String, dynamic>.from(e.value as Map)),
+      };
+    } catch (_) {
+      showPlans = {};
+    }
+    try {
+      final m = jsonDecode(await db.getMeta('song_lengths') ?? '{}') as Map<String, dynamic>;
+      for (final e in m.entries) {
+        if (e.value is num) songLengths[e.key] = Duration(milliseconds: (e.value as num).toInt());
+      }
+    } catch (_) {}
+    _indexShows();
+  }
+
+  void _indexShows() {
+    final notes = <String, String>{}, music = <String, String>{};
+    for (final plan in showPlans.values) {
+      for (final i in plan.items) {
+        if (i.isBreak) {
+          for (final m in i.music) {
+            music[_pathKey(m)] = '${i.label} · ${i.minutes} min';
+          }
+        } else if (i.note.isNotEmpty) {
+          notes[_pathKey(i.path!)] = i.note;
+        }
+      }
+    }
+    showNotes = notes;
+    intervalMusic = music;
+  }
+
+  Future<void> _saveShows() async {
+    _indexShows();
+    await db.setMeta('show_plans', jsonEncode({for (final e in showPlans.entries) '${e.key}': e.value.toJson()}));
+  }
+
+  void _saveLengths() {
+    final json = jsonEncode({for (final e in songLengths.entries) e.key: e.value.inMilliseconds});
+    unawaited(db.setMeta('song_lengths', json).catchError((_) {}));
+  }
+
+  /// A song's length: as heard, or worked out from its files, or null.
+  Duration? lengthOfPath(String path) => songLengths[path] ?? _estimated.putIfAbsent(path, () => estimateLength(path));
+
+  /// Keeps a song's length as heard, for the planner's times.
+  void rememberLength(String path, Duration d) {
+    if (d <= Duration.zero || songLengths[path] == d) return;
+    songLengths[path] = d;
+    _saveLengths();
+  }
+
+  /// The show plan for playlist [id], matched to its songs as they are now.
+  /// A plain playlist gets a plan with just its songs.
+  Future<ShowPlan> planFor(int id) async {
+    final tracks = await db.playlists.tracks(id);
+    return (showPlans[id] ?? ShowPlan()).matchedTo([for (final t in tracks) t.path]);
+  }
+
+  /// Saves the planner's work: the playlist becomes [tracks] (one for each
+  /// song in [plan], in order) and the plan is kept with it.
+  Future<void> savePlan(int id, ShowPlan plan, List<Track> tracks) async {
+    final old = await db.playlists.tracks(id);
+    if (old.isNotEmpty) await db.playlists.removePositions(id, List.generate(old.length, (i) => i));
+    await db.playlists.addAll(id, tracks.map((t) => t.id));
+    if (plan.hasExtras) {
+      showPlans[id] = plan.copy();
+    } else {
+      showPlans.remove(id);
+    }
+    await _saveShows();
+    await _reloadPlaylists();
+    if (view == ResultsView.playlist && selectedPlaylistId == id) await refreshResults();
+  }
+
+  /// [pl] and its songs, ready for the tablet: with its keys, and its show
+  /// plan (intervals, break music, notes, times) when it has one.
+  Future<PlaylistPackage> packageFor(Playlist pl) =>
+      PlaylistPackage.fromPlaylist(db, pl, keyShifts: keyShifts, plan: showPlans[pl.id], lengthOf: lengthOfPath);
+
+  /// A playlist's songs for the queue. With a planned show, each interval's
+  /// break music comes in at its place (the music that's in the library).
+  Future<List<Track>> showTracks(int id) async {
+    final tracks = await db.playlists.tracks(id);
+    final plan = showPlans[id];
+    if (plan == null || plan.musicPaths.isEmpty) return tracks;
+    final out = <Track>[];
+    var next = 0;
+    for (final i in plan.matchedTo([for (final t in tracks) t.path]).items) {
+      if (!i.isBreak) {
+        out.add(tracks[next++]);
+        continue;
+      }
+      for (final m in i.music) {
+        final t = await db.tracks.byPath(m);
+        if (t != null) out.add(t);
+      }
+    }
+    return out;
+  }
+
+  // The preview player (Pro on the PC): a song heard through the output
+  // picked for it (headphones), apart from the decks.
+  PreviewOutput? preview;
+
+  /// The file being previewed, or null.
+  String? previewing;
+
+  /// The sound output previews play through ("auto": Windows' choice).
+  String previewDevice = 'auto';
+  bool _previewHeard = false;
+
+  /// Plugs in the preview player (Windows, at start-up).
+  void attachPreview(PreviewOutput out) {
+    preview = out;
+    out.playing.listen((on) {
+      if (on) {
+        _previewHeard = true;
+      } else if (_previewHeard && previewing != null) {
+        previewing = null; // it finished
+        notifyListeners();
+      }
+    });
+    out.duration.listen((d) {
+      final path = previewing;
+      if (path != null) rememberLength(path, d);
+    });
+    unawaited(out.setDevice(previewDevice).catchError((_) {}));
+  }
+
+  /// Plays [path] in the preview player, in its planned key, or stops it if
+  /// it's the one playing.
+  Future<void> togglePreview(String path) async {
+    final out = preview;
+    if (out == null) return;
+    if (previewing == path) return stopPreview();
+    previewing = path;
+    _previewHeard = false;
+    notifyListeners();
+    try {
+      await out.play(path, key: isPro ? keyShifts[path] ?? 0 : 0);
+    } catch (e) {
+      previewing = null;
+      status = "Couldn't preview it: $e";
+      notifyListeners();
+    }
+  }
+
+  Future<void> stopPreview() async {
+    previewing = null;
+    notifyListeners();
+    await preview?.stop();
+  }
+
+  Future<List<PreviewDevice>> previewDevices() async => await preview?.devices() ?? const [];
+
+  Future<void> setPreviewDevice(String id) async {
+    previewDevice = id;
+    notifyListeners();
+    await preview?.setDevice(id);
   }
 
   // ------------------------------------------------- remove vocals (AI)
@@ -1973,6 +2204,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> deletePlaylist(Playlist p) async {
     await db.playlists.delete(p.id);
+    if (showPlans.remove(p.id) != null) await _saveShows();
     if (selectedPlaylistId == p.id) {
       selectedPlaylistId = null;
       view = ResultsView.search;
@@ -2011,7 +2243,7 @@ class AppState extends ChangeNotifier {
     status = idle
         ? 'Added "${p.name}" to $theQueue: check the order, then double-click the first song to start'
         : 'Added "${p.name}" to $theQueue';
-    await enqueueAll(await db.playlists.tracks(playlistId));
+    await enqueueAll(await showTracks(playlistId));
     queuePlaylistId = playlistId;
     notifyListeners();
   }
@@ -2021,7 +2253,12 @@ class AppState extends ChangeNotifier {
   Future<void> replacePlaylistWithQueue(int playlistId) async {
     final old = await db.playlists.tracks(playlistId);
     if (old.isNotEmpty) await db.playlists.removePositions(playlistId, List.generate(old.length, (i) => i));
-    await db.playlists.addAll(playlistId, queue.map((e) => e.track.id));
+    // A planned show's break music stays in its intervals, not the songs.
+    final music = {for (final m in showPlans[playlistId]?.musicPaths ?? const <String>[]) _pathKey(m)};
+    await db.playlists.addAll(playlistId, [
+      for (final e in queue)
+        if (!music.contains(_pathKey(e.track.path))) e.track.id,
+    ]);
     final p = playlists.where((p) => p.id == playlistId).firstOrNull;
     status = 'Saved $theQueue to "${p?.name ?? 'the playlist'}"';
     await _reloadPlaylists();

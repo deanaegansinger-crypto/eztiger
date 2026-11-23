@@ -30,6 +30,7 @@ import '../song_requests.dart';
 import 'songbook_dialog.dart';
 import 'lyrics_delay.dart';
 import 'transfer_dialogs.dart';
+import 'show_planner.dart';
 
 /// The left column of the mockup: player, settings, library, search and
 /// results.
@@ -1423,9 +1424,17 @@ class PlaylistsPanel extends StatelessWidget {
                   ),
                   PopupMenuItem(value: 'queue', child: Text('Save $theQueue into this playlist')),
                   PopupMenuItem(value: 'toqueue', child: Text('➕ Add the whole playlist to $theQueue')),
+                  // A show planned on the PC: its running order, with times.
+                  if (s.showPlans.containsKey(p.id))
+                    const PopupMenuItem(key: Key('playlist-running-order'), value: 'order', child: Text('🗓 Running order')),
                   // Pro on the PC: the playlist and its songs to the tablet.
                   if (isPro && !touchUi) ...[
                     const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      key: Key('playlist-plan'),
+                      value: 'plan',
+                      child: Text('🗓 Plan this show (sets, breaks, notes, times)…'),
+                    ),
                     const PopupMenuItem(
                       key: Key('playlist-export'),
                       value: 'export',
@@ -1448,7 +1457,11 @@ class PlaylistsPanel extends StatelessWidget {
                   case 'queue':
                     await s.saveQueueTo(p.id);
                   case 'toqueue':
-                    await s.enqueueAll(await s.db.playlists.tracks(p.id));
+                    await s.enqueueAll(await s.showTracks(p.id));
+                  case 'order':
+                    if (context.mounted) await showRunningOrder(context, p);
+                  case 'plan':
+                    if (context.mounted) await showShowPlanner(context, p);
                   case 'export':
                     if (context.mounted) await showExportPlaylist(context, p);
                   case 'send':
