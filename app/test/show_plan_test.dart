@@ -329,8 +329,7 @@ void main() {
 
     // An interval after the first song.
     await tester.tap(find.byKey(const Key('planner-row-0')));
-    // (A song row waits to see if it's a double-click, for its note.)
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('planner-add-interval')));
     await settle();
     expect(s.showPlans[id]!.items[1].isBreak, isTrue);

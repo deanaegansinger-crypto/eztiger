@@ -584,8 +584,9 @@ class _PlannerState extends State<_Planner> {
             : (picked ? EzColors.brass.withValues(alpha: 0.18) : Colors.transparent),
         child: InkWell(
           key: Key('planner-row-$i'),
+          // (No double-click here: it would hold up every button in the
+          // row while it waited to see. The 📝 button opens the note.)
           onTap: pick,
-          onDoubleTap: () => _editNote(item),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 2),
             child: Row(children: [
