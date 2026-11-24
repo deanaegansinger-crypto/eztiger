@@ -13,6 +13,7 @@ import 'package:screen_retriever/screen_retriever.dart' as sr;
 import 'package:window_manager/window_manager.dart';
 
 import 'player.dart';
+import 'promos.dart';
 import 'theme.dart';
 import 'edition.dart';
 import 'ui/logo.dart';
@@ -158,6 +159,8 @@ class SecondScreen extends ChangeNotifier {
           'ms': e.position.inMilliseconds,
           'lyricsMs': e.lyricsPosition.inMilliseconds,
           'delayMs': delay,
+          // where the music ends, so the output window knows a song has finished (promos may show)
+          'endMs': e.audioEnd.inMilliseconds,
         });
         _sentPlaying = e.playing;
         _sentDelay = delay;
@@ -214,6 +217,10 @@ Future<void> runOutputWindow(int port) async {
   } catch (_) {}
 
   final out = _OutputModel()..fullScreen = fullScreen;
+  // Promos between singers: the venue's offers take turns with the "up next" screen.
+  out.promos
+    ..start()
+    ..run(() => out.betweenActs);
   runApp(
     MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -246,6 +253,17 @@ class _OutputModel extends ChangeNotifier {
 
   /// The main window's player is playing (Pro shows the logo otherwise).
   bool playing = false;
+
+  /// Where the main window's song is, from its last clock message.
+  int _atMs = 0;
+
+  /// Promo slides for between singers.
+  final PromoPlayer promos = PromoPlayer();
+
+  /// Between singers: nothing playing, and the song (if any) not yet started or
+  /// at its end, so a pause in the middle of a song doesn't bring up promos.
+  bool get betweenActs => !playing && (title == null || _atMs < 1500 || _ended);
+  bool _ended = false;
 
   /// The main window is EZTiger Pro (it says so with each song).
   bool pro = isPro;
@@ -301,6 +319,8 @@ class _OutputModel extends ChangeNotifier {
         final a = Map<String, dynamic>.from(call.arguments as Map);
         title = a['title'] as String?;
         artist = a['artist'] as String?;
+        _ended = false;
+        _atMs = 0;
         singer = a['singer'] as String?;
         pro = a['pro'] as bool? ?? pro;
         final cdgFile = a['cdg'] as String?;
@@ -328,6 +348,11 @@ class _OutputModel extends ChangeNotifier {
         final a = Map<String, dynamic>.from(call.arguments as Map);
         final playing = a['playing'] as bool;
         _lyricsMs = a['lyricsMs'] as int? ?? a['ms'] as int;
+        final at = a['ms'] as int;
+        // Stopped at (or within a couple of seconds of) the end of the music: the song is over, promos may show.
+        final endMs = a['endMs'] as int? ?? 0;
+        _ended = !playing && endMs > 0 && at >= endMs - 2500;
+        _atMs = at;
         _sinceClock
           ..reset()
           ..start();
@@ -382,8 +407,23 @@ class _OutputView extends StatelessWidget {
         body: GestureDetector(
           onDoubleTap: () => model.setFullScreen(!model.fullScreen),
           child: ListenableBuilder(
-            listenable: model,
+            listenable: Listenable.merge([model, model.promos]),
             builder: (context, _) {
+              final promo = model.promos.showing;
+              return AnimatedSwitcher(
+                duration: const Duration(milliseconds: 800),
+                child: promo != null
+                    ? PromoSlideView(key: ValueKey('promo-${promo.id}'), slide: promo, folder: model.promos.set.folder)
+                    : KeyedSubtree(key: const ValueKey('show'), child: _show(model)),
+              );
+            },
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _show(_OutputModel model) {
               final v = model.video;
               final idle = model.pro && !model.playing;
               if (v != null && !idle) return Video(controller: v, controls: NoVideoControls, fill: Colors.black);
@@ -427,10 +467,5 @@ class _OutputView extends StatelessWidget {
                   ],
                 ),
               );
-            },
-          ),
-        ),
-      ),
-    ),
-  );
+  }
 }
