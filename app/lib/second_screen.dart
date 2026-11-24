@@ -348,11 +348,11 @@ class _OutputModel extends ChangeNotifier {
         final a = Map<String, dynamic>.from(call.arguments as Map);
         final playing = a['playing'] as bool;
         _lyricsMs = a['lyricsMs'] as int? ?? a['ms'] as int;
-        final at = a['ms'] as int;
+        final atMs = a['ms'] as int;
         // Stopped at (or within a couple of seconds of) the end of the music: the song is over, promos may show.
         final endMs = a['endMs'] as int? ?? 0;
-        _ended = !playing && endMs > 0 && at >= endMs - 2500;
-        _atMs = at;
+        _ended = !playing && endMs > 0 && atMs >= endMs - 2500;
+        _atMs = atMs;
         _sinceClock
           ..reset()
           ..start();
