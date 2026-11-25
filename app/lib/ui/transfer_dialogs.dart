@@ -323,7 +323,7 @@ Future<void> receivePlaylist(BuildContext context) async {
               decoration: const InputDecoration(labelText: 'Code'),
             ),
             const SizedBox(height: 14),
-            const _SaveToRow(),
+            _SaveToRow(s),
           ],
         ),
       ),
@@ -354,7 +354,8 @@ Future<void> receivePlaylist(BuildContext context) async {
 /// a USB stick), with Change… to pick another folder and Usual place to go
 /// back. The choice is remembered for next time.
 class _SaveToRow extends StatelessWidget {
-  const _SaveToRow();
+  const _SaveToRow(this.s);
+  final AppState s;
 
   Future<void> _change(BuildContext context, AppState s) async {
     final chosen = Platform.isAndroid
@@ -374,8 +375,9 @@ class _SaveToRow extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final s = AppScope.of(context);
+  Widget build(BuildContext context) => ListenableBuilder(listenable: s, builder: (context, _) => _row(context));
+
+  Widget _row(BuildContext context) {
     return Row(
       key: const Key('receive-save-to'),
       crossAxisAlignment: CrossAxisAlignment.start,
