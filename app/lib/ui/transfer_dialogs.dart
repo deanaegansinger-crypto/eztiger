@@ -322,6 +322,8 @@ Future<void> receivePlaylist(BuildContext context) async {
               scrollPadding: const EdgeInsets.only(bottom: 120),
               decoration: const InputDecoration(labelText: 'Code'),
             ),
+            const SizedBox(height: 14),
+            const _SaveToRow(),
           ],
         ),
       ),
@@ -346,6 +348,66 @@ Future<void> receivePlaylist(BuildContext context) async {
   );
   // Receive another: back to the address and code, with the address kept.
   if (again == true && context.mounted) await receivePlaylist(context);
+}
+
+/// "Save the songs to": where received songs go (the tablet, an SD card or
+/// a USB stick), with Change… to pick another folder and Usual place to go
+/// back. The choice is remembered for next time.
+class _SaveToRow extends StatelessWidget {
+  const _SaveToRow();
+
+  Future<void> _change(BuildContext context, AppState s) async {
+    final chosen = Platform.isAndroid
+        ? await pickAndroidFolder(context)
+        : await FilePicker.getDirectoryPath(dialogTitle: 'Where should the songs go?');
+    if (chosen == null || !context.mounted) return;
+    if (!s.setImportsFolder(chosen)) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text(
+            "EZTiger can't save songs there. Android keeps some SD cards read-only for apps: "
+            'pick a folder on the tablet, or set the SD card up as tablet storage.',
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    return Row(
+      key: const Key('receive-save-to'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2, right: 10),
+          child: Icon(s.importsRoot.startsWith('/storage/emulated') ? Icons.smartphone : Icons.sd_card, color: EzColors.brass, size: 20),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Save the songs to', style: TextStyle(fontSize: 12)),
+              Text(s.importsRoot, key: const Key('receive-folder'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              Wrap(
+                spacing: 4,
+                children: [
+                  TextButton(
+                    key: const Key('receive-change-folder'),
+                    onPressed: () => _change(context, s),
+                    child: const Text('Change…'),
+                  ),
+                  if (s.importsFolder.isNotEmpty)
+                    TextButton(onPressed: () => s.setImportsFolder(''), child: const Text('Usual place')),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// Android: the songs, their CDGs and the half-copied ".part" files go in

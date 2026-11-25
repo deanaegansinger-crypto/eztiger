@@ -113,6 +113,31 @@ void main() {
     expect(tablet.playlists, hasLength(1));
   });
 
+  test('the songs go to the folder the host chose (an SD card), remembered, and back to the usual place', () async {
+    tablet.importsRootOverride = null;
+    final card = Directory(p.join(tabletDir.path, 'SD card', 'Karaoke'))..createSync(recursive: true);
+    expect(tablet.setImportsFolder(card.path), isTrue);
+    expect(tablet.importsRoot, p.join(card.path, 'EZTiger imports'));
+    // Picking the EZTiger imports folder itself doesn't nest another inside.
+    expect(tablet.setImportsFolder(p.join(card.path, 'EZTiger imports')), isTrue);
+    expect(tablet.importsRoot, p.join(card.path, 'EZTiger imports'));
+
+    final r = await importPackage(await exportToFolder(pkg, out.path), update);
+    expect(r.plan.folder, p.join(card.path, 'EZTiger imports', 'Friday Late'));
+    await tablet.addImportedPlaylist(r);
+    expect(await tabletPlaylist(), expected);
+    expect(File(p.join(card.path, 'EZTiger playlists', 'Friday Late.m3u')).existsSync(), isTrue);
+
+    // A place it can't write to changes nothing.
+    final blocked = File(p.join(tabletDir.path, 'a file'))..writeAsStringSync('x');
+    expect(tablet.setImportsFolder(blocked.path), isFalse);
+    expect(tablet.importsRoot, p.join(card.path, 'EZTiger imports'));
+
+    expect(tablet.setImportsFolder(''), isTrue);
+    expect(tablet.importsFolder, '');
+    expect(tablet.importsRoot, tablet.defaultImportsRoot);
+  });
+
   test('update: only new or changed songs are copied, and dropped ones go', () async {
     await tablet.addImportedPlaylist(await importPackage(await exportToFolder(pkg, out.path), update));
 

@@ -287,7 +287,7 @@ const _singer = <(String, List<String>)>[
     '2. Bring a playlist from the PC',
     [
       'On the PC, in EZTiger Pro: right-click the playlist → 📶 Send to the tablet. It shows the PC\'s address and a 4-figure code.',
-      'On the tablet or phone, on the same Wi-Fi: ☰ Menu → Receive from PC…, type the address (it\'s remembered) and the code, then Receive. The keyboard\'s Next goes to the code; its ✓ starts.',
+      'On the tablet or phone, on the same Wi-Fi: ☰ Menu → Receive from PC…, type the address (it\'s remembered) and the code, then Receive. The keyboard\'s Next goes to the code; its ✓ starts. "Save the songs to" shows where they go: Change… picks another folder, on the tablet or an SD card (they go in an EZTiger imports folder inside it), and Usual place goes back. It\'s remembered for next time.',
       'No Wi-Fi? On the PC choose 📤 Export to USB, SD card or Dropbox instead, then on the tablet ☰ Menu → Import playlist… and pick it.',
       'The songs, with their CDG lyrics, are copied into the EZTiger imports folder, and the playlist arrives with its running order and keys. "Transfer successful" shows when it\'s in, with Receive another (or Import another) for the next one.',
       'Sent the same playlist again? Choose Update to bring it in line with the PC: only new or changed songs are copied, and songs taken off the list are removed. Or Keep both: the new one comes in beside the old, with the date on, such as ★ Friday Night (16 Nov).',
@@ -520,7 +520,7 @@ const _tablet = (
     'Double-tap a song to load it into the player. Press and hold a song, then move your finger to drag it onto the queue, the player or a playlist.',
     'Press and hold and let go without moving for the menu (what right-click does on Windows): add to queue, set the singer, playlists and more.',
     'Double-tap the karaoke output panel for full screen lyrics; double-tap again or press Back to come out of it. The screen stays on while EZtiger is open.',
-    'Playlists from the PC (☰ Menu): Import playlist… from a USB stick, SD card or Dropbox, or Receive from PC… over the Wi-Fi. When it\'s in, "Transfer successful" shows, with Receive another (or Import another) for the next one.',
+    'Playlists from the PC (☰ Menu): Import playlist… from a USB stick, SD card or Dropbox, or Receive from PC… over the Wi-Fi ("Save the songs to" → Change… picks the folder, an SD card included). When it\'s in, "Transfer successful" shows, with Receive another (or Import another) for the next one.',
     'Other music players: the songs come into the EZTiger imports folder, and each playlist also gets a playlist file (such as Friday Late.m3u) in the EZTiger playlists folder beside it. Open that in VLC, Poweramp or another player to play the songs in order. Other players play the sound of a CDG song without its lyrics, and in its own key.',
     'Portrait Stage view (☰ Menu → Stage tablet → Portrait): in the Stage view the tablet turns upright. The decks sit side by side at the top with the next songs scrolling under them, and the lyrics fill the bottom half. The ⟳ button in the Stage view switches between Portrait and Landscape.',
     'Running out: when Up next is down to the last 2 songs, the Stage view says so: orange at 2 songs left, red at 1 and on the last song, so you can load more in time.',

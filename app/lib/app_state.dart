@@ -440,6 +440,7 @@ class AppState extends ChangeNotifier {
       requestsLink = m['requestsLink'] as String? ?? requestsLink;
       onlineRequestsLink = m['onlineRequestsLink'] as String? ?? onlineRequestsLink;
       transferHost = m['transferHost'] as String? ?? transferHost;
+      importsFolder = m['importsFolder'] as String? ?? importsFolder;
       libraryCollapsed = m['libraryCollapsed'] as bool? ?? libraryCollapsed;
       lockEnabled = m['lockEnabled'] as bool? ?? lockEnabled;
       doubleClickToQueue = m['doubleClickToQueue'] as bool? ?? doubleClickToQueue;
@@ -504,6 +505,7 @@ class AppState extends ChangeNotifier {
       'requestsLink': requestsLink,
       'onlineRequestsLink': onlineRequestsLink,
       'transferHost': transferHost,
+      'importsFolder': importsFolder,
       'libraryCollapsed': libraryCollapsed,
       'lockEnabled': lockEnabled,
       'doubleClickToQueue': doubleClickToQueue,
@@ -1144,6 +1146,40 @@ class AppState extends ChangeNotifier {
   String? importsRootOverride;
   String get importsRoot {
     if (importsRootOverride != null) return importsRootOverride!;
+    if (importsFolder.isNotEmpty) return importsFolder;
+    return defaultImportsRoot;
+  }
+
+  /// Where the host chose for received songs ("" for the usual place):
+  /// always an "EZTiger imports" folder, inside the folder they picked.
+  String importsFolder = '';
+
+  /// Received songs go in an "EZTiger imports" folder inside [chosen] (on
+  /// the tablet, an SD card or a USB stick); "" goes back to the usual
+  /// place. Returns false, changing nothing, if the songs can't be saved
+  /// there (Android keeps some SD cards read-only).
+  bool setImportsFolder(String chosen) {
+    var folder = chosen.trim();
+    if (folder.isNotEmpty && p.basename(folder).toLowerCase() != 'eztiger imports') {
+      folder = p.join(folder, 'EZTiger imports');
+    }
+    if (folder.isNotEmpty) {
+      try {
+        Directory(folder).createSync(recursive: true);
+        final probe = File(p.join(folder, '.eztiger-write-test'));
+        probe.writeAsStringSync('ok');
+        probe.deleteSync();
+      } catch (_) {
+        return false;
+      }
+    }
+    importsFolder = folder;
+    notifyListeners();
+    return true;
+  }
+
+  /// The usual place for received songs: beside the library, or Music.
+  String get defaultImportsRoot {
     final first = roots.firstOrNull?.path;
     if (first != null) {
       final volume = RegExp(r'^(/storage/[^/]+(?:/0)?)').firstMatch(first)?.group(1);
