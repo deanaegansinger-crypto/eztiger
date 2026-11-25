@@ -153,6 +153,44 @@ class _Library {
     }
     final name = (song['file'] as String?)?.toLowerCase();
     final same = name == null ? null : byName[name];
-    return same == null || same.isEmpty ? null : same.first;
+    if (same != null && same.isNotEmpty) return same.first;
+    // Last: the same title and artist (the tablet may have renamed the file).
+    final title = _plain(song['title'] as String?);
+    if (title.isEmpty) return null;
+    final artist = _plain(song['artist'] as String?);
+    return byTitle['$title|$artist'];
   }
+
+  late final byTitle = <String, Track>{
+    for (final t in tracks.reversed) '${_plain(t.title)}|${_plain(t.artist)}': t,
+  };
+}
+
+/// Lower case, letters and digits only: "Livin' On A Prayer" = "livin on a prayer".
+String _plain(String? s) => (s ?? '').toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+
+/// A playlist sent back from the tablet (only the list, not the files): the
+/// songs found in this library, in order, with their keys.
+class BackMatch {
+  final ids = <int>[];
+  final keys = <String, int>{}; // song path → semitones
+  final missing = <String>[];
+}
+
+/// Finds the songs of a playlist sent back from the tablet in this library:
+/// by the file name, then by the title and artist.
+Future<BackMatch> matchBack(EztigerDatabase db, List<Map<String, dynamic>> songs) async {
+  final lib = await _Library.load(db);
+  final m = BackMatch();
+  for (final song in songs) {
+    final t = lib.find(song);
+    if (t == null) {
+      m.missing.add(LibrarySync._label(song));
+      continue;
+    }
+    m.ids.add(t.id);
+    final k = (song['key'] as num?)?.toInt() ?? 0;
+    if (k != 0) m.keys[t.path] = k;
+  }
+  return m;
 }

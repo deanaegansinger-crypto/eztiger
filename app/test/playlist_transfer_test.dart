@@ -138,6 +138,45 @@ void main() {
     expect(tablet.importsRoot, tablet.defaultImportsRoot);
   });
 
+  test('sent back from the tablet: the PC takes the new running order and keys, songs found by file name or title', () async {
+    // On the tablet: the playlist arrives, then gets reordered with a new key.
+    await tablet.addImportedPlaylist(await importPackage(await exportToFolder(pkg, out.path), update));
+    final onTablet = await tabDb.playlists.tracks(tablet.playlists.single.id);
+    final reordered = [onTablet[2], onTablet[0], onTablet[1]]; // Bohemian, Prayer, Waterloo
+    await tablet.deletePlaylist(tablet.playlists.single);
+    expect(await tablet.createPlaylist('Friday / Late', tracks: reordered), isNotNull);
+    tablet.keyShifts[onTablet[0].path] = 1; // Prayer up one
+    final list = await playlistBack(tabDb, tablet.playlists.single, tablet.keyShifts);
+    // A song renamed on the tablet is found by its title and artist, and one
+    // the PC hasn't got is listed.
+    final songs = (list['songs']! as List).cast<Map<String, Object?>>();
+    songs[0] = {...songs[0], 'file': 'renamed on the tablet.mp4'};
+    songs.add({'file': 'Nobody - Nothing.mp3', 'title': 'Nothing', 'artist': 'Nobody'});
+
+    final catcher = PlaylistCatcher(port: 0);
+    final got = <Map<String, dynamic>>[];
+    catcher.onReceived = got.add;
+    await catcher.start();
+    addTearDown(catcher.stop);
+    await expectLater(sendPlaylistBack('127.0.0.1', '0000', list, port: catcher.boundPort),
+        throwsA(isA<TransferException>().having((e) => e.message, 'message', contains('code is wrong'))));
+    await sendPlaylistBack('127.0.0.1', catcher.code, list, port: catcher.boundPort);
+    expect(got, hasLength(1));
+
+    final line = await pc.takePlaylistBack(got.single);
+    expect(line, contains('updated from the tablet: 3 songs'));
+    expect(line, contains('Nothing – Nobody'));
+    final pl = pc.playlists.singleWhere((x) => x.name == 'Friday / Late');
+    final order = await pcDb.playlists.tracks(pl.id);
+    expect(order.map((t) => t.title), ['Bohemian Rhapsody', 'Livin On A Prayer', 'Waterloo']);
+    expect(pc.keyShifts[order[1].path], 1);
+    expect(pc.keyShifts[order[2].path], -2);
+
+    // Keep both: beside it, under a dated name.
+    await pc.takePlaylistBack(got.single, keepBoth: true);
+    expect(pc.playlists.where((x) => x.name.startsWith('Friday / Late')), hasLength(2));
+  });
+
   test('update: only new or changed songs are copied, and dropped ones go', () async {
     await tablet.addImportedPlaylist(await importPackage(await exportToFolder(pkg, out.path), update));
 

@@ -408,6 +408,17 @@ class _MainMenu extends StatelessWidget {
               child: Row(children: [Icon(Icons.download, size: 18), SizedBox(width: 10), Text('Load sync file…')]),
             ),
           ],
+          // The PC: a playlist reordered on the tablet, sent back.
+          if (!touchUi && isPro)
+            const PopupMenuItem(
+              key: Key('receive-from-tablet'),
+              value: 'receive-from-tablet',
+              child: Row(children: [
+                Icon(Icons.move_to_inbox_outlined, size: 18),
+                SizedBox(width: 10),
+                Flexible(child: Text('📥 Receive from the tablet…')),
+              ]),
+            ),
           // The tablet: a playlist and its songs, exported by EZTiger Pro.
           if (touchUi) ...[
             const PopupMenuItem(
@@ -566,6 +577,8 @@ class _MainMenu extends StatelessWidget {
           importPlaylist(context);
         } else if (c == 'receive-playlist') {
           receivePlaylist(context);
+        } else if (c == 'receive-from-tablet') {
+          showReceiveFromTablet(context);
         } else if (c == 'licence') {
           showLicenceDialog(context, licence!);
         } else if (c == 'lock-enabled') {
@@ -1438,6 +1451,16 @@ class PlaylistsPanel extends StatelessWidget {
                     ),
                     const PopupMenuDivider(),
                   ],
+                  // Pro on the tablet: the running order and keys back to the PC.
+                  if (isPro && touchUi) ...[
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      key: Key('playlist-send-back'),
+                      value: 'send-back',
+                      child: Text('📶 Send back to the PC…'),
+                    ),
+                    const PopupMenuDivider(),
+                  ],
                   const PopupMenuItem(value: 'delete', child: Text('Delete playlist')),
                 ]);
                 switch (c) {
@@ -1453,6 +1476,8 @@ class PlaylistsPanel extends StatelessWidget {
                     if (context.mounted) await showExportPlaylist(context, p);
                   case 'send':
                     if (context.mounted) await showSendPlaylist(context, p);
+                  case 'send-back':
+                    if (context.mounted) await sendPlaylistBackToPc(context, p);
                   case 'delete':
                     await s.deletePlaylist(p);
                 }

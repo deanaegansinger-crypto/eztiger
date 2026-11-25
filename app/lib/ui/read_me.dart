@@ -217,6 +217,8 @@ const _connections = <(String, List<String>)>[
       '📶 Send to the tablet doesn\'t use the internet: the laptop hands the songs straight to the tablet. Both must be on the same Wi-Fi or hotspot. Customers\' requests aren\'t affected either way.',
       'Windows Firewall must let EZTiger through (it sends on port 8085): Windows Security → Firewall & network protection → Allow an app through firewall → tick EZTiger for Private and Public.',
       'No shared Wi-Fi? Right-click the playlist → 📤 Export to USB, SD card or Dropbox, and on the tablet ☰ Menu → Import playlist….',
+      'Faster: put the tablet on the laptop\'s own hotspot (Windows Settings → Network & internet → Mobile hotspot) or a router\'s 5 GHz Wi-Fi, not both on a phone\'s hotspot, and keep them close while it copies. For a big first load, Export to a USB stick or the SD card is quickest. After that only new or changed songs are sent.',
+      'Reordered a list on the tablet? On the PC: ☰ Menu → 📥 Receive from the tablet (it shows the address and a code). On the tablet: press and hold the playlist → 📶 Send back to the PC. Only the list and keys go across (the PC has the songs), and the PC asks Update or Keep both.',
     ],
   ),
 ];
@@ -291,6 +293,7 @@ const _singer = <(String, List<String>)>[
       'No Wi-Fi? On the PC choose 📤 Export to USB, SD card or Dropbox instead, then on the tablet ☰ Menu → Import playlist… and pick it.',
       'The songs, with their CDG lyrics, are copied into the EZTiger imports folder, and the playlist arrives with its running order and keys. "Transfer successful" shows when it\'s in, with Receive another (or Import another) for the next one.',
       'Sent the same playlist again? Choose Update to bring it in line with the PC: only new or changed songs are copied, and songs taken off the list are removed. Or Keep both: the new one comes in beside the old, with the date on, such as ★ Friday Night (16 Nov).',
+      'Changed the order or keys on the tablet? Send it back: on the PC ☰ Menu → 📥 Receive from the tablet, then on the tablet press and hold the playlist → 📶 Send back to the PC, with the address and code the PC shows. Songs the PC hasn\'t got are listed, not added.',
     ],
   ),
   (

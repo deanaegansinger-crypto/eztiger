@@ -139,6 +139,21 @@ class PlaylistPackage {
 /// How far a copy has got.
 typedef TransferProgress = void Function(int bytesDone, int bytesTotal, String file);
 
+/// Passes progress on at most ten times a second, and always the end, so
+/// redrawing the progress bar doesn't slow the copy down on a slow tablet.
+TransferProgress? tenASecond(TransferProgress? f) {
+  if (f == null) return null;
+  final clock = Stopwatch()..start();
+  var last = -1000;
+  return (done, total, file) {
+    final now = clock.elapsedMilliseconds;
+    if (done >= total || now - last >= 100) {
+      last = now;
+      f(done, total, file);
+    }
+  };
+}
+
 /// A name safe for a folder or file on Windows and Android.
 String safeName(String s) {
   final t = s.replaceAll(RegExp(r'[\\/:*?"<>|]+'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -156,14 +171,9 @@ Future<String> exportToFolder(PlaylistPackage pkg, String destDir, {TransferProg
   final total = pkg.totalBytes;
   for (final name in pkg.fileNames) {
     onProgress?.call(done, total, name);
-    final target = File(p.join(songs.path, name));
-    final sink = target.openWrite();
-    await for (final chunk in File(pkg.sources[name]!).openRead()) {
-      sink.add(chunk);
-      done += chunk.length;
-      onProgress?.call(done, total, name);
-    }
-    await sink.close();
+    // The operating system's own copy: much quicker than reading and writing.
+    await File(pkg.sources[name]!).copy(p.join(songs.path, name));
+    done += pkg.sizes[name] ?? 0;
   }
   File(p.join(out.path, manifestName)).writeAsStringSync(pkg.toJsonText());
   onProgress?.call(total, total, '');
@@ -275,13 +285,10 @@ Future<ImportResult> importPackage(String source, PlanFor planFor, {TransferProg
   }
   final total = todo.fold<int>(0, (a, n) => a + File(p.join(folder, songsFolder, n)).lengthSync());
   for (final name in todo) {
-    final sink = File(p.join(songs.path, name)).openWrite();
-    await for (final chunk in File(p.join(folder, songsFolder, name)).openRead()) {
-      sink.add(chunk);
-      done += chunk.length;
-      onProgress?.call(done, total, name);
-    }
-    await sink.close();
+    onProgress?.call(done, total, name);
+    final from = File(p.join(folder, songsFolder, name));
+    await from.copy(p.join(songs.path, name));
+    done += from.lengthSync();
     copied++;
   }
   if (plan.update) _tidy(songs.path, pkg);
@@ -375,6 +382,17 @@ class PlaylistSender {
   bool finished = false;
   void Function()? onChange;
 
+  // The PC's screen is told at most ten times a second.
+  final _clock = Stopwatch()..start();
+  var _last = -1000;
+  void _changed({bool now = false}) {
+    final t = _clock.elapsedMilliseconds;
+    if (now || t - _last >= 100) {
+      _last = t;
+      onChange?.call();
+    }
+  }
+
   Future<void> start() async {
     _server = await HttpServer.bind(InternetAddress.anyIPv4, port, shared: true);
     _server!.listen(_handle, onError: (_) {});
@@ -410,14 +428,16 @@ class PlaylistSender {
           res.statusCode = HttpStatus.notFound;
         } else {
           sending = name;
-          onChange?.call();
+          _changed(now: true);
           res.headers.contentType = ContentType.binary;
           res.contentLength = File(src).lengthSync();
-          await for (final chunk in File(src).openRead()) {
-            res.add(chunk);
+          // Streamed in big pieces, at the pace the Wi-Fi takes them.
+          await res.addStream(File(src).openRead().map((chunk) {
             bytesSent += chunk.length;
-          }
-          onChange?.call();
+            _changed();
+            return chunk;
+          }));
+          _changed(now: true);
         }
       } else {
         res.statusCode = HttpStatus.notFound;
@@ -456,26 +476,35 @@ Future<ImportResult> receivePackage(String host, String code, PlanFor planFor,
     ];
     final kept = pkg.fileNames.length - todo.length;
     final total = todo.fold<int>(0, (a, n) => a + (pkg.sizes[n] ?? 0));
-    for (final name in todo) {
-      onProgress?.call(done, total, name);
-      final r = await (await http.getUrl(at('/eztiger/file', {'name': name}))).close();
-      if (r.statusCode != HttpStatus.ok) {
-        await r.drain<void>();
-        continue; // gone from the PC: the playlist goes ahead without it
+    final progress = tenASecond(onProgress);
+    // Three files at a time, so the Wi-Fi never waits between small files
+    // (each song's CDG and lyric sheet).
+    final waiting = [...todo];
+    Future<void> fetchFiles() async {
+      while (waiting.isNotEmpty) {
+        final name = waiting.removeAt(0);
+        progress?.call(done, total, name);
+        final r = await (await http.getUrl(at('/eztiger/file', {'name': name}))).close();
+        if (r.statusCode != HttpStatus.ok) {
+          await r.drain<void>();
+          continue; // gone from the PC: the playlist goes ahead without it
+        }
+        final part = File(p.join(songs.path, '$name.part'));
+        final sink = part.openWrite();
+        await for (final chunk in r) {
+          sink.add(chunk);
+          done += chunk.length;
+          progress?.call(done, total, name);
+        }
+        await sink.close();
+        final target = File(p.join(songs.path, name));
+        if (target.existsSync()) target.deleteSync();
+        part.renameSync(target.path);
+        copied++;
       }
-      final part = File(p.join(songs.path, '$name.part'));
-      final sink = part.openWrite();
-      await for (final chunk in r) {
-        sink.add(chunk);
-        done += chunk.length;
-        onProgress?.call(done, total, name);
-      }
-      await sink.close();
-      final target = File(p.join(songs.path, name));
-      if (target.existsSync()) target.deleteSync();
-      part.renameSync(target.path);
-      copied++;
     }
+
+    await Future.wait([for (var i = 0; i < math.min(3, todo.length); i++) fetchFiles()]);
     if (plan.update) _tidy(songs.path, pkg);
     File(p.join(plan.folder, manifestName)).writeAsStringSync(pkg.toJsonText());
     try {
@@ -497,4 +526,95 @@ class TransferException implements Exception {
   final String message;
   @override
   String toString() => message;
+}
+
+// ------------------------------------------------- back from the tablet
+
+/// The tablet's playlist as a list (running order and keys, no song files),
+/// for sending back to the PC. [keyShifts]: song path → semitones.
+Future<Map<String, Object?>> playlistBack(EztigerDatabase db, Playlist pl, Map<String, int> keyShifts) async => {
+      'eztiger_back': 1,
+      'name': pl.name,
+      'songs': [
+        for (final t in await db.playlists.tracks(pl.id))
+          {
+            'file': t.fileName,
+            'title': t.title,
+            if (t.artist != null) 'artist': t.artist,
+            if ((keyShifts[t.path] ?? 0) != 0) 'key': keyShifts[t.path],
+          },
+      ],
+    };
+
+/// The tablet's side of "Send back to the PC": hands [list] (from
+/// [playlistBack]) to the PC at [host], waiting in "Receive from the tablet"
+/// with [code].
+Future<void> sendPlaylistBack(String host, String code, Map<String, Object?> list,
+    {int port = PlaylistSender.defaultPort}) async {
+  final http = HttpClient()..connectionTimeout = const Duration(seconds: 6);
+  try {
+    final req = await http.postUrl(
+        Uri(scheme: 'http', host: host.trim(), port: port, path: '/eztiger/back', queryParameters: {'code': code.trim()}));
+    req.headers.contentType = ContentType.json;
+    req.write(jsonEncode(list));
+    final res = await req.close();
+    await res.drain<void>();
+    if (res.statusCode == HttpStatus.forbidden) throw const TransferException('The code is wrong: check it on the PC.');
+    if (res.statusCode != HttpStatus.ok) throw TransferException('The PC answered ${res.statusCode}.');
+  } on SocketException {
+    throw TransferException("Can't reach the PC at $host. Is it on the same Wi-Fi, with Receive from the tablet open?");
+  } finally {
+    http.close(force: true);
+  }
+}
+
+/// The PC's side: waits, with a four-digit code, for the tablet to send a
+/// playlist back. [onReceived] gets it (the list from [playlistBack]).
+class PlaylistCatcher {
+  PlaylistCatcher({this.port = PlaylistSender.defaultPort, String? code})
+      : code = code ?? (1000 + math.Random.secure().nextInt(9000)).toString();
+
+  final int port;
+  final String code;
+  void Function(Map<String, dynamic> list)? onReceived;
+
+  HttpServer? _server;
+  int get boundPort => _server?.port ?? port;
+
+  Future<void> start() async {
+    _server = await HttpServer.bind(InternetAddress.anyIPv4, port, shared: true);
+    _server!.listen(_handle, onError: (_) {});
+  }
+
+  Future<void> stop() async {
+    await _server?.close(force: true);
+    _server = null;
+  }
+
+  Future<void> _handle(HttpRequest req) async {
+    final res = req.response;
+    try {
+      if (req.uri.queryParameters['code'] != code) {
+        res.statusCode = HttpStatus.forbidden;
+        res.write('Wrong code');
+      } else if (req.method == 'POST' && req.uri.path == '/eztiger/back') {
+        final m = jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>;
+        if (m['eztiger_back'] == null || m['songs'] is! List) {
+          res.statusCode = HttpStatus.badRequest;
+        } else {
+          res.write('{"ok":true}');
+          onReceived?.call(m);
+        }
+      } else {
+        res.statusCode = HttpStatus.notFound;
+      }
+    } catch (_) {
+      try {
+        res.statusCode = HttpStatus.badRequest; // not a playlist
+      } catch (_) {}
+    }
+    try {
+      await res.close();
+    } catch (_) {}
+  }
 }

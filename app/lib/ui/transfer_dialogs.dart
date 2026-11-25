@@ -262,7 +262,221 @@ class _SendDialogState extends State<_SendDialog> {
   }
 }
 
+/// EZTiger Pro: waits for the tablet to send a playlist back (its running
+/// order and keys; the PC has the songs already), then asks Update or Keep
+/// both if a playlist of that name is here.
+Future<void> showReceiveFromTablet(BuildContext context) =>
+    showDialog<void>(context: context, barrierDismissible: false, builder: (_) => const _CatchDialog());
+
+class _CatchDialog extends StatefulWidget {
+  const _CatchDialog();
+  @override
+  State<_CatchDialog> createState() => _CatchDialogState();
+}
+
+class _CatchDialogState extends State<_CatchDialog> {
+  PlaylistCatcher? catcher;
+  String? address, problem, result;
+  bool busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  Future<void> _start() async {
+    final s = _stateOf(context);
+    try {
+      final ip = await s.detectPcAddress();
+      final x = PlaylistCatcher()..onReceived = _received;
+      await x.start();
+      if (!mounted) {
+        await x.stop();
+        return;
+      }
+      setState(() {
+        catcher = x;
+        address = ip;
+      });
+    } catch (e) {
+      if (mounted) setState(() => problem = "Couldn't start listening for the tablet: $e");
+    }
+  }
+
+  Future<void> _received(Map<String, dynamic> list) async {
+    if (!mounted || busy) return;
+    final s = _stateOf(context);
+    setState(() => busy = true);
+    final name = '${list['name'] ?? ''}'.trim();
+    var keepBoth = false;
+    if (s.hasPlaylistNamed(name)) {
+      final choice = await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: Text('You already have ★ $name'),
+          content: SizedBox(
+            width: 460,
+            child: Text(
+              'Update: it takes the tablet\'s running order and keys.\n\n'
+              'Keep both: the tablet\'s comes in as ★ ${s.labelledName(name)}, beside the one you have.',
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            OutlinedButton(
+              key: const Key('back-keep-both'),
+              onPressed: () => Navigator.pop(context, 'both'),
+              child: const Text('Keep both'),
+            ),
+            FilledButton(key: const Key('back-update'), onPressed: () => Navigator.pop(context, 'update'), child: const Text('Update')),
+          ],
+        ),
+      );
+      if (choice == null) {
+        if (mounted) setState(() => busy = false);
+        return;
+      }
+      keepBoth = choice == 'both';
+    }
+    final line = await s.takePlaylistBack(list, keepBoth: keepBoth);
+    if (mounted) {
+      setState(() {
+        busy = false;
+        result = line;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    catcher?.stop();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final x = catcher;
+    final big = TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: EzColors.brass, letterSpacing: 1);
+    return AlertDialog(
+      title: const Text('Receive a playlist from the tablet'),
+      content: SizedBox(
+        width: 520,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (problem != null)
+              Text(problem!, style: TextStyle(color: EzColors.red))
+            else if (x == null)
+              const Text('Getting ready…')
+            else ...[
+              const Text('On the tablet, on the same Wi-Fi: press and hold the playlist → 📶 Send back to the PC, '
+                  'and type in:'),
+              const SizedBox(height: 12),
+              Row(children: [
+                const SizedBox(width: 90, child: Text('PC address')),
+                SelectableText(address ?? '(not on a network)', key: const Key('back-address'), style: big),
+              ]),
+              Row(children: [
+                const SizedBox(width: 90, child: Text('Code')),
+                SelectableText(x.code, key: const Key('back-code'), style: big),
+              ]),
+              const SizedBox(height: 12),
+              if (result != null)
+                Row(key: const Key('back-success'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Icon(Icons.check_circle, color: EzColors.green),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(result!, style: const TextStyle(fontWeight: FontWeight.w700))),
+                ])
+              else
+                Text(
+                  busy
+                      ? 'Bringing it in…'
+                      : 'Waiting for the tablet. Only the list comes across (the PC has the songs), so it takes a second. '
+                          'If Windows asks, allow EZTiger on Private networks.',
+                  style: TextStyle(fontSize: 12, color: context.ez.textDim),
+                ),
+              if (result != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text('Send another from the tablet with the same code, or Close.',
+                      style: TextStyle(fontSize: 12, color: context.ez.textDim)),
+                ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(key: const Key('back-close'), onPressed: () => Navigator.pop(context), child: const Text('Close')),
+      ],
+    );
+  }
+}
+
 // ------------------------------------------------------------ the tablet
+
+/// The tablet: sends a playlist's running order and keys back to the PC,
+/// waiting in ☰ Menu → Receive from the tablet. The songs aren't sent: the
+/// PC has them.
+Future<void> sendPlaylistBackToPc(BuildContext context, Playlist pl) async {
+  final s = AppScope.of(context);
+  final host = TextEditingController(text: s.transferHost.isNotEmpty ? s.transferHost : _hostOf(s.requestsLink));
+  final code = TextEditingController();
+  final go = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      scrollable: true,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      title: Text('Send ★ ${pl.name} back to the PC'),
+      content: SizedBox(
+        width: 460,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('On the PC: ☰ Menu → 📥 Receive from the tablet. Type in what it shows. '
+                'The running order and keys go across; the PC has the songs already.'),
+            TextField(
+              key: const Key('back-host'),
+              controller: host,
+              keyboardType: TextInputType.url,
+              textInputAction: TextInputAction.next,
+              scrollPadding: const EdgeInsets.only(bottom: 120),
+              decoration: const InputDecoration(labelText: 'PC address', hintText: 'e.g. 192.168.1.20'),
+            ),
+            TextField(
+              key: const Key('back-code-in'),
+              controller: code,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => Navigator.pop(context, true),
+              scrollPadding: const EdgeInsets.only(bottom: 120),
+              decoration: const InputDecoration(labelText: 'Code'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        FilledButton(key: const Key('back-send'), onPressed: () => Navigator.pop(context, true), child: const Text('Send')),
+      ],
+    ),
+  );
+  final h = host.text.trim(), c = code.text.trim();
+  if (go != true || h.isEmpty || !context.mounted) return;
+  s.setTransferHost(h);
+  String message;
+  try {
+    await sendPlaylistBack(h, c, await playlistBack(s.db, pl, s.keyShifts));
+    message = '✓ ★ ${pl.name} sent to the PC. It asks there whether to update its copy or keep both.';
+  } catch (e) {
+    message = '$e';
+  }
+  if (context.mounted) {
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 6)));
+  }
+}
 
 /// "Import playlist": from an EZTiger export on the tablet, an SD card or a
 /// USB stick (a folder or a zip). Every song is copied into EZTiger imports.

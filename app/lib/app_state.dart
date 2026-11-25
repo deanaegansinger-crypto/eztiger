@@ -1295,6 +1295,35 @@ class AppState extends ChangeNotifier {
     return status;
   }
 
+  /// A playlist sent back from the tablet (the list from [playlistBack]):
+  /// its songs are found in this library by file name, then by title and
+  /// artist, and it replaces the playlist of the same name with the
+  /// tablet's running order and keys; or, with [keepBoth], comes in beside
+  /// it under a dated name. Returns a line saying what happened.
+  Future<String> takePlaylistBack(Map<String, dynamic> list, {bool keepBoth = false}) async {
+    final base = '${list['name'] ?? ''}'.trim().isEmpty ? 'From the tablet' : '${list['name']}'.trim();
+    final name = keepBoth ? labelledName(base) : base;
+    final found = await matchBack(db, [for (final s in (list['songs'] as List? ?? const [])) (s as Map).cast<String, dynamic>()]);
+    for (final MapEntry(key: path, value: k) in found.keys.entries) {
+      keyShifts[path] = k.clamp(KaraokeEngine.minKey, KaraokeEngine.maxKey);
+    }
+    if (found.keys.isNotEmpty) await db.setMeta('key_shifts', jsonEncode(keyShifts));
+    final had = hasPlaylistNamed(name);
+    for (final old in await db.playlists.all()) {
+      if (old.name.toLowerCase() == name.toLowerCase()) await db.playlists.delete(old.id);
+    }
+    final id = await db.playlists.create(name);
+    await db.playlists.addAll(id, found.ids);
+    await _reloadPlaylists();
+    final n = found.ids.length;
+    status = '✓ ★ $name ${had ? 'updated' : 'added'} from the tablet: $n song${n == 1 ? '' : 's'}'
+        '${found.keys.isEmpty ? '' : ', ${found.keys.length} key change${found.keys.length == 1 ? '' : 's'}'}'
+        '${found.missing.isEmpty ? '' : '. Not found on this PC: ${found.missing.take(5).join(', ')}'
+            '${found.missing.length > 5 ? ' and ${found.missing.length - 5} more' : ''}'}';
+    notifyListeners();
+    return status;
+  }
+
   // ------------------------------------------------- remove vocals (AI)
 
   /// Pro on Windows: makes AI instrumentals (see [VocalRemover]); null when
