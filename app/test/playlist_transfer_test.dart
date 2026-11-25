@@ -253,7 +253,10 @@ void main() {
     final seen = <String>[];
     final r = await receivePackage('127.0.0.1', '4821', update,
         port: sender.boundPort, onProgress: (d, t, f) => seen.add(f));
-    expect(seen, contains('Abba - Waterloo.cdg'));
+    // Progress is passed on at most ten times a second, always with the end.
+    expect(seen, isNotEmpty);
+    expect(seen.last, '');
+    expect(File(p.join(r.plan.folder, 'songs', 'Abba - Waterloo.cdg')).lengthSync(), 24 * 300);
     expect(sender.bytesSent, pkg.totalBytes);
     expect(sender.finished, isTrue);
     expect(File(p.join(r.plan.folder, manifestName)).existsSync(), isTrue);
