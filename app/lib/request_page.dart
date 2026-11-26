@@ -93,7 +93,18 @@ String _hex(List<num> c) => '#${c.map((v) => v.round().clamp(0, 255).toRadixStri
   required String skin,
   bool lightScreen = false,
   required List<({String title, String artist, String brand, String code})> songs,
+  // Venue branding: the venue's name is [name] and its logo [logoBase64] (of [logoType]), with its tagline under the name.
+  bool venue = false,
+  String logoType = 'image/png',
+  String tagline = '',
 }) {
+  if (venue) {
+    template = template
+        .replaceAll('data:image/png;base64,{{LOGO}}', 'data:$logoType;base64,{{LOGO}}')
+        .replaceAll('<h1>{{NAME}}</h1>',
+            '<h1>{{NAME}}</h1>${tagline.isEmpty ? '' : '\n    <div class="tag venue-tag">${const HtmlEscape().convert(tagline)}</div>'}')
+        .replaceAll('Powered by EZTiger<', 'Powered by EZTiger Entertainment<');
+  }
   // Brands biggest first, so the version buttons come in the same order.
   final counts = <String, int>{};
   for (final s in songs) {

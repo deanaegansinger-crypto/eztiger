@@ -16,6 +16,7 @@ import 'player.dart';
 import 'promos.dart';
 import 'theme.dart';
 import 'edition.dart';
+import 'venue.dart';
 import 'ui/logo.dart';
 
 /// The command-line switch that starts EZTiger as the second-screen output:
@@ -221,6 +222,8 @@ Future<void> runOutputWindow(int port) async {
   out.promos
     ..start()
     ..run(() => out.betweenActs);
+  // The venue switched on in ☰ Menu → Venue branding (or in Music Bingo or Quiz Night).
+  out.watchVenue();
   runApp(
     MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -259,6 +262,30 @@ class _OutputModel extends ChangeNotifier {
 
   /// Promo slides for between singers.
   final PromoPlayer promos = PromoPlayer();
+
+  /// The venue to brand the screen with, or null for EZTiger's own look.
+  Venue? venue;
+  String _venueKey = '';
+
+  void watchVenue([VenueStore? store]) {
+    void read() {
+      try {
+        final v = (store ?? VenueStore()).active();
+        final key = v == null ? '' : '${v.id}|${v.name}|${v.tagline}|${v.colour}|${v.logo}|${v.photos.join(',')}';
+        if (key == _venueKey) return;
+        _venueKey = key;
+        // A logo or photo replaced under the same name: show the new picture.
+        for (final f in [?v?.logoPath, ...?v?.photoPaths]) {
+          FileImage(File(f)).evict();
+        }
+        venue = v;
+        notifyListeners();
+      } catch (_) {}
+    }
+
+    read();
+    Timer.periodic(const Duration(seconds: 5), (_) => read());
+  }
 
   /// Between singers: nothing playing, and the song (if any) not yet started or
   /// at its end, so a pause in the middle of a song doesn't bring up promos.
@@ -436,6 +463,9 @@ class _OutputView extends StatelessWidget {
                   ),
                 );
               }
+              if (model.venue case final venue? when model.pro) {
+                return VenueScreen(venue: venue, title: model.title, artist: model.artist, singer: model.singer);
+              }
               return Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -467,5 +497,108 @@ class _OutputView extends StatelessWidget {
                   ],
                 ),
               );
+  }
+}
+
+/// The second screen between singers while a venue is switched on: its photo
+/// behind, its logo (or name) in its colour, the tagline, who's up next, and a
+/// small "Powered by EZTiger Entertainment".
+class VenueScreen extends StatelessWidget {
+  const VenueScreen({super.key, required this.venue, this.title, this.artist, this.singer});
+  final Venue venue;
+  final String? title, artist, singer;
+
+  static const poweredBy = 'Powered by EZTiger Entertainment';
+
+  @override
+  Widget build(BuildContext context) {
+    final colour = Color(venue.colourValue);
+    final photo = venue.photoPaths.firstOrNull;
+    final logo = venue.logoPath;
+    const shadow = [Shadow(color: Color(0xAA000000), blurRadius: 24, offset: Offset(0, 4))];
+    return ColoredBox(
+      color: Colors.black,
+      child: Center(
+        child: FittedBox(
+          child: SizedBox(
+            width: 1920,
+            height: 1080,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(colors: [colour, Color.lerp(colour, Colors.black, 0.8)!], radius: 1.2),
+                  ),
+                ),
+                if (photo != null)
+                  Opacity(
+                    opacity: 0.45,
+                    child: Image.file(File(photo), fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox()),
+                  ),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x33000000), Color(0xCC000000)],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(120, 90, 120, 70),
+                  child: Column(
+                    children: [
+                      if (logo != null)
+                        SizedBox(
+                          height: 380,
+                          child: Image.file(File(logo), key: const Key('venue-screen-logo'), fit: BoxFit.contain,
+                              errorBuilder: (_, _, _) => const SizedBox()),
+                        )
+                      else
+                        Text(
+                          venue.name,
+                          key: const Key('venue-screen-name'),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 150, fontWeight: FontWeight.w900, color: Colors.white, shadows: shadow),
+                        ),
+                      if (venue.tagline.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 18),
+                          child: Text(venue.tagline, textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 60, fontStyle: FontStyle.italic, color: Colors.white, shadows: shadow)),
+                        ),
+                      const Spacer(),
+                      Text(
+                        title ?? 'Up next…',
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        style: const TextStyle(fontSize: 76, fontWeight: FontWeight.w800, color: Colors.white, shadows: shadow),
+                      ),
+                      if (artist != null)
+                        Text(artist!, style: const TextStyle(fontSize: 50, color: Colors.white70, shadows: shadow)),
+                      if (singer != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16),
+                          child: Text('🎤 $singer', style: const TextStyle(fontSize: 60, color: Colors.white, shadows: shadow)),
+                        ),
+                      const Spacer(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          const EzLogo(size: 44),
+                          const SizedBox(width: 12),
+                          Text(poweredBy, style: TextStyle(fontSize: 28, color: Colors.white.withValues(alpha: 0.75))),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

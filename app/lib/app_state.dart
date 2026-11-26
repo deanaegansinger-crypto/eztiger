@@ -16,6 +16,7 @@ import 'playlist_transfer.dart';
 import 'request_page.dart';
 import 'song_requests.dart';
 import 'sync.dart';
+import 'venue.dart';
 import 'vocal_remover.dart';
 import 'ui/common.dart' show SongDrag;
 
@@ -1531,14 +1532,34 @@ class AppState extends ChangeNotifier {
         (title: r.title, artist: r.artist, brand: brandOf(r.folder, rootPaths), code: p.basename(r.folder)),
     ];
     if (songs.isEmpty) throw StateError('Add your karaoke folder first: the request page lists its songs.');
-    final name = songbookTitle.trim().isEmpty ? 'EZTiger Karaoke' : songbookTitle.trim();
+    var name = songbookTitle.trim().isEmpty ? 'EZTiger Karaoke' : songbookTitle.trim();
+    var logoBytes = logo.existsSync() ? logo.readAsBytesSync() : null;
+    var logoType = 'image/png';
+    // ☰ Menu → Venue branding: the page shows the venue's name and logo, "Powered by EZTiger Entertainment" below.
+    Venue? venue;
+    try {
+      venue = isPro ? VenueStore().active() : null;
+    } catch (_) {}
+    if (venue != null) {
+      name = venue.name;
+      if (venue.logoPath case final l?) {
+        try {
+          logoBytes = File(l).readAsBytesSync();
+          final ext = p.extension(l).toLowerCase();
+          logoType = ext == '.jpg' || ext == '.jpeg' ? 'image/jpeg' : ext == '.webp' ? 'image/webp' : ext == '.gif' ? 'image/gif' : 'image/png';
+        } catch (_) {}
+      }
+    }
     final page = requestPageHtml(
       template: template.readAsStringSync(),
       name: name,
-      logoBase64: logo.existsSync() ? base64Encode(logo.readAsBytesSync()) : '',
+      logoBase64: logoBytes != null ? base64Encode(logoBytes) : '',
       skin: skin,
       lightScreen: !dark,
       songs: songs,
+      venue: venue != null,
+      logoType: logoType,
+      tagline: venue?.tagline ?? '',
     );
     if (online != null && online.online) {
       // The online request list: put the page with this library's songs on it,

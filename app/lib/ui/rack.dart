@@ -30,6 +30,8 @@ import '../song_requests.dart';
 import 'songbook_dialog.dart';
 import 'lyrics_delay.dart';
 import 'transfer_dialogs.dart';
+import '../venue.dart';
+import 'venue_dialog.dart';
 
 /// The left column of the mockup: player, settings, library, search and
 /// results.
@@ -545,6 +547,31 @@ class _MainMenu extends StatelessWidget {
               ],
             ),
           ),
+        // Pro on the PC: the venue's name, logo, photos and promos (shared with Music Bingo and Quiz Night).
+        if (isPro && !touchUi && VenueStore().available) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem(
+            key: const Key('menu-venue'),
+            value: 'venue',
+            child: Row(
+              children: [
+                const Icon(Icons.storefront_outlined, size: 18),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text.rich(
+                    TextSpan(
+                      text: 'Venue branding & promos…',
+                      children: [
+                        if (VenueStore().active() case final v?)
+                          TextSpan(text: '  ${v.name}', style: TextStyle(fontSize: 12, color: EzColors.green)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
       onSelected: (c) {
         if (c == 'skins') {
@@ -557,6 +584,8 @@ class _MainMenu extends StatelessWidget {
           showSongRequests(context);
         } else if (c == 'start-requests') {
           startSongRequestList(context);
+        } else if (c == 'venue') {
+          showVenueBranding(context);
         } else if (c == 'disc-choices') {
           _pickDiscChoice(context, s);
         } else if (c == 'rescan') {

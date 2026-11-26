@@ -19,6 +19,7 @@ import 'player.dart';
 import 'second_screen.dart';
 import 'ui/android_folders.dart';
 import 'ui/app.dart';
+import 'venue.dart';
 import 'vocal_remover.dart';
 
 Future<void> main(List<String> args) async {
@@ -73,6 +74,12 @@ Future<void> main(List<String> args) async {
   if (builtAsPro) state.vocalRemover = await VocalRemover.forThisPc();
   await state.init();
   licence?.addListener(state.editionChanged);
+  // Tell Music Bingo and Quiz Night (if they're on this PC) that EZTiger karaoke is here, sharing the venues.
+  if (builtAsPro) {
+    try {
+      VenueStore().registerApp('karaoke');
+    } catch (_) {}
+  }
 
   runApp(
     EztigerApp(
