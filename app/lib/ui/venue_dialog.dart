@@ -364,7 +364,9 @@ class _VenueDialogState extends State<VenueDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        Wrap(
+          spacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Switch(
               key: const Key('promos-on'),
@@ -374,9 +376,7 @@ class _VenueDialogState extends State<VenueDialog> {
                 save();
               },
             ),
-            const SizedBox(width: 6),
             const Text('Show them'),
-            const Spacer(),
             DropdownButton<bool>(
               key: const Key('promos-mix'),
               value: full,
@@ -389,7 +389,6 @@ class _VenueDialogState extends State<VenueDialog> {
                 save();
               },
             ),
-            const SizedBox(width: 10),
             DropdownButton<int>(
               key: const Key('promos-seconds'),
               value: ((j['seconds'] as num?)?.toInt() ?? 8).clamp(3, 60),
